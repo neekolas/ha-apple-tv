@@ -149,14 +149,11 @@ def test_snapshot_sanitizes_invalid_yaml_and_utf8_text():
 
 
 @pytest.mark.parametrize("role", ["note", "status", "alert", "heading"])
-async def test_secret_with_noncontrol_role_retains_handle_for_masking(role):
+def test_secret_with_noncontrol_role_retains_ref_for_masking(role):
     row, = snapshot_rows([{role + " [ref=e1]": "private"}])
     control = PageInteraction(None)
     info = dict(focused=False, secret=True, scroll=False, live=False, blocked=True)
-    handle = SimpleNamespace(owner_frame=AsyncMock(), evaluate=AsyncMock(return_value=info), dispose=AsyncMock())
-    control.frame = SimpleNamespace(locator=lambda expr: SimpleNamespace(element_handles=AsyncMock(return_value=[handle])))
-    handle.owner_frame.return_value = control.frame
-    assert row.browser_ref == "e1" and await control.read_row(row)
+    assert row.browser_ref == "e1" and control.project_row(row, info, None, 0)
     assert "[masked]" in row.line() and "private" not in row.line() and row.ref is None
 
 
@@ -167,23 +164,24 @@ def test_scoped_composites_project_options_and_nested_treeitems_only():
     assert [r.browser_ref for r in snapshot_rows(tree, scoped=True)] == ["e1", "e2", "e3", "e4", "e5"]
 
 async def test_large_snapshot_limits_reads_and_resolves_find_neighbors():
-    rows = [Row("button", f"Control {i}", [], f"e{i}") for i in range(1500)]
+    roles = ("button", "heading", "text", "link", "region")
+    rows = [Row(roles[i % len(roles)], f"Control {i}", [], f"e{i}") for i in range(1500)]
     control = PageInteraction(SimpleNamespace(stage=SimpleNamespace(page={"page_id": "id"})))
-    control.read_row = AsyncMock(return_value=True)
+    control.read_rows = AsyncMock(side_effect=lambda batch: [True] * len(batch))
     control.check = AsyncMock()
     control.title, control.view, control.mode = "Controls", "seen", "iframe"
     control.pending = control.visible_rows(rows, None)
     control.next_row = await anext(control.pending)
     first = await control.slice()
-    assert first["more"] and '"Control 38"' in first["snapshot"] and control.read_row.await_count <= 48
+    assert first["more"] and '"Control 38"' in first["snapshot"] and control.read_rows.await_count == 1
     second = await control.slice()
-    assert '"Control 39"' in second["snapshot"] and control.read_row.await_count <= 80
+    assert '"Control 39"' in second["snapshot"] and control.read_rows.await_count == 2
     await control.clear()
 
-    control.read_row.reset_mock()
+    control.read_rows.reset_mock()
     result = [row.name async for row in control.visible_rows(rows, "CONTROL 1498")]
     assert result == ["Control 1497", "Control 1498", "Control 1499"]
-    assert control.read_row.await_count == 3
+    assert [len(call.args[0]) for call in control.read_rows.await_args_list] == [1, 2]
 
 
 @pytest.mark.parametrize("url,blocked", [

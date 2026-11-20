@@ -1,6 +1,7 @@
 """Read and operate the sender's committed Chromium document under the TV and stage locks."""
 
 import asyncio
+import base64
 import ipaddress
 import json
 import logging
@@ -24,6 +25,7 @@ NODE = re.compile(r'^(\w+)(?: ("(?:[^"\\]|\\.)*"))?((?: \[[^\]]+\])*)$')
 REF = re.compile(r'\[ref=((?:f\d+)?e\d+)\]')
 STATES = ("disabled", "checked", "selected", "expanded")
 TIMEOUT = 2000
+BATCH_SIZE = 40  # 39 response lines plus the cursor lookahead.
 # The HA Green reads large pages slowly while tvpipe encodes. Measured live:
 # a GitHub repository page took about 5 s to read.
 LOOK_BUDGET_S = 15
@@ -128,6 +130,10 @@ def snapshot_rows(tree, *, scoped=False):
 # Only fixed, bridge-owned browser functions are evaluated. Field values in the ARIA
 # serialization are never copied to the response. Read them from the pinned node here.
 INSPECT = r"""(el, name) => {
+  let hidden = false;
+  for (let node = el; node; node = node.assignedSlot || node.parentElement || node.getRootNode().host) {
+    if (node.matches('[inert],[hidden],[aria-hidden=true i]')) { hidden = true; break; }
+  }
   const hints = [name, el.type, el.name, el.id, el.autocomplete, el.placeholder,
     el.getAttribute('aria-label'), ...(el.labels || [])].map(x => x?.textContent ?? x).join(' ');
   const field = el.matches('input,textarea,select,[role=textbox],[role=combobox],[role=searchbox]') || el.isContentEditable;
@@ -137,13 +143,50 @@ INSPECT = r"""(el, name) => {
     el.closest('label')?.control?.type === 'file' || el.formTarget || el.form?.target ||
     (el.form && ['submit','image'].includes(el.type));
   const textField = el.matches('textarea,input:is([type=text],[type=search],[type=email],[type=tel],[type=url],:not([type]))') || el.isContentEditable;
-  return {blocked:Boolean(blocked || secret), disabled:el.matches(':disabled,[aria-disabled=true]'),
+  return {blocked:Boolean(blocked || secret || hidden), hidden, disabled:el.matches(':disabled,[aria-disabled=true]'),
     restrictedChild:Boolean(el.querySelector(restricted)), focused:el.matches(':focus'),
     formControl:Boolean(el.form || el.closest('form') || el.closest('label')?.control?.form),
     secret, textField, select:el.tagName === 'SELECT', live:el.matches('[aria-live=polite],[aria-live=assertive]'),
     scroll: el.clientHeight > 0 && el.scrollHeight > el.clientHeight && /auto|scroll|overlay/.test(getComputedStyle(el).overflowY),
     value:secret ? '[masked]' : typeof el.value === 'string' ? el.value.slice(0,160) : el.isContentEditable ? el.innerText.slice(0,160) : null};
 }"""
+
+# Playwright resolves aria-ref in its isolated selector world. Keep the exact
+# nodes there, keyed by a detached batch element whose handle we own. This
+# avoids adopting and later releasing a CDP handle for every displayed row.
+# Each union branch writes its own slot, regardless of DOM order or missing refs.
+BATCH_ENGINE = """(() => {
+  const inspect = (""" + INSPECT + """);
+  const pins = new WeakMap();
+  let batch;
+  return {queryAll(root, command) {
+    if (command.startsWith('begin-')) {
+      const names = JSON.parse(atob(command.slice(6)));
+      const marker = document.createElement('div');
+      batch = {marker, names, info: Array(names.length).fill(null), nodes: []};
+      pins.set(marker, batch.nodes);
+      return [marker];
+    }
+    if (command.startsWith('pin-')) {
+      const i = Number(command.slice(4));
+      if (root.ownerDocument === document && root.isConnected) {
+        const info = inspect(root, batch.names[i]);
+        if (!info.hidden) {
+          batch.nodes[i] = root;
+          batch.info[i] = info;
+        }
+      }
+      return [];
+    }
+    if (command === 'finish') {
+      root.textContent = JSON.stringify(batch.info);
+      batch = null;
+      return [root];
+    }
+    const node = pins.get(root)?.[Number(command)];
+    return node ? [node] : [];
+  }};
+})()"""
 
 OBSERVE = """(root, target) => {
   const focus = document.activeElement;
@@ -160,8 +203,17 @@ OBSERVE = """(root, target) => {
 
 @dataclass
 class Target:
-    handle: ElementHandle
+    batch: ElementHandle
+    index: int
     row: Row
+    handle: ElementHandle | None = None
+
+    async def element(self):
+        if self.handle is None:
+            self.handle = await self.batch.query_selector(f"pagebatch={self.index}")
+            if self.handle is None:
+                raise stale()
+        return self.handle
 
 
 class PageInteraction:
@@ -182,7 +234,8 @@ class PageInteraction:
         self.last[op] = now
 
     async def clear(self, *, keep_document=False):
-        handles = [t.handle for t in self.targets.values()]
+        handles = list({t.batch for t in self.targets.values()})
+        handles.extend(t.handle for t in self.targets.values() if t.handle is not None)
         if not keep_document:
             if self.root:
                 handles.append(self.root)
@@ -261,47 +314,54 @@ class PageInteraction:
         if not state["current"]:
             raise stale()
 
-    async def read_row(self, row):
-        if not row.browser_ref:
-            return True
-        handles = await self.frame.locator("aria-ref=" + row.browser_ref).element_handles()
-        if len(handles) != 1:
-            for handle in handles:
-                await handle.dispose()
-            return False
-        handle = handles[0]
-        keep = False
+    def project_row(self, row, info, batch, index):
+        if info["focused"] and "focused" not in row.states:
+            row.states.append("focused")
+        if info["secret"] and row.role not in FIELDS:
+            row.name = "[masked]"
+        if row.role in FIELDS and info["value"] is not None:
+            row.states.append("value=" + quote(info["value"]))
+        if row.role == "generic" and info["scroll"]:
+            row.role = "region"
+        if row.role in ("text", "generic") and info["live"]:
+            row.role = "status"
+        addressable = row.role in REGIONS or info["scroll"] or (row.role in CONTROLS and not info["restrictedChild"])
+        if addressable and not info["blocked"]:
+            row.ref = f"e{self.next_ref}"
+            self.next_ref += 1
+            self.targets[row.ref] = Target(batch, index, row)
+        return row.role != "generic"
+
+    async def read_rows(self, rows):
+        """Resolve and inspect one batch in a single isolated-world selector evaluation."""
+        visible = [not row.browser_ref or row.ref in self.targets for row in rows]
+        if all(visible):
+            return visible
+        # JSON's ASCII escapes preserve Unicode through atob. Base64 keeps site
+        # text out of the selector grammar.
+        names = base64.b64encode(json.dumps([row.name for row in rows]).encode()).decode()
+        locator = self.frame.locator("pagebatch=begin-" + names)
+        for i, row in enumerate(rows):
+            if not visible[i]:
+                node = self.frame.locator("aria-ref=" + row.browser_ref).filter(visible=True)
+                locator = locator.or_(node.locator(f"pagebatch=pin-{i}"))
+        batch, = await locator.locator("pagebatch=finish").element_handles()
         try:
-            if await handle.owner_frame() != self.frame:
-                return False
-            info = await handle.evaluate(INSPECT, row.name)
-            if info["focused"] and "focused" not in row.states:
-                row.states.append("focused")
-            if info["secret"] and row.role not in FIELDS:
-                row.name = "[masked]"
-            if row.role in FIELDS and info["value"] is not None:
-                row.states.append("value=" + quote(info["value"]))
-            if row.role == "generic" and info["scroll"]:
-                row.role = "region"
-            if row.role in ("text", "generic") and info["live"]:
-                row.role = "status"
-            addressable = row.role in REGIONS or info["scroll"] or (row.role in CONTROLS and not info["restrictedChild"])
-            if addressable and not info["blocked"]:
-                row.ref = f"e{self.next_ref}"
-                self.next_ref += 1
-                self.targets[row.ref] = Target(handle, row)
-                keep = True
-            return row.role != "generic"
+            for i, info in enumerate(json.loads(await batch.text_content())):
+                if info is not None:
+                    visible[i] = self.project_row(rows[i], info, batch, i)
         finally:
-            if not keep:
-                await handle.dispose()
+            if not any(row.ref in self.targets and self.targets[row.ref].batch is batch for row in rows):
+                await batch.dispose()
+        return visible
 
     async def choices(self, row):
         """A scoped native select lists the exact values accepted by the action."""
         target = self.targets.get(row.ref)
         if not target or row.role not in ("combobox", "listbox"):
             return []
-        options = await target.handle.evaluate("""el => el.tagName === 'SELECT'
+        handle = await target.element()
+        options = await handle.evaluate("""el => el.tagName === 'SELECT'
           ? [...el.options].map(o => [o.label, o.value, o.selected, o.matches(':disabled')]) : []""")
         return [Row("option", label, ["value=" + quote(value)] +
                     (["selected"] if selected else []) + (["disabled"] if disabled else []), None)
@@ -345,7 +405,7 @@ class PageInteraction:
                     if not rows or rows[0].browser_ref != scope_ref:
                         raise stale()
                     # Recheck the scoped control before exposing its choices.
-                    if not await self.read_row(rows[0]) or not rows[0].ref:
+                    if not (await self.read_rows(rows[:1]))[0] or not rows[0].ref:
                         raise missing()
                     options = await self.choices(rows[0])
                     if options:
@@ -378,50 +438,63 @@ class PageInteraction:
         query = find.casefold() if find else ""
         inspected = {}
 
-        async def read(index):
-            if index not in inspected:
-                row = rows[index]
-                visible = row.ref in self.targets or await self.read_row(row)
-                inspected[index] = row if visible else None
-            return inspected[index]
+        async def read(indices):
+            unread = [i for i in dict.fromkeys(indices) if 0 <= i < len(rows) and i not in inspected]
+            for start in range(0, len(unread), BATCH_SIZE):
+                batch = unread[start:start + BATCH_SIZE]
+                visible = await self.read_rows([rows[i] for i in batch])
+                inspected.update((i, rows[i] if keep else None) for i, keep in zip(batch, visible, strict=True))
 
         def candidate(row):
-            # Fields, live regions and scrolling containers gain searchable text
-            # during inspection. Ordinary buttons already have their label and states.
-            if row.role not in CONTROLS or row.role in FIELDS:
+            if query in row.name.casefold() or query in row.line().casefold():
                 return True
-            if re.match(r"^e?\d", query):
-                return True  # A public ref is assigned during inspection.
-            masked = Row(row.role, "[masked]", row.states, None)
-            return (query in row.name.casefold() or query in row.line().casefold() + " focused"
-                    or query in masked.line().casefold() + " focused")
+            if not row.browser_ref:
+                return False
+            # Values and public refs are assigned at inspection. Other rows can
+            # only gain focus, become masked, or acquire a live/scroll role.
+            if row.role in FIELDS or re.match(r"^e?\d", query):
+                return True
+            roles = [row.role]
+            if row.role in ("generic", "text"):
+                roles.append("status")
+            if row.role == "generic":
+                roles.append("region")
+            return any(query in Row(role, name, row.states, None).line().casefold() + " focused"
+                       for role in roles for name in (row.name, "[masked]"))
 
         indices = (i for i, row in enumerate(rows) if not query or candidate(row))
         last = -1
-        while batch := list(islice(indices, 16)):
-            async with asyncio.TaskGroup() as group:
-                for index in batch:
-                    group.create_task(read(index))
-            for index in batch:
-                row = inspected[index]
+        while batch := list(islice(indices, BATCH_SIZE)):
+            await read(batch)
+            if not query:
+                for i in batch:
+                    if inspected[i] is not None:
+                        yield inspected[i]
+                continue
+
+            matches = []
+            for i in batch:
+                row = inspected[i]
                 if row is None:
-                    continue
-                if not query:
-                    yield row
                     continue
                 position = row.name.casefold().find(query)
                 if position < 0 and query not in row.line().casefold():
                     continue
                 if position > 64 and row.role == "text":
                     row.name = "…" + row.name[position - 24:]
-                # Include the nearest visible row on either side, once, even
-                # when a generic container disappears during inspection.
-                before, after = index - 1, index + 1
-                while before > last and await read(before) is None:
+                matches.append(i)
+            await read(n for i in matches for n in (i - 1, i + 1))
+            for i in matches:
+                before, after = i - 1, i + 1
+                while before > last and inspected[before] is None:
                     before -= 1
-                while after < len(rows) and await read(after) is None:
+                    if before > last and before not in inspected:
+                        await read(range(before, max(last, before - BATCH_SIZE), -1))
+                while after < len(rows) and inspected[after] is None:
                     after += 1
-                for neighbor in (before, index, after):
+                    if after < len(rows) and after not in inspected:
+                        await read(range(after, after + BATCH_SIZE))
+                for neighbor in (before, i, after):
                     if last < neighbor < len(rows):
                         yield inspected[neighbor]
                         last = neighbor
@@ -454,7 +527,8 @@ class PageInteraction:
             if re.fullmatch(r"e[1-9][0-9]*", ref) and int(ref[1:]) < self.first_ref:
                 raise stale()
             raise missing()
-        if not await target.handle.evaluate("el => el.isConnected && el.ownerDocument === document"):
+        handle = await target.element()
+        if not await handle.evaluate("el => el.isConnected && el.ownerDocument === document"):
             raise stale()
         return target
 

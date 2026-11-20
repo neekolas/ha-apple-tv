@@ -12,6 +12,7 @@ from ..live import page_failure
 from ..processes import child_env, reap
 from ..state import Fault
 from . import browsers
+from .interaction import BATCH_ENGINE
 from .sender import STAGE_URL, Sender
 
 
@@ -134,6 +135,7 @@ class TvpipeSender(Sender):
                 finally:
                     await session.detach()
                 self.debug_port = int(port)
+                await self.driver.selectors.register("pagebatch", script=BATCH_ENGINE, content_script=True)
                 self.page = page
             finally:
                 if self.page is None:
