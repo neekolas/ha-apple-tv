@@ -84,6 +84,7 @@ Set these in **Settings → Apps → Apple TV Agent Bridge → Configuration**. 
 | `max_active_mirrors` | `1` | Positive integer. Maximum concurrent mirror sessions across the TVs. |
 | `presentation_mode` | `mirror` | `mirror` streams the Chromium tab. `play_url` renders supplied HTML, files or bundles to MP4. `auto` can fall back to MP4 after two failed mirror starts. Live URLs always mirror. |
 | `mirror_size` | `1920x1080` | `1920x1080` or `1280x720`. Use the smaller size to reduce encoding work. |
+| `page_scripts` | `true` | Permit HA admin callers to run JavaScript in the presented document. Set to `false` and restart the app to disable `tv_page_run`. |
 | `mirror_fps` | `10` | Integer from 1 through 60. Higher frame rates need more CPU. |
 | `default_profile` | empty | Preferred label on the tvOS profile picker. The bridge needs screen pairing to read and select it. |
 | `app_profile` | empty | Preferred label on an in-app profile picker. If empty, the bridge tries the selected tvOS profile or `default_profile`. |
@@ -126,14 +127,14 @@ curl -fsS -H "Authorization: Bearer $HA_TOKEN" -H 'Content-Type: application/jso
 
 Choose a TV that is free to use. Replace `<TV name>` in all three MCP calls with its name or bridge ID. Perform them in order.
 
-1. Show a page with a handler that renders updates.
+1. Show a page with a function that changes its heading.
 
    ```json
-   {"tv":"<TV name>","html":"<h1 id='step'>Step 1</h1><script>tv.on('update', d => { document.getElementById('step').textContent = 'Step ' + d.step; tv.state = d }); tv.ready()</script>"}
+   {"tv":"<TV name>","html":"<h1 id='step'>Step 1</h1><script>window.setStep = n => document.getElementById('step').textContent = 'Step ' + n</script>"}
    ```
 
    Pass this to `tv_show`. Read `verified` and `evidence` to see what the bridge confirmed.
-2. Call `tv_update {"tv":"<TV name>","data":{"step":2}}`. The page should display “Step 2”. Check `data.delivered` and `data.page_state`.
+2. Call `tv_page_run {"tv":"<TV name>","script":"window.setStep(arg)","arg":2}`. The page should display “Step 2”. Check that `data.result` is `"Step 2"`.
 3. Call `tv_show {"tv":"<TV name>"}` to stop that presentation. With one paired TV, `tv_show {}` also dismisses it.
 
 For multiple files, supply `files` with `index.html` at its root. Use relative asset paths and a `base64:` prefix for binary file values. For a ZIP, put `index.html` at the archive root and upload the raw archive:

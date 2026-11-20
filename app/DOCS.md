@@ -59,7 +59,7 @@ With several paired TVs, use `data.tvs[].status` for each receiver’s pairing a
 | Intent | Example |
 | --- | --- |
 | Check health and pairings | `tv_status {}` |
-| Show a page or update it | `tv_show {"html":"<h1>Step 1</h1><script>tv.on('update', d => document.querySelector('h1').textContent = d.title)</script>"}`, then `tv_update {"data":{"title":"Step 2"}}` |
+| Show a page and read it | `tv_show {"html":"<h1>Step 1</h1>"}`, then `tv_page_run {"script":"document.querySelector('h1').innerText"}` |
 | Play media | `tv_play {"youtube":"jNQXAC9IVRw"}`, `tv_play {"media":"https://example.org/clip.mp4"}`, or `tv_play {"app":"HBO Max","title":"Succession"}` |
 | Open an app | `tv_open {"app":"Settings","path":["Remotes and Devices"]}` |
 | Read labels or inspect an image | `tv_look {}` or `tv_look {"image":true}` |
@@ -74,23 +74,17 @@ Use `tv://apps` for installed names and IDs, `tv://screen` for the latest text o
 
 ### Presenting pages
 
-On a live mirror, use `tv_page_look {"find":"Next"}` to read a button ref and view. Send them to `tv_page_act` with `action: "click"` and check the returned status. These admin tools operate the mirrored browser without waking the TV or requiring screen pairing. Recorded pages support `tv_update`.
+Use `tv_page_run` to call functions on a page you authored. For other live pages, use DOM APIs such as `document.querySelector('#next').click()`. A later call follows the current document after navigation.
+
+The **page_scripts** app option defaults to `true`. It lets callers with an HA admin token use `tv_page_run` on the private network. Scripts can read and change the page and make requests with its privileges. Set the option to `false` and restart the app to disable caller scripts. Use a new `tv_show` to refresh a recording.
 
 Pass one of `url`, `html`, `files` or `bundle` to `tv_show`. Inline files need an `index.html` entry and relative asset paths. Prefix binary contents with `base64:`. For larger pages, POST a ZIP with `index.html` at its root to `/api/atv_bridge/bundle` and pass the returned `bundle`. The ZIP and its unpacked contents each have a 50 MiB limit. A ZIP may contain up to 8,192 entries. Stored pages share a 500 MiB cache.
 
 For a live web app, keep its server running and pass its URL. Chromium on the Green loads the site, including its JavaScript, fetch requests and WebSockets. For a server on your own machine, share it with `tailscale serve`. Enable kernel networking in the HA Tailscale app. If HA cannot resolve MagicDNS names, record the existing upstream servers with `ha dns info` before running `ha dns options --servers dns://100.100.100.100`. That command replaces the Supervisor DNS server list. For LAN URLs, Tailscale is optional. The bridge checks tailnet DNS in `tv_status` even before a page is shown. The `tailnet_dns_missing` problem includes the HA DNS command. For each live URL, the bridge probes the server and checks the loaded Chromium document. A `page_unreachable` result includes the network error and a suggested fix. A site that refuses framing opens in the captured tab. The next show returns to the stage.
 
-HTML pages and bundles receive the helper automatically. To use it on a live site, include `<script src="http://127.0.0.1:8766/tv.js"></script>` in the page and allow this script in its content security policy.
+Expose an application function for the caller, for example `window.setStep = n => document.querySelector('h1').textContent = 'Step ' + n`. Invoke it with `tv_page_run {"script":"window.setStep(arg)","arg":2}`.
 
-```js
-tv.on("update", data => {
-  document.querySelector("h1").textContent = data.title;
-  tv.state = {title: data.title};
-});
-tv.ready();
-```
-
-A plain `message` event also carries the update in `event.data`. Use the 1920×1080 canvas and body text of at least 28 px. Audio plays by default. Set `audio` to `mute` for silence. `keep_awake` defaults to true and requests a browser screen wake lock. Dismiss the page with `tv_show {}`. The `tv_hide` alias is accepted but omitted from `tools/list`. For a specific room use `tv_show {"tv":"<room>"}`.
+Use the 1920×1080 canvas and body text of at least 28 px. Audio plays by default. Set `audio` to `mute` for silence. `keep_awake` defaults to true and requests a browser screen wake lock. Dismiss the page with `tv_show {}`. The `tv_hide` alias is accepted but omitted from `tools/list`. For a specific room use `tv_show {"tv":"<room>"}`.
 
 ### Presentation mode
 
