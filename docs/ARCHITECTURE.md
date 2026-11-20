@@ -48,7 +48,7 @@ Each advertised tool accepts an optional `tv` selector. Use a name or ID from `t
 | `tv_look` | Read accessible labels and focus. Request an image for a DVT capture. |
 | `tv_open` | Launch an installed app by name or ID. Optionally search or follow a labeled path. |
 | `tv_navigate` | Focus a label and optionally select it. |
-| `tv_remote` | Send keys, a swipe or text. Key sequences read screen state between presses. |
+| `tv_remote` | Send keys, a swipe or text. Keys go out in one burst with one screen read at the end and after Home; `check_each` reads after every key. |
 | `tv_sequence` | Execute bounded, optionally repeated steps while holding the receiver lock. Raw keys check delivery and explicit checkpoints read accessibility. |
 | `tv_power` | Request on or off and check the receiver's power state. |
 | `tv_play` | Play YouTube, a media URL or an app title, or open a deep link and report where it landed. |

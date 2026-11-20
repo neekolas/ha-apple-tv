@@ -344,7 +344,7 @@ class Tools:
             "Check that YouTube is installed and the video is available.",
         ).result(evidence=attempts)
 
-    async def tv_press(self, keys, hold_ms=0, settle_ms=600, screenshot=False, return_focus=False, *, switching_app=False):
+    async def tv_press(self, keys, hold_ms=0, settle_ms=600, screenshot=False, return_focus=False, *, switching_app=False, gap_ms=0):
         """Press an ordered key sequence once. An uncertain delivery must never be replayed automatically."""
         if hold_ms and any(key in MEDIA_COMMANDS for key in keys):
             raise invalid(
@@ -354,7 +354,9 @@ class Tools:
         attempted = False
         try:
             async with self.engine.session() as client:
-                for key in keys:
+                for index, key in enumerate(keys):
+                    if index and gap_ms:
+                        await asyncio.sleep(gap_ms / 1000)
                     if key == "home" or switching_app:
                         async with self.changing_app():
                             attempted = True

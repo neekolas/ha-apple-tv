@@ -13,7 +13,7 @@ Use the bridge on Home Assistant OS with an Apple TV 4K running tvOS 27 or later
 2. Call `tv_status {}` or read `tv://tvs`. Use the target room's stable ID if names collide. Every tool takes optional `tv`. If several TVs are paired, include it on every call for a particular room.
 3. Check `tv_status {"tv":"<room>"}` for reachability, pairings and capabilities. If someone may be watching, use a text-only `tv_look` before changing their screen.
 
-Use MCP discovery for tool choices, arguments and examples. For repetitive remote work, plan a `tv_sequence` using labels from the target TV. Put a checkpoint immediately before an action that depends on focus, app or row value. See [Drive native apps](apps.md).
+Use MCP discovery for tool choices, arguments and examples. For repetitive remote work, plan a `tv_sequence` using labels from the target TV. Put a checkpoint immediately before an action that depends on focus, app or row value. `tv_remote` sends keys in one fast burst and checks the screen once at the end; add `"check_each":true` only when each press must be confirmed. See [Drive native apps](apps.md).
 
 On uncertain delivery, inspect the current screen before resuming. Ask before purchases, rentals or upgrades.
 

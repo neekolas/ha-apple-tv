@@ -141,9 +141,11 @@ Choose one form:
 - `{"text":"search terms","submit":true}` replaces text in a focused field and checks readback. Optional `submit` sends Select afterwards.
 - `{"swipe":"left"}` accepts `up`, `down`, `left` or `right`.
 
+Optional `check_each` (keys only, default false) switches to the slower per-key mode described below.
+
 HID keys are `up`, `down`, `left`, `right`, `menu`, `select`, `home`, `volume_up`, `volume_down`, `siri`, `screensaver`, `play_pause`, `channel_increment`, `channel_decrement`, `guide`, `page_up` and `page_down`. Media commands are `play`, `pause`, `next` and `previous`.
 
-The bridge checks the screen after each key. A sequence can continue after an acknowledged key with no visible change if focus remains readable. Lost acknowledgment or missing focus between keys stops the sequence. `data.confirmed_keys` counts acknowledged keys. The next attempted key may also have arrived. Look before sending more. The bridge has no purchase guard. Get the user's approval before selecting a paid action.
+By default the bridge sends the keys in one burst, 100 ms apart, waits 300 ms and reads the screen once. `verified` is true when power, focus, keyboard, app or playback differs from the start. After `home`, it reads the screen before sending the remaining keys and stops if focus is unreadable. With `check_each: true` it reads the screen after every key, so `verified` is false if any key showed no change, and missing focus between keys stops the run. Lost acknowledgment always stops the keys. `data.confirmed_keys` counts acknowledged keys. The next attempted key may also have arrived. Look before sending more. The bridge has no purchase guard. Get the user's approval before selecting a paid action.
 
 ### tv_sequence
 

@@ -19,6 +19,7 @@ from .pair import exchange
 from .prompts import prompt_choice
 from .navigation import label, match_app, matches_label, navigate, normal
 
+KEY_GAP_MS = 100
 RECIPES = yaml.safe_load((Path(__file__).parents[1] / "data/apps.yaml").read_text())
 
 
@@ -416,9 +417,27 @@ class PublicTools:
             or playback_identity(before["playing"]) != playback_identity(after["playing"])
         )
 
-    async def tv_remote(self, keys=None, text=None, submit=False, hold_ms=0, swipe=None):
-        """Send keys, a swipe or text when a labeled target is unavailable. Can wake the TV. Reads the screen after each key and checks keyboard readback for text.
-        data.confirmed_keys counts acknowledgments. verified=false means an effect was unclear. On lost delivery inspect screen before sending more.
+    async def settled(self, before, key):
+        after = await self.snapshot()
+        if key in ("home", "menu", "select") and (not after["focus"] or not self.changed(before, after)):
+            await asyncio.sleep(0.3)
+            after = await self.snapshot()
+        return after
+
+    async def send_keys(self, keys, hold, path):
+        result = await self.ops.tv_press(keys, hold_ms=hold, settle_ms=self.settle_ms, gap_ms=KEY_GAP_MS)
+        if not result["ok"]:
+            path += keys[: result.get("confirmed_keys", 0)]
+        try:
+            checked(result)
+        except Fault as exc:
+            exc.fields.update(confirmed_keys=len(path), keys=path)
+            raise
+        path += keys
+
+    async def tv_remote(self, keys=None, text=None, submit=False, hold_ms=0, swipe=None, check_each=False):
+        """Send keys, a swipe or text when a labeled target is unavailable. Can wake the TV. Keys go out in one burst and the screen is read once at the end, plus after Home. check_each reads the screen after every key and stops if focus is unreadable. Text checks keyboard readback.
+        data.confirmed_keys counts acknowledgments. verified=false means no screen change was seen. On lost delivery inspect screen before sending more.
         Use tv_sequence for checkpointed runs. For example, tv_remote {"keys":["menu"]}."""
         path = []
         screen = await self.snapshot()
@@ -440,22 +459,18 @@ class PublicTools:
             after = await self.snapshot()
             verified = self.changed(screen, after)
             screen = after
-        for index, key in enumerate(keys or []):
-            try:
-                await self.press(key, hold_ms)
-            except Fault as exc:
-                exc.fields.update(confirmed_keys=len(path), keys=path)
-                raise
-            path.append(key)
-            after = await self.snapshot()
-            if key in ("home", "menu", "select") and (
-                not after["focus"] or not self.changed(screen, after)
-            ):
-                await asyncio.sleep(0.3)
-                after = await self.snapshot()
-            verified &= self.changed(screen, after)
+        keys = list(keys or [])
+        # Per-key mode checks every key. Burst mode still re-reads after Home, before more keys land in a new app.
+        cuts = [i + 1 for i, key in enumerate(keys) if check_each or key == "home"]
+        chunks = [keys[a:b] for a, b in zip([0] + cuts, cuts + [len(keys)]) if a < b]
+        start = screen
+        for index, chunk in enumerate(chunks):
+            await self.send_keys(chunk, hold_ms, path)
+            after = await self.settled(screen, chunk[-1])
+            if check_each:
+                verified &= self.changed(screen, after)
             screen = after
-            if index < len(keys) - 1 and screen["focus"] is None:
+            if index < len(chunks) - 1 and screen["focus"] is None:
                 raise Fault(
                     "uncertain",
                     "Focus could not be read between remote presses.",
@@ -463,6 +478,8 @@ class PublicTools:
                     confirmed_keys=len(path),
                     keys=path,
                 )
+        if keys and not check_each:
+            verified &= self.changed(start, screen)
         evidence.append(
             "Screen change observed" if verified else "Delivery acknowledged; screen change unconfirmed"
         )

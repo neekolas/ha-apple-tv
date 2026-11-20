@@ -1,6 +1,7 @@
 """Exercise the public dispatcher against a focusable UI and fake control session."""
 
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock
 
 import pytest
@@ -229,6 +230,52 @@ async def test_airplay_interrupt_reopens_and_eof_finishes(ui):
         finished.set()
         await service.tools.media.task
     assert positions == [0, 30] and service.tools.media.problem is None
+
+
+async def test_remote_bursts_keys_and_reads_once(ui):
+    service, grid, tv = ui
+    grid.steps.clear()
+    r = await service.tools.call("tv_remote", {"keys": ["right", "down", "left"]})
+    assert r["ok"] and r["verified"] and r["data"]["keys"] == ["right", "down", "left"]
+    presses = [i for i, step in enumerate(grid.steps) if step[0] == "press"]
+    assert presses == [presses[0], presses[0] + 1, presses[0] + 2]
+    assert r["screen"]["focus"]["label"] == "Results"
+
+
+async def test_remote_burst_ignores_unreadable_focus_but_check_each_stops(ui):
+    service, grid, tv = ui
+    reads = {"n": 0}
+
+    async def blind(method, **kwargs):
+        reads["n"] += 1
+        return {"focused": None}
+
+    service.observer.call = blind
+    r = await service.tools.call("tv_remote", {"keys": ["right", "down"]})
+    assert r["ok"] and grid.keys == ["right", "down"]
+    grid.keys.clear()
+    r = await service.tools.call("tv_remote", {"keys": ["right", "down"], "check_each": True})
+    assert r["error"]["code"] == "uncertain" and r["data"]["confirmed_keys"] == 1
+    assert grid.keys == ["right"]
+
+
+async def test_remote_rereads_after_home_before_more_keys(ui):
+    service, grid, tv = ui
+    service.tools.ops.changing_app = lambda: contextlib.nullcontext()
+
+    async def press(key, hold=0):
+        if key == "home":
+            grid.steps.append(("press", key))
+            grid.keys.append(key)
+            return
+        await grid.press(key)
+
+    tv.hid = press
+    grid.steps.clear()
+    r = await service.tools.call("tv_remote", {"keys": ["home", "right"]})
+    assert r["ok"] and grid.keys == ["home", "right"]
+    kinds = [step[0] for step in grid.steps]
+    assert "read" in kinds[kinds.index("press") : len(kinds) - kinds[::-1].index("press")]
 
 
 async def test_remote_uncertain_no_text_field_and_observer_failure(ui):

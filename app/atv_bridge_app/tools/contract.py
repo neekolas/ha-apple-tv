@@ -75,7 +75,7 @@ DIRECTIONS = ["up", "down", "left", "right"]
 TV = described(TEXT, "Receiver name or ID from tv://tvs. Supply it when the target is ambiguous.")
 APP = described(TEXT, "Installed app name or bundle ID from tv://apps.")
 HOLD = "Hold each HID key for this many milliseconds. Media commands require zero."
-KEYS_HELP = "Ordered keys. Stop on lost acknowledgment or unreadable focus between presses."
+KEYS_HELP = "Ordered keys, sent in one burst. The screen is read at the end and after Home. Stop on lost acknowledgment."
 SHOW = {
     "url": described(TEXT, "Live HTTP(S) page on the public internet, tailnet or a destination permitted by page_network_allow."),
     "html": described(TEXT, "Contents of a standalone HTML page."),
@@ -170,9 +170,10 @@ SCHEMAS = {
             "text": described(TEXT, "Replace the contents of the focused keyboard field and check readback."),
             "submit": described(BOOL, "Press Select after successful text entry.", default=False),
             "swipe": described({"enum": DIRECTIONS}, "Send one directional swipe."),
+            "check_each": described(BOOL, "Read the screen after every key, report whether each changed it, and stop if focus becomes unreadable. Slower.", default=False),
         },
         oneOf=[{"required": [key]} for key in ("keys", "text", "swipe")],
-        dependentRequired={"hold_ms": ["keys"], "submit": ["text"]},
+        dependentRequired={"hold_ms": ["keys"], "submit": ["text"], "check_each": ["keys"]},
         **{
             "if": {"required": ["hold_ms"], "properties": {"hold_ms": described({"exclusiveMinimum": 0}, HOLD)}},
             "then": {"properties": {"keys": described({"items": {"not": {"enum": list(MEDIA_COMMANDS)}}}, KEYS_HELP)}},
