@@ -152,6 +152,8 @@ async def check(root):
     submissions = []
 
     async def content(request):
+        if request.path == "/redirect":
+            raise web.HTTPFound("/direct")
         if request.path == "/submitted":
             submissions.append(request.query_string)
         if request.path.startswith("/browser-error") and "Chrom" in request.headers.get(
@@ -202,7 +204,7 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
                 {"html": PAGE.replace('<script src="http://127.0.0.1:8766/tv.js"></script>', "")},
             ),
             ("live frame", {"url": "http://localhost:8767/frame"}),
-            ("direct", {"url": "http://127.0.0.1:8767/direct"}),
+            ("direct", {"url": "http://127.0.0.1:8767/redirect"}),
             ("HTTP 401 page", {"url": "http://127.0.0.1:8767/auth"}),
             ("back on stage", {"files": {"index.html": PAGE}}),
         ]:
@@ -212,7 +214,7 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
             await ops.present(**(options | source))
             capture = await mirror.browser_page()
             assert capture.url == (
-                source["url"] if label in ("direct", "HTTP 401 page") else STAGE_URL
+                "http://127.0.0.1:8767/direct" if label == "direct" else source["url"] if label == "HTTP 401 page" else STAGE_URL
             ), capture.url
             assert await stage.current_state() == {"phase": "initial"}, (
                 label,
@@ -258,6 +260,21 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
                     data = (await tools.call("tv_page_look", {"find": "Next"}))["data"]
                     action = {"view": data["view"], "ref": element(data["snapshot"], "button", "Next"), "action": "click"}
                     assert (await tools.call("tv_page_act", action))["error"]["code"] == "delivery_uncertain"
+                    # End the real sender. Its supervisor starts a fresh capture at the raw redirect URL.
+                    previous = mirror.proc
+                    previous.terminate()
+                    async with asyncio.timeout(25):
+                        while mirror.proc is previous or not mirror.started:
+                            await asyncio.sleep(.1)
+                    await asyncio.sleep(1)
+                    lost = await tools.call("tv_page_look", {})
+                    assert lost["error"]["code"] == "stale_view" and "tv_show" in lost["error"]["fix"], lost
+                    assert await stage.current_state() == {"phase": "initial"}
+                    await ops.update_page({"title": "Restarted"})
+                    assert await stage.current_state() == {"title": "Restarted"}
+                    await ops.present(**(options | source))
+                    await asyncio.sleep(1)
+                    assert (await tools.call("tv_page_look", {}))["ok"]
             if runner:
                 assert runner is mirror.runner
             runner = mirror.runner

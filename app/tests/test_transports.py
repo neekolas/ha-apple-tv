@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -242,3 +243,32 @@ async def test_failed_mcp_capture_after_success_returns_reason_and_no_image(serv
         error = second.structuredContent["error"]
         assert error["code"] == "screen_unavailable" and "ConnectionTerminatedError" in error["message"]
         assert "image" not in second.structuredContent["data"]
+
+@pytest.mark.parametrize("urls,deny_fails", [
+    (["http://example.org/"], False),
+    (["https://example.org/redirected"], False),
+    (["https://example.org/one", "https://example.org/two"], False),
+    (["http://example.org/"], True),
+])
+async def test_repin_capture_and_close_failed_cdp_attachment(tmp_path, urls, deny_fails):
+    sender = TvpipeSender("", None)
+    sender.url = "http://example.org"
+    sender.profile = SimpleNamespace(name=str(tmp_path))
+    (tmp_path / "DevToolsActivePort").write_text("9222\n/browser\n")
+    session = SimpleNamespace(send=AsyncMock(side_effect=RuntimeError if deny_fails else None), detach=AsyncMock())
+    context = SimpleNamespace(new_cdp_session=AsyncMock(return_value=session))
+    context.pages = [SimpleNamespace(url=url, opener=AsyncMock(return_value=None), context=context, is_closed=lambda: False)
+                     for url in urls]
+    browser = SimpleNamespace(contexts=[context], close=AsyncMock())
+    sender.driver = SimpleNamespace(chromium=SimpleNamespace(connect_over_cdp=AsyncMock(return_value=browser)))
+    if len(urls) > 1 or deny_fails:
+        with pytest.raises((Fault, RuntimeError)):
+            await sender.browser_page()
+        browser.close.assert_awaited_once()
+        assert sender.page is None
+    else:
+        assert await sender.browser_page() is context.pages[0]
+        browser.close.assert_not_awaited()
+    if len(urls) == 1:
+        session.send.assert_awaited_once_with("Browser.setDownloadBehavior", {"behavior": "deny"})
+        session.detach.assert_awaited_once()

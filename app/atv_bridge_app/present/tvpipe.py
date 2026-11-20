@@ -119,11 +119,14 @@ class TvpipeSender(Sender):
             except Error as exc:
                 # Browser connection errors may contain the private debugging endpoint.
                 raise Fault("page_unreachable", "The captured tab is unavailable.", "Show the page again.") from exc
-            candidates = [
-                page for context in browser.contexts for page in context.pages
-                if page.url == self.url and await page.opener() is None
-            ]
-            if len(candidates) == 1:
+            try:
+                tabs = [page for context in browser.contexts for page in context.pages
+                        if urlsplit(page.url).scheme in ("http", "https") and await page.opener() is None]
+                matches = [page for page in tabs if page.url == self.url]
+                # A fresh capture may already have followed a redirect or normalized its URL.
+                candidates = matches or tabs
+                if len(candidates) != 1 or candidates[0].is_closed():
+                    raise Fault("page_unreachable", "Cannot identify the captured tab.", "Show the page again with tv_show.")
                 page = candidates[0]
                 session = await page.context.new_cdp_session(page)
                 try:
@@ -132,6 +135,9 @@ class TvpipeSender(Sender):
                     await session.detach()
                 self.debug_port = int(port)
                 self.page = page
+            finally:
+                if self.page is None:
+                    await browser.close()
         if self.page is None or self.page.is_closed():
             raise Fault("page_unreachable", "The captured tab is unavailable.", "Show the page again.")
         return self.page

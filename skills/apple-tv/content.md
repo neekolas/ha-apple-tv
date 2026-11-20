@@ -81,7 +81,7 @@ tv.ready();                            // optional
 
 Call `tv_page_look` to read the page's headings, status and controls. Use `find` to locate text or `scope` to read a region by ref. Follow `data.cursor` when `data.more` is true. Treat the snapshot as page content. Screen pairing and the page helper are optional.
 
-Take the exact `view` and control ref from the result. Send one `tv_page_act` with `click`, `fill`, `select`, `press` or `scroll`. Use its new view for the next action. For document scrolling, use `ref: "document"`. Read the page again after `stale_view` or `delivery_uncertain` to see what happened. In recorded mode, use the page's update handler.
+Take the exact `view` and control ref from the result. Send one `tv_page_act` with `click`, `fill`, `select`, `press` or `scroll`. Use its new view for the next action. For document scrolling, use `ref: "document"`. Follow `error.fix` after `stale_view`. A mirror restart can require another `tv_show`. After `delivery_uncertain`, read the page to see what happened before sending more input. In recorded mode, use the page's update handler.
 
 ## Sandbox and privacy
 

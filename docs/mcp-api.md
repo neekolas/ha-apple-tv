@@ -117,7 +117,7 @@ A successful action returns `data.dispatched: true`, a new `data.view` and any o
 
 | Error | How to proceed |
 |---|---|
-| `stale_view` | Call `tv_page_look` again. A reload, replaced element, new presentation or newer view can invalidate a ref. If the tab navigated away, present the intended page again. |
+| `stale_view` | Follow `error.fix`. Use a fresh `tv_page_look` for an expired ref or view. If the mirror restarted or lost the verified document, present the intended page again with `tv_show`. |
 | `target_missing` | Choose an issued ref or an action the control supports. A select value must identify one enabled option. |
 | `delivery_uncertain` | Inspect the page before any further input. The action may have run. The bridge does not replay it. |
 | `nothing_showing` | Present a page on the selected TV first. |

@@ -831,7 +831,7 @@ class PublicTools:
 
     async def tv_page_act(self, view, ref, action, **args):
         """Operate one control in the mirrored browser without waking the TV. Use the view and ref from tv_page_look. Scroll with ref document or a scrollable region.
-        data.dispatched acknowledges input. verified means a focus, value or status change was observed. Use the returned view for the next action. On stale_view or delivery_uncertain, read the page before acting again.
+        data.dispatched acknowledges input. verified means a focus, value or status change was observed. Use the returned view for the next action. For stale_view, follow error.fix to refresh the view or present the page again. For delivery_uncertain, inspect the page before acting again.
         For example, tv_page_act {"view":"sample-view","ref":"e2","action":"click"}."""
         data = await self.page_interaction.act(view, ref, action, **args)
         return outcome("Dispatched browser input.", ["Chromium accepted the action"], data,

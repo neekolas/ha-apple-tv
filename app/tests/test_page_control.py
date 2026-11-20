@@ -116,3 +116,19 @@ async def test_form_activation_key_refused_before_dispatch(service, key):
     result = await service.tools.call("tv_page_act", {"view": "seen", "ref": "e1", "action": "press", "key": key})
     assert result["error"]["code"] == "target_missing" and "form" in result["error"]["message"]
     handle.press.assert_not_awaited()
+
+
+@pytest.mark.parametrize("frame_url,verified", [
+    ("https://example.org/", False),
+    ("https://example.org/other", True),
+    ("https://other.example.org/", True),
+])
+async def test_lost_live_document_requires_new_show(service, frame_url, verified):
+    page = object()
+    service.stage.page = {"url": "https://example.org/", "page_id": "id", "revision": "r"}
+    sender = SimpleNamespace(mode="mirror", started=True, page=page, verified_page=page if verified else None,
+                             verified_root=None, verified_url="https://example.org/",
+                             presented_frame=AsyncMock(return_value=SimpleNamespace(url=frame_url)))
+    service.stage.direct_browser = service.operations.presenter = sender
+    result = await service.tools.call("tv_page_look", {})
+    assert result["error"]["code"] == "stale_view" and "tv_show" in result["error"]["fix"]

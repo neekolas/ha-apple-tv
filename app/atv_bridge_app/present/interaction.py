@@ -26,6 +26,11 @@ def stale():
     return Fault("stale_view", "The page view or element has changed.", "Call tv_page_look again.")
 
 
+def unverified():
+    return Fault("stale_view", "The mirror no longer has the verified presentation.",
+                 "Present the intended page again with tv_show.")
+
+
 def missing():
     return Fault("target_missing", "This target is unavailable for the requested operation.",
                  "Read tv_page_look and choose a supported control.")
@@ -166,20 +171,20 @@ class PageInteraction:
             raise Fault("page_not_live", "The presentation is a recording.", "Show a mirrored page.")
         direct = stage.direct_browser is sender
         if not sender.started or (not direct and not stage.ready.is_set()):
-            raise stale()
+            raise unverified()
         page = stage.page
         if page.get("url") and (sender.page is None or sender.page is not sender.verified_page):
-            raise stale()
+            raise unverified()
         try:
             frame = await sender.presented_frame(page["page_id"], page["revision"], direct)
         except Fault as exc:
-            raise stale() from exc
+            raise unverified() from exc
         expected = sender.verified_url if page.get("url") else urljoin(stage.origin, page["src"])
         if not frame or not expected:
-            raise stale()
+            raise unverified()
         current, wanted = urlsplit(frame.url), urlsplit(expected)
         if (current.scheme, current.netloc) != (wanted.scheme, wanted.netloc):
-            raise stale()
+            raise unverified()
         if page.get("url"):
             # Single-page apps change the URL in place. Accept a changed URL only
             # while the frame holds the document last seen at the verified URL.
@@ -193,14 +198,14 @@ class PageInteraction:
                 same = False
             if not same:
                 if urldefrag(frame.url).url != urldefrag(expected).url:
-                    raise stale()
+                    raise unverified()
                 sender.verified_root = await frame.evaluate_handle("document.documentElement")
                 if root is not None:
                     await asyncio.gather(root.dispose(), return_exceptions=True)
         elif not current.path.startswith(wanted.path.rsplit("/", 1)[0] + "/"):
-            raise stale()
+            raise unverified()
         if urlsplit(expected).scheme not in ("http", "https"):
-            raise stale()
+            raise unverified()
         if page.get("url") and (urlsplit(expected).netloc == urlsplit(stage.origin).netloc
                                 or (sender.debug_port and urlsplit(expected).port == sender.debug_port)):
             raise missing()
@@ -314,7 +319,11 @@ class PageInteraction:
                 await self.check()
                 self.view = token_urlsafe(14)
                 return self.slice(0)
-        except (Error, ExceptionGroup, TimeoutError, yaml.YAMLError, ValueError, RecursionError) as exc:
+        except (yaml.YAMLError, ValueError, RecursionError) as exc:
+            await self.clear()
+            raise Fault("page_unreachable", "Chromium returned an unreadable snapshot.",
+                        "Simplify the page and present it again with tv_show.") from exc
+        except (Error, ExceptionGroup, TimeoutError) as exc:
             await self.clear()
             raise stale() from exc
 
