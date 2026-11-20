@@ -8,6 +8,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from ..live import TAILNET_DNS_FIX
+from ..present.interaction import PageInteraction
 from ..present.media import MediaPlayback
 from ..state import Fault, classify
 from . import link_info, playback_identity
@@ -19,6 +20,9 @@ from .prompts import prompt_choice
 from .navigation import label, match_app, matches_label, navigate, normal
 
 RECIPES = yaml.safe_load((Path(__file__).parents[1] / "data/apps.yaml").read_text())
+
+
+PAGE_TOOLS = {"tv_page_look", "tv_page_act"}
 
 
 class PublicTools:
@@ -34,6 +38,7 @@ class PublicTools:
         self.profile_name = None
         self.action_evidence = []
         self.media = MediaPlayback(self.engine)
+        self.page_interaction = PageInteraction(ops)
 
     async def snapshot(self, focus=None, read_focus=True, observation=None, *, status=None):
         if status is None:
@@ -119,18 +124,18 @@ class PublicTools:
             ):
                 await self.admit(replace)
             already_off = name == "tv_power" and not args["on"] and (await self.engine.status())["power"] == "off"
-            if name not in ("tv_look", "tv_status", "tv_pair", "tv_sequence") and not already_off:
+            if name not in ("tv_look", "tv_status", "tv_pair", "tv_sequence") and name not in PAGE_TOOLS and not already_off:
                 await self.prepare_action(force=name == "tv_power" and args["on"])
             result = await getattr(self, name)(**args)
             if self.action_evidence:
                 result["evidence"][:0] = self.action_evidence
             if name != "tv_status" and "screen" not in result:
-                result["screen"] = await self.snapshot()
+                result["screen"] = self.last_screen.copy() if name in PAGE_TOOLS else await self.snapshot()
             if name == "tv_look":
                 self.last_look = {k: v for k, v in result.items() if k != "image"}
         except Exception as exc:  # noqa: BLE001 - Both public transports use this contract.
             fault = classify(exc)
-            if name not in ("tv_status", "tv_pair"):
+            if name not in ("tv_status", "tv_pair") and name not in PAGE_TOOLS:
                 await self.snapshot(
                     read_focus=fault.code
                     not in ("screen_unavailable", "observer_failed", "observer_unavailable")
@@ -141,9 +146,13 @@ class PublicTools:
             if name == "tv_pair":
                 result["screen"] = UNKNOWN.copy()
         finally:
-            if hasattr(self, "reconcile"):
-                self.reconcile()
-            self.lock.release()
+            try:
+                if self.page_interaction.root and self.page_interaction.revision != (self.stage.page or {}).get("revision"):
+                    await self.page_interaction.clear()
+                if hasattr(self, "reconcile"):
+                    self.reconcile()
+            finally:
+                self.lock.release()
         self.ops.state.audit(name, args, result)
         return result
 
@@ -811,6 +820,21 @@ class PublicTools:
             },
             result["verified"],
         )
+
+    async def tv_page_look(self, find=None, scope=None, cursor=None):
+        """Read controls, headings and status in the mirrored browser without waking the TV. Use find for literal text, scope for a region or control, or cursor for the next rows.
+        Read data.snapshot and use its element refs with data.view on the same TV. A recording gives page_not_live. The screen field is cached.
+        For example, tv_page_look {"find":"Next"}."""
+        data = await self.page_interaction.look(find, scope, cursor)
+        return outcome("Read the mirrored document.", ["Chromium accessibility snapshot"], data)
+
+    async def tv_page_act(self, view, ref, action, **args):
+        """Operate one control in the mirrored browser without waking the TV. Use the view and ref from tv_page_look. Scroll with ref document or a scrollable region.
+        data.dispatched acknowledges input. verified means a focus, value or status change was observed. Use the returned view for the next action. On stale_view or delivery_uncertain, read the page before acting again.
+        For example, tv_page_act {"view":"sample-view","ref":"e2","action":"click"}."""
+        data = await self.page_interaction.act(view, ref, action, **args)
+        return outcome("Dispatched browser input.", ["Chromium accepted the action"], data,
+                       verified=any(k in data for k in ("focus", "focused", "value", "status")))
 
     async def tv_update(self, data):
         """Send data to the current page after tv_show. Can wake the TV. The browser posts a message and recorded presentations are rendered again.

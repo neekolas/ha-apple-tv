@@ -7,4 +7,4 @@ Pillow>=11,<14
 zeroconf>=0.145,<1
 PyYAML>=6,<7
 jsonschema>=4,<5
-playwright>=1.51,<2
+playwright>=1.65.2,<2

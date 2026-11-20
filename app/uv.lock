@@ -251,7 +251,7 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4,<5" },
     { name = "mcp", specifier = "==1.30.0" },
     { name = "pillow", specifier = ">=11,<14" },
-    { name = "playwright", specifier = ">=1.51,<2" },
+    { name = "playwright", specifier = ">=1.65.2,<2" },
     { name = "pyatv", specifier = "==0.18.0" },
     { name = "pymobiledevice3", specifier = "==11.61.0" },
     { name = "pyyaml", specifier = ">=6,<7" },
