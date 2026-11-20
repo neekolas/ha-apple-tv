@@ -1,5 +1,8 @@
 import asyncio
+import hashlib
 import json
+import os
+import re
 import struct
 import tempfile
 from contextlib import suppress
@@ -9,10 +12,38 @@ from urllib.parse import urlsplit
 from playwright.async_api import Error, async_playwright
 
 from ..live import page_failure
+from ..page_network import PageNetworkPolicy
+from ..page_proxy import PageProxy
 from ..processes import child_env, reap
 from ..state import Fault
 from . import browsers
 from .sender import STAGE_URL, Sender
+
+
+# crates/tvpipe/src/browser/capture.js at the release pinned by install-tvpipe.sh.
+CAPTURE_JS_LENGTH = 38420
+CAPTURE_JS_SHA256 = "485907e2d6bb5b9e91aa1bd136b11908b83d72fd6ffcd0863a027f621be3487c"
+
+
+def _listener_inode(pid, port):
+    """Return the child-owned listening inode for the exact IPv4 loopback endpoint."""
+    root = Path("/proc") / str(pid)
+    endpoint = f"0100007F:{port:04X}"
+    try:
+        for row in (root / "net/tcp").read_text().splitlines()[1:]:
+            fields = row.split()
+            if fields[1] != endpoint or fields[3] != "0A":
+                continue
+            owner = f"socket:[{fields[9]}]"
+            for fd in (root / "fd").iterdir():
+                try:
+                    if os.readlink(fd) == owner:
+                        return owner
+                except FileNotFoundError:
+                    continue
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        pass
+    return None
 
 
 async def stop_sender(proc):
@@ -41,10 +72,13 @@ class TvpipeSender(Sender):
         size="1920x1080",
         fps=10,
         resolve_endpoint=None,
+        stage=None,
     ):
         super().__init__("mirror")
         self.size = size
         self.fps = fps
+        self.stage = stage
+        self.proxy = None
         self.stage_ready = ready
         self.stage_url = STAGE_URL
         self.host = host
@@ -60,7 +94,7 @@ class TvpipeSender(Sender):
         self.frames = 0
         self.profile = self.driver = self.page = None
         self.content_frame = self.frame_revision = None
-        self.documents = {}
+        self.navigation_failures = {}
         self.runner = self.proc = None
         self.child_lock = asyncio.Lock()
         self.changed = asyncio.Event()
@@ -103,7 +137,10 @@ class TvpipeSender(Sender):
                 if response and response.status >= 500:
                     raise ValueError(f"HTTP {response.status}")
             except Exception as exc:
-                raise page_failure(urlsplit(stage_url).hostname, exc) from exc
+                denial = self.blocked_navigation(page.main_frame)
+                if not denial and self.proxy:
+                    denial = self.proxy.denial_for(stage_url)
+                raise denial or page_failure(urlsplit(stage_url).hostname, exc) from exc
             self.url = stage_url
         if stage_url == self.stage_url and self.stage_ready is not None:
             await asyncio.wait_for(self.stage_ready.wait(), 8)
@@ -137,7 +174,8 @@ class TvpipeSender(Sender):
                     await session.detach()
                 self.debug_port = int(port)
                 page.on("response", self.record_document)
-                page.on("framedetached", lambda frame: self.documents.pop(frame, None))
+                page.on("requestfailed", self.record_failed_navigation)
+                page.on("framedetached", lambda frame: self.navigation_failures.pop(frame, None))
                 self.page = page
             finally:
                 if self.page is None:
@@ -148,15 +186,18 @@ class TvpipeSender(Sender):
 
     def record_document(self, response):
         if response.request.is_navigation_request():
-            self.documents[response.frame] = response
+            self.navigation_failures.pop(response.frame, None)
 
-    async def document_peer(self, frame, uri):
-        """Use the browser's actual peer when a site shares a protected port number."""
-        response = self.documents.get(frame)
-        if response and urlsplit(response.url).netloc == urlsplit(uri).netloc:
-            peer = await response.server_addr()
-            return peer and peer.get("ipAddress")
-        return None
+    def record_failed_navigation(self, request):
+        if request.is_navigation_request() and self.proxy:
+            denial = self.proxy.denial_for(request.url)
+            if denial:
+                self.navigation_failures[request.frame] = denial
+            else:
+                self.navigation_failures.pop(request.frame, None)
+
+    def blocked_navigation(self, frame):
+        return self.navigation_failures.get(frame)
 
     async def presented_frame(self, page_id, revision, direct):
         page = await self.browser_page()
@@ -192,16 +233,27 @@ class TvpipeSender(Sender):
                 document = await frame.evaluate("""() => ({
                     url: document.documentURI,
                     state: document.readyState,
+                    navigation: document.documentURI.startsWith('chrome-error:')
+                        ? performance.getEntriesByType('navigation')[0]?.name : null,
                     error: document.querySelector('.error-code, #error-code')?.textContent
                 })""")
                 if (
                     urlsplit(document["url"]).scheme not in ("http", "https")
                     or document["state"] == "loading"
                 ):
+                    denial = self.blocked_navigation(frame)
+                    if not denial and self.proxy:
+                        # A fresh stage iframe can fail before CDP attaches.
+                        # Its navigation entry retains the last redirect URL.
+                        denial = self.proxy.denial_for(document.get("navigation") or frame.url)
+                    if denial:
+                        raise denial
                     raise ValueError(
                         document["error"]
                         or f"Chromium loaded {document['url']} ({document['state']})"
                     )
+        except Fault:
+            raise
         except Exception as exc:
             raise page_failure(host, exc) from exc
 
@@ -253,6 +305,9 @@ class TvpipeSender(Sender):
                 self.state.write_tvpipe(host, port)
                 async with self.child_lock:
                     await browsers.sweep()
+                    policy = self.stage.page_network if self.stage else PageNetworkPolicy()
+                    self.proxy = PageProxy(policy, open_capture=self.open_capture)
+                    proxy_url = await self.proxy.start()
                     self.proc = proc = await browsers.spawn(
                         self.executable,
                         "--machine",
@@ -270,7 +325,11 @@ class TvpipeSender(Sender):
                         *(["--no-audio"] if self.audio == "mute" else []),
                         stdin=asyncio.subprocess.PIPE,
                         stdout=asyncio.subprocess.PIPE,
-                        env=child_env(TVPIPE_CONFIG_DIR=str(self.state.root / "tvpipe")),
+                        env=child_env(
+                            TVPIPE_CONFIG_DIR=str(self.state.root / "tvpipe"),
+                            TVPIPE_BROWSER=browsers.CHROMIUM_WRAPPER,
+                            ATV_PAGE_PROXY=proxy_url,
+                        ),
                     )
                 proc.stdin.write(b"SLRW")
                 await proc.stdin.drain()
@@ -349,17 +408,60 @@ class TvpipeSender(Sender):
                 self.started = False
                 self.page = self.debug_port = None
                 self.content_frame = self.frame_revision = None
-                self.documents.clear()
-                if proc:
-                    cleanup = asyncio.create_task(self._clean_child(proc))
-                    try:
-                        await asyncio.shield(cleanup)
-                    except asyncio.CancelledError:
-                        await cleanup
-                        raise
+                self.navigation_failures.clear()
+                cleanup = asyncio.create_task(self._clean_child(proc))
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    await cleanup
+                    raise
             failed_host = host
             await asyncio.sleep(delay)
             delay = min(delay * 2, 60)
+
+    async def open_capture(self, host, port):
+        """Identify tvpipe's capture WebSocket on this connection before sending page bytes."""
+        proc = self.proc
+        if host != "127.0.0.1" or proc is None or proc.returncode is not None:
+            return None
+        inode = await asyncio.to_thread(_listener_inode, proc.pid, port)
+        if not inode:
+            return None
+        writer = None
+        try:
+            async with asyncio.timeout(2):
+                reader, writer = await asyncio.open_connection(host, port)
+                if (
+                    proc is not self.proc
+                    or proc.returncode is not None
+                    or inode != await asyncio.to_thread(_listener_inode, proc.pid, port)
+                ):
+                    return None
+                # tvpipe v0.2.0 does not announce the capture port in URL share mode.
+                # Its other listeners (including a browser-player sink) must stay private.
+                # Fingerprint the pinned release's public script on the very socket
+                # that will carry the authenticated upgrade. No second dial is made.
+                writer.write(f"GET /capture.js HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n".encode())
+                await writer.drain()
+                headers = await reader.readuntil(b"\r\n\r\n")
+                length = re.search(rb"(?im)^Content-Length: ([0-9]+)\r$", headers)
+                if not headers.startswith(b"HTTP/1.1 200 ") or not length:
+                    return None
+                if length[1] != str(CAPTURE_JS_LENGTH).encode():
+                    return None
+                capture = await reader.readexactly(CAPTURE_JS_LENGTH)
+                if hashlib.sha256(capture).hexdigest() != CAPTURE_JS_SHA256:
+                    return None
+                streams = reader, writer
+                writer = None  # Hand ownership of this verified connection to the proxy.
+                return streams
+        except (OSError, TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
+            return None
+        finally:
+            if writer:
+                writer.close()
+                with suppress(OSError):
+                    await writer.wait_closed()
 
     async def wait_for_airplay_handoff(self):
         """Give the receiver a second after the last mirror TEARDOWN."""
@@ -371,8 +473,9 @@ class TvpipeSender(Sender):
     async def _clean_child(self, proc):
         async with self.child_lock:
             try:
-                await stop_sender(proc)
-                self.last_teardown = asyncio.get_running_loop().time()
+                if proc:
+                    await stop_sender(proc)
+                    self.last_teardown = asyncio.get_running_loop().time()
             finally:
                 self.proc = None
                 try:
@@ -381,4 +484,7 @@ class TvpipeSender(Sender):
                             await self.driver.stop()
                 finally:
                     self.driver = None
+                    if self.proxy:
+                        await self.proxy.close()
+                        self.proxy = None
                     await browsers.sweep()

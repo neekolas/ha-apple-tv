@@ -1,9 +1,7 @@
 """Run an admin request in the exact HTTP(S) content document captured by tvpipe."""
 
 import asyncio
-import ipaddress
 import json
-import socket
 from urllib.parse import urljoin, urlsplit
 
 from playwright.async_api import Error
@@ -49,31 +47,9 @@ def unverified():
                  "Present the intended page again with tv_show.")
 
 
-def local_address(host):
-    host = host.rstrip(".").lower()
-    if host == "localhost" or host.endswith(".localhost"):
-        return True
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        return None
-    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
-        address = address.ipv4_mapped
-    if address.is_loopback or address.is_unspecified:
-        return True
-    # The primary stage also listens on the host's LAN interfaces.
-    with socket.socket(socket.AF_INET6 if address.version == 6 else socket.AF_INET) as sock:
-        try:
-            sock.bind((str(address), 0))
-        except OSError:
-            return False
-    return True
-
-
 class PageInteraction:
     def __init__(self, ops):
         self.ops = ops
-        self.debug_ports = set
         self.last_run = float("-inf")
 
     async def binding(self):
@@ -94,33 +70,29 @@ class PageInteraction:
             raise unverified() from exc
         if not frame:
             raise unverified()
+        if denied := sender.blocked_navigation(frame):
+            raise denied
         uri = frame.url
-        await self.allow_document(uri, direct, frame)
+        self.allow_document(uri, direct)
         return frame, uri, direct
 
-    async def allow_document(self, uri, direct, frame):
+    def allow_document(self, uri, direct):
         stage = self.ops.stage
         page = stage.page
-        sender = getattr(self.ops.presenter, "active", self.ops.presenter)
         current = urlsplit(uri)
         if current.scheme not in ("http", "https"):
             raise Fault("target_missing", "The browser is displaying an internal or error document.",
                         "Use tv_show to present an HTTP(S) page.")
-        ports = stage.stage_ports | self.debug_ports() | {8765, 8099, urlsplit(stage.origin).port, sender.debug_port}
-        if (current.port or (443 if current.scheme == "https" else 80)) not in ports:
+        # The proxy allows only literal stage origins on the bridge host. A remote
+        # site may use the same port number. CDP reports the proxy as its peer.
+        if current.hostname != "127.0.0.1" or current.port not in stage.stage_ports | {urlsplit(stage.origin).port}:
             return
-        # An inline bundle lives on the stage listener in an opaque-origin iframe.
         bundle = urlsplit(urljoin(stage.origin, "/c/" + page["page_id"] + "/"))
         if (not direct and not page.get("url") and current.netloc == bundle.netloc
                 and current.scheme == bundle.scheme and current.path.startswith(bundle.path)):
             return
-        local = local_address(current.hostname or "")
-        if local is None:
-            peer = await sender.document_peer(frame, uri)
-            local = local_address(peer) if peer else None
-        if local is not False:
-            raise Fault("target_missing", "Page control cannot operate a bridge listener.",
-                        "Use tv_show to present your content URL or bundle.")
+        raise Fault("target_missing", "Page control cannot operate a bridge listener.",
+                    "Use tv_show to present your content URL or bundle.")
 
     async def run(self, script, arg=None, timeout_ms=5000):
         now = asyncio.get_running_loop().time()
@@ -132,7 +104,7 @@ class PageInteraction:
                 frame, uri, direct = await self.binding()
                 result = await frame.evaluate(RUN_SCRIPT, {"script": script, "arg": arg, "uri": uri, "limit": SCRIPT_LIMIT})
                 if "changed" in result:
-                    await self.allow_document(result["changed"], direct, frame)
+                    self.allow_document(result["changed"], direct)
                     raise stale()
                 if "error" in result:
                     raise Fault("script_error", result["error"] or "The script threw an error.",

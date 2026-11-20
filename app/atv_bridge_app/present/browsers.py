@@ -9,6 +9,8 @@ from pathlib import Path
 
 from ..processes import reap
 
+CHROMIUM_WRAPPER = "/usr/local/bin/chromium-wrapper"
+
 _LOG = logging.getLogger(__name__)
 _owners = set()
 _spawn_lock = asyncio.Lock()

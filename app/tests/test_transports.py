@@ -275,3 +275,33 @@ async def test_repin_capture_and_close_failed_cdp_attachment(tmp_path, urls, den
     if len(urls) == 1:
         session.send.assert_awaited_once_with("Browser.setDownloadBehavior", {"behavior": "deny"})
         session.detach.assert_awaited_once()
+
+
+@pytest.mark.parametrize("recycled", [True, False], ids=["recycled-port", "different-tvpipe-service"])
+async def test_capture_socket_rejects_unverified_listener(monkeypatch, recycled):
+    from atv_bridge_app.present import tvpipe
+
+    sender = TvpipeSender("", None)
+    sender.proc = SimpleNamespace(pid=42, returncode=None)
+    inodes = iter(["socket:[7]", "socket:[8]" if recycled else "socket:[7]"])
+    monkeypatch.setattr(tvpipe, "_listener_inode", lambda pid, port: next(inodes))
+    received = asyncio.get_running_loop().create_future()
+
+    async def listener(reader, writer):
+        message = await reader.readline()
+        if message:
+            # Correct length, wrong script. A child-owned listener alone isn't enough.
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(f"HTTP/1.1 200 OK\r\nContent-Length: {tvpipe.CAPTURE_JS_LENGTH}\r\n\r\n".encode())
+            writer.write(b"x" * tvpipe.CAPTURE_JS_LENGTH)
+            await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+        received.set_result(message)
+
+    async with await asyncio.start_server(listener, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        assert await sender.open_capture("127.0.0.1", port) is None
+        assert await asyncio.wait_for(received, 2) == (
+            b"" if recycled else b"GET /capture.js HTTP/1.1\r\n"
+        )

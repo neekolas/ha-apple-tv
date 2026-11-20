@@ -1,6 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -28,24 +28,19 @@ async def test_page_failures_skip_tv_io_and_use_active_transport(service):
 async def test_live_binding_follows_the_presented_frame_after_navigation(service, url):
     service.stage.page = {"url": "https://example.org/", "page_id": "id", "revision": "r"}
     frame = SimpleNamespace(url=url)
-    sender = SimpleNamespace(mode="mirror", started=True, debug_port=None, presented_frame=AsyncMock(return_value=frame))
+    sender = SimpleNamespace(mode="mirror", started=True, blocked_navigation=Mock(return_value=None), presented_frame=AsyncMock(return_value=frame))
     service.stage.direct_browser = service.operations.presenter = sender
     assert await service.tools.page_interaction.binding() == (frame, frame.url, True)
 
 
 @pytest.mark.parametrize("url,blocked", [
-    ("http://localhost:8766/page", True), ("http://LOCALHOST.:9123/page", True),
-    ("http://127.254.2.1:9123/page", True), ("https://[::1]:9222/page", True),
-    ("http://[::ffff:127.0.0.2]:8766/page", True), ("http://localhost:8767/page", False),
-    ("https://example.org:8766/page", False), ("http://alias.test:9123/page", True),
-    ("http://0.0.0.0:8765/page", True),
+    ("http://127.0.0.1:8766/page", True), ("http://127.0.0.1:9123/page", True),
+    ("https://example.org:8766/page", False), ("https://example.org:8765/page", False),
 ])
-async def test_live_binding_excludes_loopback_stage_and_debug_ports(service, url, blocked):
-    page = object()
+async def test_live_binding_excludes_stage_origin_and_allows_remote_ports(service, url, blocked):
     service.stage.stage_ports = {9123}
     service.stage.page = {"url": url, "page_id": "id", "revision": "r"}
-    sender = SimpleNamespace(mode="mirror", started=True, page=page, debug_port=9222,
-                             document_peer=AsyncMock(return_value="127.0.0.1" if "alias.test" in url else "192.0.2.8"),
+    sender = SimpleNamespace(mode="mirror", started=True, blocked_navigation=Mock(return_value=None),
                              presented_frame=AsyncMock(return_value=SimpleNamespace(url=url)))
     service.stage.direct_browser = service.operations.presenter = sender
     if blocked:

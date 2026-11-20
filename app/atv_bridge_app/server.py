@@ -79,6 +79,7 @@ class TVRuntime:
             host,
             state,
             ready=self.stage.ready,
+            stage=self.stage,
             size=mirror_size,
             fps=mirror_fps,
             resolve_endpoint=resolver.airplay_endpoint,

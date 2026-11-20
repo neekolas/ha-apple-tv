@@ -8,6 +8,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 COPY build/install-tvpipe.sh /tmp/
 RUN /tmp/install-tvpipe.sh
 COPY build/chromium-wrapper /usr/local/bin/
+COPY build/chromium-network-policy.json /etc/chromium/policies/managed/page-network.json
 WORKDIR /opt/app
 RUN --mount=type=bind,source=vendor,target=/mnt/vendor \
     pip install --no-cache-dir --require-hashes --no-deps -r /mnt/vendor/requirements.lock \

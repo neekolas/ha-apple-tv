@@ -2,12 +2,12 @@ import asyncio
 import base64
 import json
 import logging
-import os
 import tempfile
 from pathlib import Path
 
 from playwright.async_api import async_playwright
 
+from ..page_proxy import PageProxy
 from ..processes import child_env, reap
 from ..state import Fault
 from . import browsers
@@ -31,14 +31,17 @@ class StageRenderer:
     def __init__(self, stage, default_duration=60):
         self.stage = stage
         self.default_duration = default_duration
+        self.proxy = None
         self.driver = self.browser = self.page = self.proc = self.profile = None
 
     async def open(self, stage_url):
         if self.page is None or self.page.is_closed():
             await self.close()
             self.profile = tempfile.TemporaryDirectory(prefix="atv-render-")
+            self.proxy = PageProxy(self.stage.page_network)
+            proxy_url = await self.proxy.start()
             self.proc = await browsers.spawn(
-                os.getenv("TVPIPE_BROWSER", "/usr/bin/chromium"),
+                browsers.CHROMIUM_WRAPPER,
                 "--headless",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
@@ -50,7 +53,7 @@ class StageRenderer:
                 "--remote-debugging-address=127.0.0.1",
                 f"--user-data-dir={self.profile.name}",
                 "about:blank",
-                env=child_env(),
+                env=child_env(ATV_PAGE_PROXY=proxy_url),
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -82,6 +85,9 @@ class StageRenderer:
                 if self.proc:
                     await reap(self.proc, group=True, sweep=browsers.sweep)
             finally:
+                if self.proxy:
+                    await self.proxy.close()
+                    self.proxy = None
                 self.page = self.browser = self.driver = self.proc = None
                 if self.profile:
                     self.profile.cleanup()

@@ -1,2 +1,12 @@
 #!/bin/sh
-exec /usr/bin/chromium --remote-debugging-address=127.0.0.1 --no-sandbox --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required "$@"
+set -eu
+: "${ATV_PAGE_PROXY:?A running page proxy is required}"
+exec /usr/bin/chromium \
+    --remote-debugging-address=127.0.0.1 --no-sandbox --disable-dev-shm-usage \
+    --autoplay-policy=no-user-gesture-required \
+    "--proxy-server=$ATV_PAGE_PROXY" '--proxy-bypass-list=<-loopback>' \
+    '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1' \
+    --webrtc-ip-handling-policy=disable_non_proxied_udp --disable-quic \
+    --disable-features=MediaRouter,WebRtcHideLocalIpsWithMdns \
+    --disable-blink-features=DirectSockets,DirectSocketsInServiceWorkers,DirectSocketsInSharedWorkers \
+    --disable-background-networking "$@"
