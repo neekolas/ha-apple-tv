@@ -324,6 +324,11 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
                 assert runner is mirror.runner
             runner = mirror.runner
             print(label, "update and state confirmed", flush=True)
+        bundle = stage.page["page_id"]
+        await ops.present(**(options | {"url": f"http://localhost:8766/c/{bundle}/index.html"}))
+        await asyncio.sleep(1)
+        blocked = await tools.call("tv_page_look", {})
+        assert blocked["error"]["code"] == "target_missing" and "listener" in blocked["error"]["message"], blocked
         for endpoint in ("browser-error", "browser-error-direct"):
             try:
                 await ops.present(**(options | {"url": "http://127.0.0.1:8767/" + endpoint}))

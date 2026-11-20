@@ -1,6 +1,7 @@
 """Read and operate the sender's committed Chromium document under the TV and stage locks."""
 
 import asyncio
+import ipaddress
 import json
 import re
 from itertools import islice
@@ -51,6 +52,22 @@ def uncertain():
     # Native TV operations already translate delivery_uncertain to the v1 'uncertain' code.
     return Fault("page_delivery_uncertain", "Chromium could not confirm dispatch.",
                  "Call tv_page_look to check the result before sending further input.")
+
+
+def private_listener(url, ports):
+    port = url.port or (443 if url.scheme == "https" else 80)
+    if port not in ports:
+        return False
+    host = (url.hostname or "").rstrip(".").lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return address.is_loopback
 
 
 def quote(value):
@@ -217,9 +234,9 @@ class PageInteraction:
             raise unverified()
         if urlsplit(expected).scheme not in ("http", "https"):
             raise unverified()
-        if page.get("url") and (urlsplit(expected).netloc == urlsplit(stage.origin).netloc
-                                or (sender.debug_port and urlsplit(expected).port == sender.debug_port)):
-            raise missing()
+        if page.get("url") and private_listener(current, stage.stage_ports | {urlsplit(stage.origin).port, sender.debug_port}):
+            raise Fault("target_missing", "Page control cannot operate a bridge listener.",
+                        "Use tv_show to present your content URL or bundle.")
         return frame, page["revision"], "direct" if direct else "iframe"
 
     async def check(self):

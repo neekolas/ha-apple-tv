@@ -162,6 +162,9 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
     headers = {"Authorization": "Bearer " + fleet.controller.token}
     inventory = await (await client.get("/api/tvs", headers=headers)).json()
     assert [t["name"] for t in inventory["tvs"]] == ["Living Room", "Bedroom"]
+    from urllib.parse import urlsplit
+    ports = {urlsplit(rt.stage.origin).port for rt in (a, b)}
+    assert a.stage.stage_ports == b.stage.stage_ports == ports
     assert a.stage.origin != b.stage.origin
     assert a.stage.media_origin == b.stage.media_origin
     for rt in (a, b):

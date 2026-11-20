@@ -183,3 +183,26 @@ async def test_large_snapshot_limits_reads_and_resolves_find_neighbors():
     result = [row.name async for row in control.visible_rows(rows, "CONTROL 1498")]
     assert result == ["Control 1497", "Control 1498", "Control 1499"]
     assert control.read_row.await_count == 3
+
+
+@pytest.mark.parametrize("url,blocked", [
+    ("http://localhost:8766/page", True), ("http://LOCALHOST.:9123/page", True),
+    ("http://127.254.2.1:9123/page", True), ("https://[::1]:9222/page", True),
+    ("http://[::ffff:127.0.0.2]:8766/page", True), ("http://localhost:8767/page", False),
+    ("https://example.org:8766/page", False),
+])
+async def test_live_binding_excludes_loopback_stage_and_debug_ports(service, url, blocked):
+    page = object()
+    service.stage.stage_ports = {9123}
+    service.stage.page = {"url": url, "page_id": "id", "revision": "r"}
+    sender = SimpleNamespace(mode="mirror", started=True, page=page, verified_page=page, debug_port=9222,
+                             verified_root=SimpleNamespace(evaluate=AsyncMock(return_value=True)), verified_url=url,
+                             presented_frame=AsyncMock(return_value=SimpleNamespace(url=url)))
+    service.stage.direct_browser = service.operations.presenter = sender
+    if blocked:
+        with pytest.raises(Fault) as failure:
+            await service.tools.page_interaction.binding()
+        assert failure.value.code == "target_missing" and "tv_show" in failure.value.remediation
+    else:
+        frame, _, _ = await service.tools.page_interaction.binding()
+        assert frame.url == url

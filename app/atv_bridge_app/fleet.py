@@ -103,6 +103,7 @@ class Fleet:
     def __init__(self, root, options, factory=TVRuntime, *, stage_port=8766):
         self.controller = State(root)
         self.stage_port = stage_port
+        self.stage_ports = set()
         self.options = options
         self.factory = factory
         self.runtimes = {}
@@ -181,7 +182,9 @@ class Fleet:
                 await rt.idle.wait()
                 await rt.close()
                 if runner := self.runners.pop(rt, None):
+                    port = runner.addresses[0][1]
                     await runner.cleanup()
+                    self.stage_ports.discard(port)
                 self.mirrors.pop(key, None)
                 self.runtimes.pop(key)
                 if rt is self.public_receiver:
@@ -475,7 +478,10 @@ class Fleet:
             except BaseException:
                 await runner.cleanup()
                 raise
-            rt.stage.origin = f"http://127.0.0.1:{runner.addresses[0][1]}"
+            port = runner.addresses[0][1]
+            rt.stage.origin = f"http://127.0.0.1:{port}"
+            self.stage_ports.add(port)
+        rt.stage.stage_ports = self.stage_ports
         if rt in self.runtimes.values():
             rt.stage.media_origin = self.primary.stage.origin
             rt.stage.media_prefix = rt.metadata["id"]
@@ -508,6 +514,7 @@ class Fleet:
             *(stop(rt, runner) for rt, runner in self.runners.items()), return_exceptions=True
         )
         self.runners.clear()
+        self.stage_ports.clear()
         for result in results:
             if isinstance(result, BaseException):
                 raise result

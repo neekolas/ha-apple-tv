@@ -147,6 +147,7 @@ class ContentStore:
 class Stage:
     def __init__(self, root, store=None):
         self.origin = "http://127.0.0.1:8766"
+        self.stage_ports = set()
         self.store = store or ContentStore(root / "content")
         self.media_origin = self.media_prefix = None
         self.media = root / "media"
