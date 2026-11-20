@@ -121,6 +121,14 @@ async def exercise_snapshot(tools, frame):
         scoped = (await tools.call("tv_page_look", {"scope": element(data["snapshot"], role, name)}))["data"]
         assert child in scoped["snapshot"], scoped
 
+    await asyncio.sleep(1)
+    data = (await tools.call("tv_page_look", {"find": "Size"}))["data"]
+    ref = element(data["snapshot"], "combobox", "Size")
+    await frame.get_by_label("Size").evaluate("el => el.id = 'secret-token'")
+    await asyncio.sleep(1)
+    blocked = await tools.call("tv_page_look", {"scope": ref})
+    assert blocked["error"]["code"] == "target_missing", blocked
+
 
 async def exercise_form(tools, frame, submissions):
     await frame.evaluate("""() => {
@@ -286,6 +294,7 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
                     await asyncio.sleep(1)
                     after = await tools.call("tv_page_look", {})
                     assert after["ok"] and 'status "Routed"' in after["data"]["snapshot"], after
+                    await frame.evaluate("history.replaceState({}, '', '/frame/step-3')")
                     await exercise_large_page(tools, frame)
                 if label == "direct":
                     await exercise_form(tools, frame, submissions)

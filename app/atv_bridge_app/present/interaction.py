@@ -4,8 +4,8 @@ import asyncio
 import ipaddress
 import json
 import re
-from itertools import islice
 from dataclasses import dataclass
+from itertools import islice
 from secrets import token_urlsafe
 from urllib.parse import urldefrag, urljoin, urlsplit
 
@@ -205,7 +205,7 @@ class PageInteraction:
             raise unverified()
         try:
             frame = await sender.presented_frame(page["page_id"], page["revision"], direct)
-        except Fault as exc:
+        except (Fault, Error) as exc:
             raise unverified() from exc
         expected = sender.verified_url if page.get("url") else urljoin(stage.origin, page["src"])
         if not frame or not expected:
@@ -243,9 +243,15 @@ class PageInteraction:
         frame, revision, _ = await self.binding()
         if frame != self.frame or revision != self.revision:
             raise stale()
-        if not self.root or not await self.root.evaluate(
-            "el => el === document.documentElement && el.isConnected && /^https?:/.test(document.documentURI)"
-        ):
+        if not self.root:
+            raise stale()
+        state = await self.root.evaluate("""el => ({
+            current: el === document.documentElement && el.isConnected,
+            http: /^https?:/.test(document.documentURI)
+        })""")
+        if not state["http"]:
+            raise unverified()
+        if not state["current"]:
             raise stale()
 
     async def read_row(self, row):
@@ -305,14 +311,14 @@ class PageInteraction:
                     return await self.slice()
                 frame, revision, mode = await self.binding()
                 scope_ref = None
-                options = []
+                expand_scope = False
                 if scope:
                     if not self.view:
                         raise stale()
                     await self.check()
                     target = await self.target(scope)
                     scope_ref = target.row.browser_ref
-                    options = await self.choices(target.row)
+                    expand_scope = target.row.role in ("combobox", "listbox", "treeitem")
                 await self.clear(keep_document=scope is not None)
                 self.frame, self.revision, self.mode = frame, revision, mode
                 if scope is None:
@@ -324,9 +330,16 @@ class PageInteraction:
                     raise Fault("page_unreachable", "The page exceeds the snapshot limit.", "Show a smaller page.")
                 loader = getattr(yaml, "CBaseLoader", yaml.BaseLoader)
                 tree = yaml.load(INVALID_TEXT.sub("�", snapshot), Loader=loader) or []
-                rows = list(snapshot_rows(tree, scoped=scope is not None))
-                if options and rows and rows[0].browser_ref == scope_ref:
-                    rows = [rows[0], *options]
+                rows = list(snapshot_rows(tree, scoped=expand_scope))
+                if expand_scope:
+                    if not rows or rows[0].browser_ref != scope_ref:
+                        raise stale()
+                    # Recheck the scoped control before exposing its choices.
+                    if not await self.read_row(rows[0]) or not rows[0].ref:
+                        raise missing()
+                    options = await self.choices(rows[0])
+                    if options:
+                        rows = [rows[0], *options]
                 self.pending = self.visible_rows(rows, find)
                 self.next_row = await anext(self.pending, None)
                 self.title = await frame.title() or self.ops.stage.page.get("title") or ""
@@ -337,9 +350,14 @@ class PageInteraction:
             await self.clear()
             raise Fault("page_unreachable", "Chromium returned an unreadable snapshot.",
                         "Simplify the page and present it again with tv_show.") from exc
-        except (Error, ExceptionGroup, TimeoutError) as exc:
+        except TimeoutError as exc:
             await self.clear()
-            raise stale() from exc
+            raise Fault("page_unreachable", "The page read exceeded its time budget.",
+                        "Use a narrower find or present a smaller page with tv_show.") from exc
+        except (Error, ExceptionGroup) as exc:
+            await self.clear()
+            raise Fault("stale_view", "Chromium could not finish reading the page.",
+                        "Call tv_page_look again. If it fails again, present the page with tv_show.") from exc
 
     async def visible_rows(self, rows, find):
         """Resolve a small batch at a time. A cursor resumes this snapshot."""
@@ -349,7 +367,8 @@ class PageInteraction:
         async def read(index):
             if index not in inspected:
                 row = rows[index]
-                inspected[index] = row if await self.read_row(row) else None
+                visible = row.ref in self.targets or await self.read_row(row)
+                inspected[index] = row if visible else None
             return inspected[index]
 
         def candidate(row):

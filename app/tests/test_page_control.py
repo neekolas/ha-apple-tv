@@ -217,3 +217,13 @@ def test_page_control_reference_covers_tools_and_recovery():
     troubleshooting = (root / "skills/apple-tv/troubleshooting.md").read_text()
     for code in ("stale_view", "target_missing", "delivery_uncertain", "nothing_showing", "page_not_live"):
         assert f"| `{code}` |" in troubleshooting
+
+
+async def test_browser_error_document_requires_show(service):
+    control = service.tools.page_interaction
+    control.frame, control.revision = object(), "r"
+    control.binding = AsyncMock(return_value=(control.frame, "r", "direct"))
+    control.root = SimpleNamespace(evaluate=AsyncMock(return_value={"current": True, "http": False}))
+    with pytest.raises(Fault) as failure:
+        await control.check()
+    assert failure.value.code == "stale_view" and "tv_show" in failure.value.remediation
