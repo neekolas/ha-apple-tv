@@ -1,6 +1,5 @@
 """Implementation of SRP used by AirPlay device authtentication."""
 
-import binascii
 import hashlib
 import logging
 from os import urandom
@@ -156,16 +155,11 @@ class LegacySRPAuthHandler:
             prime=constants.PRIME_2048,
             generator=constants.PRIME_2048_GEN,
         )
-        self.session = SRPClientSession(
-            context, binascii.hexlify(self._auth_private).decode()
-        )
+        self.session = SRPClientSession(context, private=self._auth_private)
 
     def step2(self, pub_key, salt):
         """Second authentication step."""
-        pk_str = binascii.hexlify(pub_key).decode()
-        salt = binascii.hexlify(salt).decode()
-        client_session_key, _, _ = self.session.process(pk_str, salt)
-        _LOGGER.debug("Client session key: %s", client_session_key)
+        self.session.process(pub_key, salt)
 
         # Generate client public and session key proof.
         client_public = self.session.public
@@ -180,7 +174,7 @@ class LegacySRPAuthHandler:
 
     def step3(self):
         """Last authentication step."""
-        session_key = binascii.unhexlify(self.session.key)
+        session_key = self.session.key_bin
 
         aes_key = hash_sha512("Pair-Setup-AES-Key", session_key)[0:16]
         tmp = bytearray(hash_sha512("Pair-Setup-AES-IV", session_key)[0:16])

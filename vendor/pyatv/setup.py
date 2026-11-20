@@ -12,8 +12,8 @@ def read(fname):
 
 
 def get_requirements():
-    """Retuen requirements with loose version restrictions."""
-    return read("base_versions.txt").replace("==", ">=").split("\n")
+    """Read the supported runtime requirements."""
+    return read("base_versions.txt").splitlines()
 
 
 setup(

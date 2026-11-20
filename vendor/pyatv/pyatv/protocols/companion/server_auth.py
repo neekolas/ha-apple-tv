@@ -65,7 +65,7 @@ def new_server_session(keys, pin):
     )
 
     session = SRPServerSession(
-        context_server, verifier, binascii.hexlify(keys.auth).decode()
+        context_server, password_verifier=verifier, private=keys.auth
     )
 
     return session, salt
@@ -153,11 +153,11 @@ class CompanionServerAuth(ABC):
         self.send_to_client(FrameType.PS_Next, {"_pd": tlv, "_pwTy": 1})
 
     def _m3_setup(self, pairing_data):
-        pubkey = binascii.hexlify(pairing_data[TlvValue.PublicKey]).decode()
+        pubkey = pairing_data[TlvValue.PublicKey]
         self.session.process(pubkey, self.salt)
 
-        if self.session.verify_proof(binascii.hexlify(pairing_data[TlvValue.Proof])):
-            proof = binascii.unhexlify(self.session.key_proof_hash)
+        if self.session.verify_proof(pairing_data[TlvValue.Proof]):
+            proof = self.session.key_proof_hash_bin
             tlv = {TlvValue.Proof: proof, TlvValue.SeqNo: b"\x04"}
         else:
             tlv = {
@@ -171,13 +171,13 @@ class CompanionServerAuth(ABC):
         session_key = hkdf_expand(
             "Pair-Setup-Encrypt-Salt",
             "Pair-Setup-Encrypt-Info",
-            binascii.unhexlify(self.session.key),
+            self.session.key_bin,
         )
 
         acc_device_x = hkdf_expand(
             "Pair-Setup-Accessory-Sign-Salt",
             "Pair-Setup-Accessory-Sign-Info",
-            binascii.unhexlify(self.session.key),
+            self.session.key_bin,
         )
 
         chacha = chacha20.Chacha20Cipher(session_key, session_key)

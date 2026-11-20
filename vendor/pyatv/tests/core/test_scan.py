@@ -111,7 +111,7 @@ RAOP_SERVICE_RECORD = DNSService(
     "Ohana.local.",
 )
 RAOP_TXT_RECORD = DNSText(
-    "Ohana._airplay._tcp.local.",
+    RAOP_PTR_RECORD.alias,
     const._TYPE_TXT,
     const._CLASS_IN,
     const._DNS_OTHER_TTL,
@@ -379,7 +379,7 @@ async def test_scan_with_zeroconf_unicast_not_found():
     assert mock_async_request.mock_calls
     for call in mock_async_request.mock_calls:
         # Called with host argument
-        assert call[1][2] == "127.0.0.1"
+        assert call.kwargs["addr"] == "127.0.0.1"
     calls = mock_async_send.mock_calls
     assert len(calls) >= 1
     # We should send a PTR query as a fallback to unicast

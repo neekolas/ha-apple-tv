@@ -6,7 +6,6 @@ makes it easier to implement as the verification procedure step instead, so that
 how it works and why there's no setup procedure at all.
 """
 
-import binascii
 from copy import copy
 import logging
 from typing import Any, Dict, Tuple
@@ -118,7 +117,7 @@ class AirPlayHapTransientPairVerifyProcedure(PairVerifyProcedure):
         self, salt: str, output_info: str, input_info: str
     ) -> Tuple[bytes, bytes]:
         """Return derived encryption keys."""
-        shared = binascii.unhexlify(self.srp.shared_key)
+        shared = self.srp.shared_key
         output_key = hkdf_expand(salt, output_info, shared)
         input_key = hkdf_expand(salt, input_info, shared)
         log_binary(_LOGGER, "Keys", Output=output_key, Input=input_key)

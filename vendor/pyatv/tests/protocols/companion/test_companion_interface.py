@@ -33,7 +33,7 @@ class CompanionCoreMock:
 
 
 @pytest.fixture(name="api_mock")
-def api_mock_fixture(event_loop):
+def api_mock_fixture():
     yield CompanionApiMock()
 
 

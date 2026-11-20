@@ -1,5 +1,6 @@
 """Unit tests for pyatv.core."""
 
+import asyncio
 from unittest.mock import ANY, MagicMock
 
 import pytest
@@ -39,7 +40,8 @@ class PushUpdaterDummy(AbstractPushUpdater):
 
 
 @pytest.mark.parametrize("updates", [1, 2, 3])
-def test_post_ignore_duplicate_update(event_loop, state_dispatcher, updates):
+@pytest.mark.asyncio
+async def test_post_ignore_duplicate_update(state_dispatcher, updates):
     listener = MagicMock()
     playing = Playing()
 
@@ -48,14 +50,12 @@ def test_post_ignore_duplicate_update(event_loop, state_dispatcher, updates):
         assert message.state == UpdatedState.Playing
         listener.state_updated(message.value)
 
-    async def _post_updates(repeats: int):
-        updater = PushUpdaterDummy(state_dispatcher)
-        updater.listener = listener
-        state_dispatcher.listen_to(UpdatedState.Playing, _state_changed)
-        for _ in range(repeats):
-            updater.post_update(playing)
-
-    event_loop.run_until_complete(_post_updates(updates))
+    updater = PushUpdaterDummy(state_dispatcher)
+    updater.listener = listener
+    state_dispatcher.listen_to(UpdatedState.Playing, _state_changed)
+    for _ in range(updates):
+        updater.post_update(playing)
+    await asyncio.sleep(0)
 
     assert listener.playstatus_update.call_count == 1
     listener.playstatus_update.assert_called_once_with(ANY, playing)

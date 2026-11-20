@@ -72,7 +72,7 @@ def new_server_session(keys, pin) -> Tuple[SRPServerSession, bytes]:
     )
 
     session = SRPServerSession(
-        context_server, verifier, binascii.hexlify(keys.auth).decode()
+        context_server, password_verifier=verifier, private=keys.auth
     )
 
     return session, salt
@@ -323,11 +323,11 @@ class BaseAirPlayServerAuth(http.HttpSimpleRouter, ABC):
 
     def _m3_setup(self, pairing_data, transient: bool):
         assert self.session is not None
-        pubkey = binascii.hexlify(pairing_data[TlvValue.PublicKey]).decode()
+        pubkey = pairing_data[TlvValue.PublicKey]
         self.session.process(pubkey, self.salt)
 
-        if self.session.verify_proof(binascii.hexlify(pairing_data[TlvValue.Proof])):
-            proof = binascii.unhexlify(self.session.key_proof_hash)
+        if self.session.verify_proof(pairing_data[TlvValue.Proof]):
+            proof = self.session.key_proof_hash_bin
             tlv = {TlvValue.Proof: proof, TlvValue.SeqNo: b"\x04"}
         else:
             tlv = {
@@ -336,7 +336,7 @@ class BaseAirPlayServerAuth(http.HttpSimpleRouter, ABC):
             }
 
         if transient:
-            self.shared_key = binascii.unhexlify(self.session.key)
+            self.shared_key = self.session.key_bin
             self.input_key = hkdf_expand(
                 "Control-Salt",
                 "Control-Write-Encryption-Key",
@@ -359,13 +359,13 @@ class BaseAirPlayServerAuth(http.HttpSimpleRouter, ABC):
         session_key = hkdf_expand(
             "Pair-Setup-Encrypt-Salt",
             "Pair-Setup-Encrypt-Info",
-            binascii.unhexlify(self.session.key),
+            self.session.key_bin,
         )
 
         acc_device_x = hkdf_expand(
             "Pair-Setup-Accessory-Sign-Salt",
             "Pair-Setup-Accessory-Sign-Info",
-            binascii.unhexlify(self.session.key),
+            self.session.key_bin,
         )
 
         chacha = chacha20.Chacha20Cipher8byteNonce(session_key, session_key)

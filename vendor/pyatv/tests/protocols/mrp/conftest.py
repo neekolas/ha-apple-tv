@@ -24,5 +24,5 @@ class MrpProtocolMock(MessageDispatcher[int, protobuf.ProtocolMessage]):
 
 
 @pytest.fixture(name="protocol_mock")
-def protocol_mock_fixture(event_loop):
+def protocol_mock_fixture():
     yield MrpProtocolMock()

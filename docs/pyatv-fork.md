@@ -1,6 +1,6 @@
 # pyatv fork for the Apple TV bridge
 
-`vendor/pyatv/` contains installable source for **0.18.0+atvbridge.1**. The upstream base is tag `v0.18.0`, commit `d88abc960e188d3cd2498d19117e75d7711d8600`. The 19 diffs in `vendor/pyatv-patches/` apply in filename order. The bridge supports tvOS 27 or later. AppleTV11,1 running tvOS 27.2 (24K122) was the hardware reference. The fork's automated checks use simulated receivers and loopback sockets. [Upstream base](https://github.com/postlund/pyatv/tree/d88abc960e188d3cd2498d19117e75d7711d8600)
+`vendor/pyatv/` contains installable source for **0.18.0+atvbridge.2**. The upstream base is tag `v0.18.0`, commit `d88abc960e188d3cd2498d19117e75d7711d8600`. The 20 diffs in `vendor/pyatv-patches/` apply in filename order. The fork requires Python 3.11 or newer. Current zeroconf and miniaudio releases require that minimum. The bridge supports tvOS 27 or later. AppleTV11,1 running tvOS 27.2 (24K122) was the hardware reference. The fork's automated checks use simulated receivers and loopback sockets. [Upstream base](https://github.com/postlund/pyatv/tree/d88abc960e188d3cd2498d19117e75d7711d8600)
 
 ## Patch series
 
@@ -25,6 +25,7 @@
 | 0017 | Fork | Checks Companion pair-verify M4 before enabling encryption, ends URL playback when the control socket closes, and limits FCUP to an active control stream. Adds an AirPlay PIN-to-Companion connection test and preserves upstream's tracked `.coveragerc` when vendoring. |
 | 0018 | Fork | Runs PR 2948's three HTTP fetch tests with an aiohttp loopback server. This removes a macOS reverse-DNS timeout in the Werkzeug test fixture. Checks real gzip decoding, error status and the response size limit. |
 | 0019 | Fork | Logs HTTP status for URL playback control exchanges, queue commands and failed media-origin fetches. Omits headers, bodies and media URLs from these status messages. |
+| 0020 | Fork | Updates the runtime, test and documentation requirements. Adapts HAP and legacy AirPlay to srptools 2 while preserving the pairing wire format. Updates zeroconf unicast requests and the test fixtures for current zeroconf and pytest-asyncio. |
 
 ## Using the fork
 
@@ -107,7 +108,7 @@ git diff --cached --check
 git write-tree
 ```
 
-The verified Git tree ID for this series is `7093140a28937c747917dcd032f1eae69fe04e73`. This is the replayed upstream index. The repository also tracks a bridge-generated `vendor/pyatv/uv.lock` that is absent from the replay. All other tracked paths and modes matched during review. To export the replay, create an empty directory and run `git archive "$(git write-tree)" | tar -x -C "$export_dir"` with `export_dir` set to that directory. Include upstream deletions and executable modes when replacing the vendored copy.
+The verified Git tree ID for this series is `fdda9bd11ffb4539a8d871f833696334f42ab2fc`. This is the replayed upstream index. The repository also tracks a bridge-generated `vendor/pyatv/uv.lock` that is absent from the replay. All other tracked paths and modes matched during review. To export the replay, create an empty directory and run `git archive "$(git write-tree)" | tar -x -C "$export_dir"` with `export_dir` set to that directory. Include upstream deletions and executable modes when replacing the vendored copy.
 
 ```sh
 cd "$bridge"
@@ -121,7 +122,7 @@ PATH="$work/venv/bin:$PATH" "$work/venv/bin/python" -m pytest -n 4 -q -rs --time
 
 ## Recorded test results
 
-**1,337 passed, 6 skipped, 0 failed.** The full suite ran on macOS with CPython 3.13.17 and pytest 8.4.2. Replaying the patches in a clean checkout and running the suite there produced the same counts. The installed distribution and imported library both reported `0.18.0+atvbridge.1`. `uv pip check` found compatible dependencies.
+**1,338 passed, 6 skipped, 0 failed.** The full suite ran on macOS with CPython 3.13.17 and pytest 9.2.0. The new SRP regression test checks the public key, proof and shared key against wire values from srptools 1.0.1. The installed distribution and imported library both reported `0.18.0+atvbridge.2`.
 
 The six upstream skips on this host are listed below. The fork adds no skips.
 

@@ -66,7 +66,7 @@ def new_server_session(keys, pin):
     )
 
     session = SRPServerSession(
-        context_server, verifier, binascii.hexlify(keys.auth).decode()
+        context_server, password_verifier=verifier, private=keys.auth
     )
 
     return session, salt
@@ -186,11 +186,11 @@ class MrpServerAuth(ABC):
         self.send_to_client(msg)
 
     def _m3_setup(self, pairing_data):
-        pubkey = binascii.hexlify(pairing_data[TlvValue.PublicKey]).decode()
+        pubkey = pairing_data[TlvValue.PublicKey]
         self.session.process(pubkey, self.salt)
 
-        proof = binascii.unhexlify(self.session.key_proof_hash)
-        if self.session.verify_proof(binascii.hexlify(pairing_data[TlvValue.Proof])):
+        proof = self.session.key_proof_hash_bin
+        if self.session.verify_proof(pairing_data[TlvValue.Proof]):
             msg = messages.crypto_pairing(
                 {TlvValue.Proof: proof, TlvValue.SeqNo: b"\x04"}
             )
@@ -208,13 +208,13 @@ class MrpServerAuth(ABC):
         session_key = hkdf_expand(
             "Pair-Setup-Encrypt-Salt",
             "Pair-Setup-Encrypt-Info",
-            binascii.unhexlify(self.session.key),
+            self.session.key_bin,
         )
 
         acc_device_x = hkdf_expand(
             "Pair-Setup-Accessory-Sign-Salt",
             "Pair-Setup-Accessory-Sign-Info",
-            binascii.unhexlify(self.session.key),
+            self.session.key_bin,
         )
 
         device_info = acc_device_x + self.unique_id + self.keys.auth_pub

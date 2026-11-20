@@ -628,7 +628,7 @@ class ZeroconfUnicastScanner(ZeroconfScanner):
         host_strs = [str(host) for host in self.hosts]
         await asyncio.gather(
             *(
-                info.async_request(zeroconf, zc_timeout, host_str)
+                info.async_request(zeroconf, zc_timeout, addr=host_str)
                 for host_str in host_strs
                 for info in infos_to_send
             )

@@ -1,0 +1,627 @@
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+index e7453ae..db72618 100644
+--- a/.github/workflows/tests.yml
++++ b/.github/workflows/tests.yml
+@@ -27,8 +27,6 @@ jobs:
+           - macos-latest
+           - windows-latest
+         python-version:
+-          - "3.9"
+-          - "3.10"
+           - "3.11"
+           - "3.12"
+           - "3.13"
+@@ -39,7 +37,7 @@ jobs:
+           - false
+         include:
+           - platform: ubuntu-latest
+-            python-version: 3.9
++            python-version: '3.11'
+             chickn-args: "--no-venv -v requirements_file=base_versions.txt"
+             regression: true
+     steps:
+diff --git a/Dockerfile b/Dockerfile
+index 68b66aa..cd85428 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,4 +1,4 @@
+-FROM python:3.14.6-alpine
++FROM python:3.14.9-alpine
+ ARG VERSION
+
+ WORKDIR .
+@@ -6,7 +6,7 @@ COPY dist/pyatv-${VERSION}-py3-none-any.whl .
+ COPY requirements/requirements.txt .
+
+ RUN apk add gcc musl-dev build-base linux-headers libffi-dev rust cargo openssl-dev git && \
+-    pip install setuptools-rust && \
++    pip install 'pip>=26.3,<27' 'setuptools-rust>=1,<2' && \
+     pip install -r requirements.txt && \
+     pip install pyatv-${VERSION}-py3-none-any.whl && \
+     apk del gcc musl-dev build-base linux-headers libffi-dev rust cargo openssl-dev git && \
+diff --git a/base_versions.txt b/base_versions.txt
+index c1c8103..11754bb 100644
+--- a/base_versions.txt
++++ b/base_versions.txt
+@@ -1,13 +1,12 @@
+-aiohttp==3.8.3,<5
+-async-timeout==4.0.2;python_version<'3.11'
+-cryptography==44.0.1
+-chacha20poly1305-reuseable==0.13.2
+-ifaddr==0.1.7
+-miniaudio==1.45
+-protobuf==6.31.1
+-pydantic==2.0.0
+-requests==2.30.0
+-srptools>=1,<2
+-tabulate==0.9.0
+-tinytag==1.10.0
+-zeroconf==0.129.0
++aiohttp>=3.14.5,<4
++cryptography>=50.0.2,<51
++chacha20poly1305-reuseable>=0.13.2,<0.14
++ifaddr>=0.2.0,<0.3
++miniaudio>=1.73,<2
++protobuf>=7.36.2,<8
++pydantic>=2.14.4,<3
++requests>=2.34.2,<3
++srptools>=2.0.0,<3
++tabulate>=0.10.0,<0.11
++tinytag>=2.3.2,<3
++zeroconf>=0.154.0,<1
+diff --git a/pyatv/auth/hap_srp.py b/pyatv/auth/hap_srp.py
+index 3453bfd..5617e75 100644
+--- a/pyatv/auth/hap_srp.py
++++ b/pyatv/auth/hap_srp.py
+@@ -1,6 +1,5 @@
+ """SRP implementation for HAP."""
+
+-import binascii
+ import hashlib
+ import logging
+ import os
+@@ -61,7 +60,7 @@ class SRPAuthHandler:
+     @property
+     def shared_key(self) -> bytes:
+         """Return shared secret."""
+-        return self._session.key
++        return self._session.key_bin
+
+     def initialize(self):
+         """Initialize operation by generating new keys."""
+@@ -144,21 +143,17 @@ class SRPAuthHandler:
+             generator=constants.PRIME_3072_GEN,
+             hash_func=hashlib.sha512,
+         )
+-        self._session = SRPClientSession(
+-            context, binascii.hexlify(self._auth_private).decode()
+-        )
++        self._session = SRPClientSession(context, private=self._auth_private)
+
+     def step2(self, atv_pub_key, atv_salt):
+         """Second pairing step."""
+-        pk_str = binascii.hexlify(atv_pub_key).decode()
+-        salt = binascii.hexlify(atv_salt).decode()
+-        self._session.process(pk_str, salt)
++        self._session.process(atv_pub_key, atv_salt)
+
+         if not self._session.verify_proof(self._session.key_proof_hash):
+             raise exceptions.AuthenticationError("proofs do not match")
+
+-        pub_key = binascii.unhexlify(self._session.public)
+-        proof = binascii.unhexlify(self._session.key_proof)
++        pub_key = bytes.fromhex(self._session.public)
++        proof = self._session.key_proof_bin
+         log_binary(_LOGGER, "Client", Public=pub_key, Proof=proof)
+         return pub_key, proof
+
+@@ -171,13 +166,13 @@ class SRPAuthHandler:
+         ios_device_x = hkdf_expand(
+             "Pair-Setup-Controller-Sign-Salt",
+             "Pair-Setup-Controller-Sign-Info",
+-            binascii.unhexlify(self._session.key),
++            self._session.key_bin,
+         )
+
+         self._session_key = hkdf_expand(
+             "Pair-Setup-Encrypt-Salt",
+             "Pair-Setup-Encrypt-Info",
+-            binascii.unhexlify(self._session.key),
++            self._session.key_bin,
+         )
+
+         device_info = ios_device_x + self.pairing_id + self._auth_public
+diff --git a/pyatv/const.py b/pyatv/const.py
+index bb7eca8..3987c9c 100644
+--- a/pyatv/const.py
++++ b/pyatv/const.py
+@@ -8,7 +8,7 @@ MAJOR_VERSION = "0"
+ MINOR_VERSION = "18"
+ PATCH_VERSION = "0"
+ __short_version__ = f"{MAJOR_VERSION}.{MINOR_VERSION}"
+-__version__ = f"{__short_version__}.{PATCH_VERSION}+atvbridge.1"
++__version__ = f"{__short_version__}.{PATCH_VERSION}+atvbridge.2"
+
+
+ class Protocol(Enum):
+diff --git a/pyatv/core/scan.py b/pyatv/core/scan.py
+index 3025f6b..7550d40 100644
+--- a/pyatv/core/scan.py
++++ b/pyatv/core/scan.py
+@@ -628,7 +628,7 @@ class ZeroconfUnicastScanner(ZeroconfScanner):
+         host_strs = [str(host) for host in self.hosts]
+         await asyncio.gather(
+             *(
+-                info.async_request(zeroconf, zc_timeout, host_str)
++                info.async_request(zeroconf, zc_timeout, addr=host_str)
+                 for host_str in host_strs
+                 for info in infos_to_send
+             )
+diff --git a/pyatv/protocols/airplay/auth/hap_transient.py b/pyatv/protocols/airplay/auth/hap_transient.py
+index ab6a74a..b7f5277 100644
+--- a/pyatv/protocols/airplay/auth/hap_transient.py
++++ b/pyatv/protocols/airplay/auth/hap_transient.py
+@@ -6,7 +6,6 @@ makes it easier to implement as the verification procedure step instead, so that
+ how it works and why there's no setup procedure at all.
+ """
+
+-import binascii
+ from copy import copy
+ import logging
+ from typing import Any, Dict, Tuple
+@@ -118,7 +117,7 @@ class AirPlayHapTransientPairVerifyProcedure(PairVerifyProcedure):
+         self, salt: str, output_info: str, input_info: str
+     ) -> Tuple[bytes, bytes]:
+         """Return derived encryption keys."""
+-        shared = binascii.unhexlify(self.srp.shared_key)
++        shared = self.srp.shared_key
+         output_key = hkdf_expand(salt, output_info, shared)
+         input_key = hkdf_expand(salt, input_info, shared)
+         log_binary(_LOGGER, "Keys", Output=output_key, Input=input_key)
+diff --git a/pyatv/protocols/airplay/server_auth.py b/pyatv/protocols/airplay/server_auth.py
+index 9351273..5d2ddeb 100644
+--- a/pyatv/protocols/airplay/server_auth.py
++++ b/pyatv/protocols/airplay/server_auth.py
+@@ -72,7 +72,7 @@ def new_server_session(keys, pin) -> Tuple[SRPServerSession, bytes]:
+     )
+
+     session = SRPServerSession(
+-        context_server, verifier, binascii.hexlify(keys.auth).decode()
++        context_server, password_verifier=verifier, private=keys.auth
+     )
+
+     return session, salt
+@@ -323,11 +323,11 @@ class BaseAirPlayServerAuth(http.HttpSimpleRouter, ABC):
+
+     def _m3_setup(self, pairing_data, transient: bool):
+         assert self.session is not None
+-        pubkey = binascii.hexlify(pairing_data[TlvValue.PublicKey]).decode()
++        pubkey = pairing_data[TlvValue.PublicKey]
+         self.session.process(pubkey, self.salt)
+
+-        if self.session.verify_proof(binascii.hexlify(pairing_data[TlvValue.Proof])):
+-            proof = binascii.unhexlify(self.session.key_proof_hash)
++        if self.session.verify_proof(pairing_data[TlvValue.Proof]):
++            proof = self.session.key_proof_hash_bin
+             tlv = {TlvValue.Proof: proof, TlvValue.SeqNo: b"\x04"}
+         else:
+             tlv = {
+@@ -336,7 +336,7 @@ class BaseAirPlayServerAuth(http.HttpSimpleRouter, ABC):
+             }
+
+         if transient:
+-            self.shared_key = binascii.unhexlify(self.session.key)
++            self.shared_key = self.session.key_bin
+             self.input_key = hkdf_expand(
+                 "Control-Salt",
+                 "Control-Write-Encryption-Key",
+@@ -359,13 +359,13 @@ class BaseAirPlayServerAuth(http.HttpSimpleRouter, ABC):
+         session_key = hkdf_expand(
+             "Pair-Setup-Encrypt-Salt",
+             "Pair-Setup-Encrypt-Info",
+-            binascii.unhexlify(self.session.key),
++            self.session.key_bin,
+         )
+
+         acc_device_x = hkdf_expand(
+             "Pair-Setup-Accessory-Sign-Salt",
+             "Pair-Setup-Accessory-Sign-Info",
+-            binascii.unhexlify(self.session.key),
++            self.session.key_bin,
+         )
+
+         chacha = chacha20.Chacha20Cipher8byteNonce(session_key, session_key)
+diff --git a/pyatv/protocols/airplay/srp.py b/pyatv/protocols/airplay/srp.py
+index 09cb198..a9ccc12 100644
+--- a/pyatv/protocols/airplay/srp.py
++++ b/pyatv/protocols/airplay/srp.py
+@@ -1,6 +1,5 @@
+ """Implementation of SRP used by AirPlay device authtentication."""
+
+-import binascii
+ import hashlib
+ import logging
+ from os import urandom
+@@ -156,16 +155,11 @@ class LegacySRPAuthHandler:
+             prime=constants.PRIME_2048,
+             generator=constants.PRIME_2048_GEN,
+         )
+-        self.session = SRPClientSession(
+-            context, binascii.hexlify(self._auth_private).decode()
+-        )
++        self.session = SRPClientSession(context, private=self._auth_private)
+
+     def step2(self, pub_key, salt):
+         """Second authentication step."""
+-        pk_str = binascii.hexlify(pub_key).decode()
+-        salt = binascii.hexlify(salt).decode()
+-        client_session_key, _, _ = self.session.process(pk_str, salt)
+-        _LOGGER.debug("Client session key: %s", client_session_key)
++        self.session.process(pub_key, salt)
+
+         # Generate client public and session key proof.
+         client_public = self.session.public
+@@ -180,7 +174,7 @@ class LegacySRPAuthHandler:
+
+     def step3(self):
+         """Last authentication step."""
+-        session_key = binascii.unhexlify(self.session.key)
++        session_key = self.session.key_bin
+
+         aes_key = hash_sha512("Pair-Setup-AES-Key", session_key)[0:16]
+         tmp = bytearray(hash_sha512("Pair-Setup-AES-IV", session_key)[0:16])
+diff --git a/pyatv/protocols/companion/server_auth.py b/pyatv/protocols/companion/server_auth.py
+index a8368c8..ece9d48 100644
+--- a/pyatv/protocols/companion/server_auth.py
++++ b/pyatv/protocols/companion/server_auth.py
+@@ -65,7 +65,7 @@ def new_server_session(keys, pin):
+     )
+
+     session = SRPServerSession(
+-        context_server, verifier, binascii.hexlify(keys.auth).decode()
++        context_server, password_verifier=verifier, private=keys.auth
+     )
+
+     return session, salt
+@@ -153,11 +153,11 @@ class CompanionServerAuth(ABC):
+         self.send_to_client(FrameType.PS_Next, {"_pd": tlv, "_pwTy": 1})
+
+     def _m3_setup(self, pairing_data):
+-        pubkey = binascii.hexlify(pairing_data[TlvValue.PublicKey]).decode()
++        pubkey = pairing_data[TlvValue.PublicKey]
+         self.session.process(pubkey, self.salt)
+
+-        if self.session.verify_proof(binascii.hexlify(pairing_data[TlvValue.Proof])):
+-            proof = binascii.unhexlify(self.session.key_proof_hash)
++        if self.session.verify_proof(pairing_data[TlvValue.Proof]):
++            proof = self.session.key_proof_hash_bin
+             tlv = {TlvValue.Proof: proof, TlvValue.SeqNo: b"\x04"}
+         else:
+             tlv = {
+@@ -171,13 +171,13 @@ class CompanionServerAuth(ABC):
+         session_key = hkdf_expand(
+             "Pair-Setup-Encrypt-Salt",
+             "Pair-Setup-Encrypt-Info",
+-            binascii.unhexlify(self.session.key),
++            self.session.key_bin,
+         )
+
+         acc_device_x = hkdf_expand(
+             "Pair-Setup-Accessory-Sign-Salt",
+             "Pair-Setup-Accessory-Sign-Info",
+-            binascii.unhexlify(self.session.key),
++            self.session.key_bin,
+         )
+
+         chacha = chacha20.Chacha20Cipher(session_key, session_key)
+diff --git a/pyatv/protocols/mrp/server_auth.py b/pyatv/protocols/mrp/server_auth.py
+index ef3a3d0..9d1af45 100644
+--- a/pyatv/protocols/mrp/server_auth.py
++++ b/pyatv/protocols/mrp/server_auth.py
+@@ -66,7 +66,7 @@ def new_server_session(keys, pin):
+     )
+
+     session = SRPServerSession(
+-        context_server, verifier, binascii.hexlify(keys.auth).decode()
++        context_server, password_verifier=verifier, private=keys.auth
+     )
+
+     return session, salt
+@@ -186,11 +186,11 @@ class MrpServerAuth(ABC):
+         self.send_to_client(msg)
+
+     def _m3_setup(self, pairing_data):
+-        pubkey = binascii.hexlify(pairing_data[TlvValue.PublicKey]).decode()
++        pubkey = pairing_data[TlvValue.PublicKey]
+         self.session.process(pubkey, self.salt)
+
+-        proof = binascii.unhexlify(self.session.key_proof_hash)
+-        if self.session.verify_proof(binascii.hexlify(pairing_data[TlvValue.Proof])):
++        proof = self.session.key_proof_hash_bin
++        if self.session.verify_proof(pairing_data[TlvValue.Proof]):
+             msg = messages.crypto_pairing(
+                 {TlvValue.Proof: proof, TlvValue.SeqNo: b"\x04"}
+             )
+@@ -208,13 +208,13 @@ class MrpServerAuth(ABC):
+         session_key = hkdf_expand(
+             "Pair-Setup-Encrypt-Salt",
+             "Pair-Setup-Encrypt-Info",
+-            binascii.unhexlify(self.session.key),
++            self.session.key_bin,
+         )
+
+         acc_device_x = hkdf_expand(
+             "Pair-Setup-Accessory-Sign-Salt",
+             "Pair-Setup-Accessory-Sign-Info",
+-            binascii.unhexlify(self.session.key),
++            self.session.key_bin,
+         )
+
+         device_info = acc_device_x + self.unique_id + self.keys.auth_pub
+diff --git a/pyatv/support/__init__.py b/pyatv/support/__init__.py
+index 66fe4a9..2c51af1 100644
+--- a/pyatv/support/__init__.py
++++ b/pyatv/support/__init__.py
+@@ -1,11 +1,11 @@
+ """Support functions used in library."""
+
+ import asyncio
++from asyncio import timeout as async_timeout  # noqa: F401
+ import binascii
+ import functools
+ import logging
+ from os import environ, path
+-import sys
+ from typing import Any, List, Sequence, Union, get_args, get_origin
+ import warnings
+
+@@ -15,13 +15,6 @@ from pydantic import BaseModel
+ import pyatv
+ from pyatv import exceptions
+
+-if sys.version_info >= (3, 11):
+-    # TODO: Remove version guard and import alias
+-    # once Python 3.11 is the lowest supported version.
+-    from asyncio import timeout as async_timeout  # noqa: F401
+-else:
+-    from async_timeout import timeout as async_timeout  # noqa: F401
+-
+ _PROTOBUF_LINE_LENGTH = 150
+ _BINARY_LINE_LENGTH = 512
+
+diff --git a/pyproject.toml b/pyproject.toml
+index 78853cf..b1779dd 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -1,6 +1,6 @@
+ [build-system]
+ build-backend = "setuptools.build_meta"
+-requires = ["setuptools>=77.0"]
++requires = ["setuptools>=84.2.1,<85"]
+
+ [project]
+ name="pyatv"
+@@ -9,14 +9,12 @@ license-files = ["LICENSE.md"]
+ description = "A client library for Apple TV and AirPlay devices"
+ readme = "README.md"
+ authors = [{ name = "Pierre Ståhl", email = "pierre.staahl@gmail.com" }]
+-requires-python = ">=3.9.0"
++requires-python = ">=3.11"
+ keywords = ["apple", "tv", "airplay", "raop", "companion", "dmap", "dacp"]
+ classifiers = [
+     "Development Status :: 4 - Beta",
+     "Intended Audience :: Developers",
+     "Operating System :: OS Independent",
+-    "Programming Language :: Python :: 3.9",
+-    "Programming Language :: Python :: 3.10",
+     "Programming Language :: Python :: 3.11",
+     "Programming Language :: Python :: 3.12",
+     "Programming Language :: Python :: 3.13",
+diff --git a/requirements/requirements.txt b/requirements/requirements.txt
+index b21b67b..f0611b7 100644
+--- a/requirements/requirements.txt
++++ b/requirements/requirements.txt
+@@ -1,14 +1,12 @@
+-aiohttp==3.13.5
+-async-timeout==5.0.1;python_version<'3.11'
+-cryptography==49.0.0
++aiohttp==3.14.5
++cryptography==50.0.2
+ chacha20poly1305-reuseable==0.13.2
+ ifaddr==0.2.0
+-ifaddr==0.2.0
+-miniaudio==1.71
+-protobuf==6.33.6
+-pydantic==2.13.4
+-requests==2.32.5
+-srptools==1.0.1
+-tabulate==0.9.0
+-tinytag==2.2.1
+-zeroconf==0.148.0
++miniaudio==1.73
++protobuf==7.36.2
++pydantic==2.14.4
++requests==2.34.2
++srptools==2.0.0
++tabulate==0.10.0
++tinytag==2.3.2
++zeroconf==0.154.0
+diff --git a/requirements/requirements_docs.txt b/requirements/requirements_docs.txt
+index e1fc642..05b2951 100644
+--- a/requirements/requirements_docs.txt
++++ b/requirements/requirements_docs.txt
+@@ -1,2 +1,2 @@
+-codespell==2.4.2
++codespell==2.4.3
+ pdoc3==0.11.6
+diff --git a/requirements/requirements_test.txt b/requirements/requirements_test.txt
+index 41981dd..efbe8d8 100644
+--- a/requirements/requirements_test.txt
++++ b/requirements/requirements_test.txt
+@@ -1,20 +1,20 @@
+-black==25.11.0
+-deepdiff==8.6.2
+-flake8==7.3.0
+-isort==6.1.0
+-mutagen==1.47.0
+-pyfakefs==5.10.2
+-pylint==3.3.9
+-pytest==8.4.2
+-pytest-asyncio==0.26.0
++black==26.10.1
++deepdiff==9.2.1
++flake8==7.5.0
++isort==9.0.2
++mutagen==1.48.1
++pyfakefs==6.3.2
++pylint==4.1.4
++pytest==9.2.0
++pytest-asyncio==1.5.0
+ pytest-cov==7.1.0
+ pytest-timeout==2.4.0
+-pytest-aiohttp==1.0.5
+-pytest_httpserver==1.1.3
++pytest-aiohttp==1.1.1
++pytest_httpserver==1.2.1
+ pytest-xdist==3.8.0
+ pydocstyle==6.3.0
+-mypy==1.19.1
++mypy==2.4.1
+ mypy-protobuf==5.1.0
+-types-protobuf==6.32.1.20251210
+-types-requests==2.32.4.20260107
+-types-tabulate==0.9.0.20241207
++types-protobuf==7.35.1.20260906
++types-requests==2.33.0.20261030
++types-tabulate==0.10.0.20261006
+diff --git a/setup.py b/setup.py
+index b7c0eeb..6eb77b2 100644
+--- a/setup.py
++++ b/setup.py
+@@ -12,8 +12,8 @@ def read(fname):
+
+
+ def get_requirements():
+-    """Retuen requirements with loose version restrictions."""
+-    return read("base_versions.txt").replace("==", ">=").split("\n")
++    """Read the supported runtime requirements."""
++    return read("base_versions.txt").splitlines()
+
+
+ setup(
+diff --git a/tests/auth/test_hap_srp.py b/tests/auth/test_hap_srp.py
+new file mode 100644
+index 0000000..46389e8
+--- /dev/null
++++ b/tests/auth/test_hap_srp.py
+@@ -0,0 +1,22 @@
++"""Regression tests for HAP SRP serialization."""
++
++from pyatv.auth.hap_srp import SRPAuthHandler
++
++
++def test_srp_pair_setup_wire_values(monkeypatch):
++    """Match the proof and key produced by srptools 1.0.1 for this exchange."""
++    srp = SRPAuthHandler()
++    # Private value 2 with generator 5 produces a one-byte public key.
++    monkeypatch.setattr(srp, "_auth_private", bytes(31) + b"\x02")
++    srp.step1(2271)
++    public, proof = srp.step2(b"\x07", bytes(range(16)))
++
++    assert public == b"\x19"
++    assert proof == bytes.fromhex(
++        "5f37fbbbe9efcce88d848c915b4149813989dd61703232e0c9c629dc17445fa47"
++        "aae26c1cea2fcc131e23324941e00c017e401ee6ff9c04ddacbc72cb2231adc"
++    )
++    assert srp.shared_key == bytes.fromhex(
++        "23d18da3b21a598321af115cfc5dac44650e8c6cd3d4c667795201be7a362e3f1"
++        "01aec3b813a58da1ae9e48ca45176b17f2fae8987371c061ff6805628fda3fd"
++    )
+diff --git a/tests/core/test_core.py b/tests/core/test_core.py
+index aacd5d2..8abc0d3 100644
+--- a/tests/core/test_core.py
++++ b/tests/core/test_core.py
+@@ -1,5 +1,6 @@
+ """Unit tests for pyatv.core."""
+
++import asyncio
+ from unittest.mock import ANY, MagicMock
+
+ import pytest
+@@ -39,7 +40,8 @@ class PushUpdaterDummy(AbstractPushUpdater):
+
+
+ @pytest.mark.parametrize("updates", [1, 2, 3])
+-def test_post_ignore_duplicate_update(event_loop, state_dispatcher, updates):
++@pytest.mark.asyncio
++async def test_post_ignore_duplicate_update(state_dispatcher, updates):
+     listener = MagicMock()
+     playing = Playing()
+
+@@ -48,14 +50,12 @@ def test_post_ignore_duplicate_update(event_loop, state_dispatcher, updates):
+         assert message.state == UpdatedState.Playing
+         listener.state_updated(message.value)
+
+-    async def _post_updates(repeats: int):
+-        updater = PushUpdaterDummy(state_dispatcher)
+-        updater.listener = listener
+-        state_dispatcher.listen_to(UpdatedState.Playing, _state_changed)
+-        for _ in range(repeats):
+-            updater.post_update(playing)
+-
+-    event_loop.run_until_complete(_post_updates(updates))
++    updater = PushUpdaterDummy(state_dispatcher)
++    updater.listener = listener
++    state_dispatcher.listen_to(UpdatedState.Playing, _state_changed)
++    for _ in range(updates):
++        updater.post_update(playing)
++    await asyncio.sleep(0)
+
+     assert listener.playstatus_update.call_count == 1
+     listener.playstatus_update.assert_called_once_with(ANY, playing)
+diff --git a/tests/core/test_scan.py b/tests/core/test_scan.py
+index 1523e84..820e250 100644
+--- a/tests/core/test_scan.py
++++ b/tests/core/test_scan.py
+@@ -111,7 +111,7 @@ RAOP_SERVICE_RECORD = DNSService(
+     "Ohana.local.",
+ )
+ RAOP_TXT_RECORD = DNSText(
+-    "Ohana._airplay._tcp.local.",
++    RAOP_PTR_RECORD.alias,
+     const._TYPE_TXT,
+     const._CLASS_IN,
+     const._DNS_OTHER_TTL,
+@@ -379,7 +379,7 @@ async def test_scan_with_zeroconf_unicast_not_found():
+     assert mock_async_request.mock_calls
+     for call in mock_async_request.mock_calls:
+         # Called with host argument
+-        assert call[1][2] == "127.0.0.1"
++        assert call.kwargs["addr"] == "127.0.0.1"
+     calls = mock_async_send.mock_calls
+     assert len(calls) >= 1
+     # We should send a PTR query as a fallback to unicast
+diff --git a/tests/protocols/companion/test_companion_interface.py b/tests/protocols/companion/test_companion_interface.py
+index a465d33..a013212 100644
+--- a/tests/protocols/companion/test_companion_interface.py
++++ b/tests/protocols/companion/test_companion_interface.py
+@@ -33,7 +33,7 @@ class CompanionCoreMock:
+
+
+ @pytest.fixture(name="api_mock")
+-def api_mock_fixture(event_loop):
++def api_mock_fixture():
+     yield CompanionApiMock()
+
+
+diff --git a/tests/protocols/mrp/conftest.py b/tests/protocols/mrp/conftest.py
+index bfb13ab..f6a3b15 100644
+--- a/tests/protocols/mrp/conftest.py
++++ b/tests/protocols/mrp/conftest.py
+@@ -24,5 +24,5 @@ class MrpProtocolMock(MessageDispatcher[int, protobuf.ProtocolMessage]):
+
+
+ @pytest.fixture(name="protocol_mock")
+-def protocol_mock_fixture(event_loop):
++def protocol_mock_fixture():
+     yield MrpProtocolMock()

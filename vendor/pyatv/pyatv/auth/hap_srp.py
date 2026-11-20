@@ -1,6 +1,5 @@
 """SRP implementation for HAP."""
 
-import binascii
 import hashlib
 import logging
 import os
@@ -61,7 +60,7 @@ class SRPAuthHandler:
     @property
     def shared_key(self) -> bytes:
         """Return shared secret."""
-        return self._session.key
+        return self._session.key_bin
 
     def initialize(self):
         """Initialize operation by generating new keys."""
@@ -144,21 +143,17 @@ class SRPAuthHandler:
             generator=constants.PRIME_3072_GEN,
             hash_func=hashlib.sha512,
         )
-        self._session = SRPClientSession(
-            context, binascii.hexlify(self._auth_private).decode()
-        )
+        self._session = SRPClientSession(context, private=self._auth_private)
 
     def step2(self, atv_pub_key, atv_salt):
         """Second pairing step."""
-        pk_str = binascii.hexlify(atv_pub_key).decode()
-        salt = binascii.hexlify(atv_salt).decode()
-        self._session.process(pk_str, salt)
+        self._session.process(atv_pub_key, atv_salt)
 
         if not self._session.verify_proof(self._session.key_proof_hash):
             raise exceptions.AuthenticationError("proofs do not match")
 
-        pub_key = binascii.unhexlify(self._session.public)
-        proof = binascii.unhexlify(self._session.key_proof)
+        pub_key = bytes.fromhex(self._session.public)
+        proof = self._session.key_proof_bin
         log_binary(_LOGGER, "Client", Public=pub_key, Proof=proof)
         return pub_key, proof
 
@@ -171,13 +166,13 @@ class SRPAuthHandler:
         ios_device_x = hkdf_expand(
             "Pair-Setup-Controller-Sign-Salt",
             "Pair-Setup-Controller-Sign-Info",
-            binascii.unhexlify(self._session.key),
+            self._session.key_bin,
         )
 
         self._session_key = hkdf_expand(
             "Pair-Setup-Encrypt-Salt",
             "Pair-Setup-Encrypt-Info",
-            binascii.unhexlify(self._session.key),
+            self._session.key_bin,
         )
 
         device_info = ios_device_x + self.pairing_id + self._auth_public
