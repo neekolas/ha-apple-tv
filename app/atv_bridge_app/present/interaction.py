@@ -3,7 +3,9 @@
 import asyncio
 import ipaddress
 import json
+import logging
 import re
+import time
 from dataclasses import dataclass
 from itertools import islice
 from secrets import token_urlsafe
@@ -22,6 +24,11 @@ NODE = re.compile(r'^(\w+)(?: ("(?:[^"\\]|\\.)*"))?((?: \[[^\]]+\])*)$')
 REF = re.compile(r'\[ref=((?:f\d+)?e\d+)\]')
 STATES = ("disabled", "checked", "selected", "expanded")
 TIMEOUT = 2000
+# The HA Green reads large pages slowly while tvpipe encodes. Measured live:
+# a GitHub repository page took about 5 s to read.
+LOOK_BUDGET_S = 15
+SNAPSHOT_TIMEOUT = 10_000
+log = logging.getLogger(__name__)
 # YAML excludes surrogates and most control characters. Unicode reserves the
 # last two code points of each plane and U+FDD0..FDEF as noncharacters.
 INVALID_TEXT = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x84\x86-\x9f\ud800-\udfff\ufdd0-\ufdef"
@@ -303,7 +310,8 @@ class PageInteraction:
     async def look(self, find=None, scope=None, cursor=None):
         self.throttle("look", 1)
         try:
-            async with self.ops.stage.lock, asyncio.timeout(5):
+            async with self.ops.stage.lock, asyncio.timeout(LOOK_BUDGET_S):
+                started = time.monotonic()
                 if cursor:
                     await self.check()
                     if cursor != self.cursor:
@@ -325,7 +333,9 @@ class PageInteraction:
                     self.root = await frame.evaluate_handle("document.documentElement")
                 await self.check()
                 locator = frame.locator("aria-ref=" + scope_ref if scope_ref else "body")
-                snapshot = await locator.aria_snapshot(mode="ai", timeout=TIMEOUT)
+                bound = time.monotonic()
+                snapshot = await locator.aria_snapshot(mode="ai", timeout=SNAPSHOT_TIMEOUT)
+                snapped = time.monotonic()
                 if len(snapshot) > 512_000:
                     raise Fault("page_unreachable", "The page exceeds the snapshot limit.", "Show a smaller page.")
                 loader = getattr(yaml, "CBaseLoader", yaml.BaseLoader)
@@ -345,7 +355,11 @@ class PageInteraction:
                 self.title = await frame.title() or self.ops.stage.page.get("title") or ""
                 await self.check()
                 self.view = token_urlsafe(14)
-                return await self.slice()
+                result = await self.slice()
+                log.info("Page look: bind %.0f ms, snapshot %.0f ms (%d chars), rows %.0f ms",
+                         1000 * (bound - started), 1000 * (snapped - bound), len(snapshot),
+                         1000 * (time.monotonic() - snapped))
+                return result
         except (yaml.YAMLError, ValueError, RecursionError) as exc:
             await self.clear()
             raise Fault("page_unreachable", "Chromium returned an unreadable snapshot.",
