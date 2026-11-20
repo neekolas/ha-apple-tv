@@ -2,6 +2,7 @@ import asyncio
 import hmac
 import logging
 import os
+import time
 from contextlib import contextmanager
 from functools import cached_property
 
@@ -216,13 +217,22 @@ class TVRuntime:
                 return web.json_response(await rt.operations.tv_health() | {"pending_pairing": rt.pairing.prompt()})
 
         async def tool(request):
+            started = time.monotonic()
+            name = request.match_info["name"]
             try:
                 args = await request.json()
             except ValueError:
                 args = None
             if fleet and "tv" in request.match_info and isinstance(args, dict):
                 args["tv"] = request.match_info["tv"]
-            result = await (fleet or self.tools).call(request.match_info["name"], args)
+            logging.getLogger(__name__).info("REST tool %s received", name)
+            result = await (fleet or self.tools).call(name, args)
+            logging.getLogger(__name__).info(
+                "REST tool %s answered %s in %d ms",
+                name,
+                "ok" if result["ok"] else result["error"]["code"],
+                (time.monotonic() - started) * 1000,
+            )
             if "image" in result:
                 result["data"]["image"] = result.pop("image")
             return web.json_response(result)
