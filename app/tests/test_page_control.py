@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -206,3 +207,13 @@ async def test_live_binding_excludes_loopback_stage_and_debug_ports(service, url
     else:
         frame, _, _ = await service.tools.page_interaction.binding()
         assert frame.url == url
+
+def test_page_control_reference_covers_tools_and_recovery():
+    root = Path(__file__).resolve().parents[2]
+    readme = (root / "README.md").read_text()
+    architecture = (root / "docs/ARCHITECTURE.md").read_text()
+    for tool in ("tv_page_look", "tv_page_act", "tv_update"):
+        assert f"`{tool}`" in readme and f"| `{tool}` |" in architecture
+    troubleshooting = (root / "skills/apple-tv/troubleshooting.md").read_text()
+    for code in ("stale_view", "target_missing", "delivery_uncertain", "nothing_showing", "page_not_live"):
+        assert f"| `{code}` |" in troubleshooting

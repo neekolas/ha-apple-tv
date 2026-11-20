@@ -53,6 +53,8 @@ Each advertised tool accepts an optional `tv` selector. Use a name or ID from `t
 | `tv_power` | Request on or off and check the receiver's power state. |
 | `tv_play` | Play YouTube, a media URL or an app title, or open a deep link and report where it landed. |
 | `tv_show` | Show a URL, HTML, inline files or a stored bundle. With only the selector, dismiss that TV's page. |
+| `tv_page_look` | Read a bounded snapshot of the mirrored document. Search by text, scope by ref or continue with a cursor. |
+| `tv_page_act` | Dispatch one action to a control or scroll the document using the current view. |
 | `tv_update` | Post JSON to the current page and return its reported state, if available. |
 
 Tool calls wait up to ten seconds for the selected TV's tool lock. Results contain `ok`, `summary`, `verified`, `evidence` and `data`. All tools except `tv_status` include `screen`. Errors add `code`, `message`, `retryable` and `fix` under `error`. In a fleet summary, inspect the individual receiver results. The bridge has no purchase guard.

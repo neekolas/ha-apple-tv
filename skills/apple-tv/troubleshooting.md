@@ -12,6 +12,11 @@ A failed tool result has `ok: false` and `error` with `code`, `message`, `retrya
 | `busy` | yes | Wait for the active call. The per-TV lock waits up to 10 seconds. For a pairing conflict, finish or cancel the pending exchange. |
 | `launch_refused` | no | For a refused link, inspect the screen and try an installed app or another confirmed link. For a media URL, check `data.capabilities.play_media` and the staged pyatv fork. |
 | `page_unreachable` | yes | Check that the HA host can reach the page and its server is running. For a missing bundle, upload it again. For an update without a ready page, call `tv_show` first. |
+| `stale_view` | no | Follow `error.fix`. Get a fresh view with `tv_page_look` for an expired ref. After a mirror restart or navigation away, present the intended page again with `tv_show`. |
+| `target_missing` | no | Choose an issued ref and a supported action. Enter and Space are blocked on form controls. For a blocked bridge listener, show the content URL or bundle. |
+| `delivery_uncertain` | no | Read the page before sending more input. The action may already have taken effect. |
+| `nothing_showing` | no | Use `tv_show` to present a page on the selected receiver. |
+| `page_not_live` | no | The TV is showing a recording. Use `tv_update` if the page handles updates, or show it in mirror mode. |
 | `screen_unavailable` | yes | Check screen pairing and whether the app publishes labels. If a picker lacks a clear choice, select the profile on the TV. Request an image only when needed. |
 | `uncertain` | no | Read the evidence and take a fresh text look before continuing. For remote keys, `data.confirmed_keys` counts acknowledged keys. A key whose acknowledgment was lost may still have arrived. For menu paths, inspect `data.steps` when present. |
 | `not_found` | no | Read `data.path` and choose a visible label from a new look. |
