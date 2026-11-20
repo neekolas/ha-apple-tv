@@ -242,6 +242,21 @@ async def test_remote_bursts_keys_and_reads_once(ui):
     assert r["screen"]["focus"]["label"] == "Results"
 
 
+async def test_remote_reuses_prompt_check_read_as_starting_screen(ui):
+    service, grid, tv = ui
+    methods = []
+
+    async def counted(method, **kwargs):
+        methods.append(method)
+        return await grid.observer(method, **kwargs) | {"app": {"bundle_id": "com.example.app", "name": "Example"}}
+
+    service.state.save_pairings(remote_pairing=True)
+    service.observer.call = counted
+    r = await service.tools.call("tv_remote", {"keys": ["right"]})
+    assert r["ok"] and r["verified"] and r["screen"]["focus"]["label"] == "Search"
+    assert methods == ["ax_items", "ax_focused"]
+
+
 async def test_remote_burst_ignores_unreadable_focus_but_check_each_stops(ui):
     service, grid, tv = ui
     reads = {"n": 0}

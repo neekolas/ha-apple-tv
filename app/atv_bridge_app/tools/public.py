@@ -36,6 +36,7 @@ class PublicTools:
         self.last_look = None
         self.profile_name = None
         self.action_evidence = []
+        self.prompt_view = None
         self.media = MediaPlayback(self.engine)
         self.page_interaction = PageInteraction(ops)
 
@@ -115,6 +116,7 @@ class PublicTools:
             )
         try:
             self.action_evidence = []
+            self.prompt_view = None
             if (
                 name == "tv_show"
                 and args
@@ -224,6 +226,8 @@ class PublicTools:
             preferred = self.default_profile if system else self.app_profile or self.profile_name or self.default_profile
             choice = prompt_choice(view, system=system, preferred=preferred)
             if not choice:
+                # Nothing has been pressed since this read, so the action can reuse it as its starting screen.
+                self.prompt_view = view
                 return changed
             if choice == previous:
                 raise Fault("uncertain", "The same prompt is still visible.", "Read tv_look before acting.")
@@ -440,7 +444,8 @@ class PublicTools:
         data.confirmed_keys counts acknowledgments. verified=false means no screen change was seen. On lost delivery inspect screen before sending more.
         Use tv_sequence for checkpointed runs. For example, tv_remote {"keys":["menu"]}."""
         path = []
-        screen = await self.snapshot()
+        view, self.prompt_view = self.prompt_view, None
+        screen = await (self.snapshot(view["focused"], False, view) if view else self.snapshot())
         verified = True
         evidence = []
         if text is not None:
