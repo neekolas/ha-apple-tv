@@ -18,10 +18,10 @@ The staging script copies the fork into `app/vendor/pyatv/` and exports the hash
 
 Run the Home Assistant 2026.11.2 end-to-end test from `app/` with `tests/e2e/run.sh`. It runs HA in the integration test environment and the bridge in its Python 3.13 environment. The bridge pairs with the vendored fake TV over loopback. The test sends remote keys through HA’s authenticated MCP proxy with both the 2025 handshake and the 2026 per-request protocol.
 
-Use the network-isolated tvpipe browser sink to test DOM reads, controlled fields, form navigation and script limits in iframe and direct modes. For timings on a limited CPU, add `--cpus=0.5` to Docker and `--benchmark` after `/tmp/check.py`.
+Use the network-isolated tvpipe browser sink to test DOM reads, controlled fields, form navigation, script limits and page egress in iframe and direct modes. The DNS alias and listening fixtures verify that a denied request never reaches the bridge API. The check also verifies encoded video after a browser restart. When updating tvpipe, verify the length and SHA-256 of its capture.js in `present/tvpipe.py` against the new release. For timings on a limited CPU, add `--cpus=0.5` to Docker and `--benchmark` after `/tmp/check.py`.
 
 ```sh
-docker run --rm --network none -e PYTHONPATH=/opt/app \
+docker run --rm --network none --add-host=blocked.page.test:127.0.0.1 -e PYTHONPATH=/opt/app \
   -v "$PWD/tests/e2e/live_page_check.py:/tmp/check.py:ro" atv-bridge python /tmp/check.py
 ```
 

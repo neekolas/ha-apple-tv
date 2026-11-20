@@ -83,11 +83,20 @@ async def main(root):
                 struct.pack("<h", int(8000 * math.sin(n * math.tau * 440 / 8000))) for n in range(32000)
             )
         )
+    connections = []
+
+    def trap(reader, writer):
+        connections.append(writer.get_extra_info("peername"))
+        writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        writer.close()
+
+    sentinel = await asyncio.start_server(trap, "127.0.0.1", 8765)
     runner = web.AppRunner(stage.app())
     renderer = StageRenderer(stage)
     await runner.setup()
     try:
         await web.TCPSite(runner, "127.0.0.1", 8766).start()
+        stage.stage_ports.add(8766)
         for html, duration, audible, motion in [
             ("<body style='background:blue'>static", 60, False, False),
             (
@@ -114,6 +123,16 @@ async def main(root):
             assert browser_status()["processes"] > 0
             if motion:
                 renderer.default_duration = duration
+                owner = await renderer.page.locator("iframe.visible").element_handle()
+                frame = await owner.content_frame()
+                reached = await frame.evaluate("""async () => {
+                    try {
+                        await fetch('http://127.0.0.1:8765/', {mode: 'no-cors'});
+                        return true;
+                    } catch { return false; }
+                }""")
+                assert not reached and not connections, connections
+                assert renderer.proxy.denial_for("http://127.0.0.1:8765/")
             with tempfile.TemporaryDirectory(dir=root) as work:
                 path, captured = await renderer.render(Path(work))
                 assert abs(captured - duration) < 0.1
@@ -121,6 +140,8 @@ async def main(root):
     finally:
         await renderer.close()
         await runner.cleanup()
+        sentinel.close()
+        await sentinel.wait_closed()
     assert browser_status() == {"processes": 0, "rss_mib": 0}
 
 
