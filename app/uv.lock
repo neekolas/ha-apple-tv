@@ -227,6 +227,8 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
+    { name = "h11" },
+    { name = "ifaddr" },
     { name = "jsonschema" },
     { name = "mcp" },
     { name = "pillow" },
@@ -253,6 +255,8 @@ image-build = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.14.5,<4" },
+    { name = "h11", specifier = ">=0.16,<1" },
+    { name = "ifaddr", specifier = ">=0.2.0,<0.3" },
     { name = "jsonschema", specifier = ">=4.26.0,<5" },
     { name = "mcp", specifier = ">=2.3.0,<3" },
     { name = "pillow", specifier = ">=13.0.0,<14" },
