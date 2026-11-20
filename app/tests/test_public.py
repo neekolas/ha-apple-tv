@@ -503,6 +503,8 @@ async def test_nested_settings_path_observes_each_destination(ui, correct_destin
         observation = {"focused": focused, "app": settings}
         if method == "ax_items":
             observation["items"] = [{"label": heading, "uid": "heading"}, focused]
+            if level == 0:
+                observation["items"].append({"label": "Network", "uid": "network"})
         else:
             assert method == "ax_focused"
         return observation

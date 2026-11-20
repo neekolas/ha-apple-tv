@@ -241,7 +241,9 @@ class PublicTools:
             items = [normal(label(i)) for i in view["items"]]
             if (view.get("app") or {}).get("bundle_id") != "com.apple.TVSettings" or not items:
                 break
-            if ("settings" in items and "remotes and devices" in items) or {"general", "network", "remotes and devices"} <= set(items):
+            # The devices submenu also exposes both "Settings" and "Remotes and Devices".
+            # Require a sibling root row before starting a path from this screen.
+            if "remotes and devices" in items and {"network", "video and audio", "general"}.intersection(items):
                 return
             if previous == items:
                 break

@@ -229,8 +229,8 @@ async def test_settings_returns_to_root_without_selecting_device(service):
     tools.read_observation = AsyncMock(
         side_effect=[
             page(["Remote App and Devices", "Agent Bridge"]),
-            page(["Remotes and Devices", "Remote App and Devices"]),
-            page(["Settings", "Remotes and Devices"]),
+            page(["Settings", "Remotes and Devices", "TV Button", "Remote App and Devices"]),
+            page(["Settings", "Network", "Remotes and Devices"]),
         ]
     )
     tools.press = AsyncMock()

@@ -70,7 +70,10 @@ Use one `tv_sequence` call to open the device list, confirm the page heading, ba
     {"app":"Settings","path":["Remotes and Devices","Remote App and Devices"]},
     {"expect":{"app":"Settings","visible":"Remote App and Devices"}},
     {"key":"menu"},
+    {"pause_ms":1500},
+    {"expect":{"app":"Settings","focus":"Remote App and Devices"}},
     {"key":"home"},
+    {"pause_ms":1500},
     {"expect":{"app":"Home"}}
   ]
 }

@@ -138,7 +138,7 @@ For repetition, supply an ordered list of labels. The bridge runs the complete s
 
 ```json
 {
-  "for_each": ["General", "Network"],
+  "for_each": ["Accessibility", "Network"],
   "steps": [{"to":"$item"}, {"expect":{"focus":"$item","app":"Settings"}}]
 }
 ```
