@@ -108,10 +108,10 @@ Send one input using the latest `view` and an element `ref` from that receiver. 
 | Activate a button, checkbox or tab | `{"view":"sample-view","ref":"e2","action":"click"}` |
 | Replace a text field, including clearing it with an empty string | `{"view":"sample-view","ref":"e3","action":"fill","text":"Dinner"}` |
 | Choose one enabled option by its exact HTML value | `{"view":"sample-view","ref":"e4","action":"select","value":"large"}` |
-| Press one key on a control | `{"view":"sample-view","ref":"e3","action":"press","key":"Enter"}` |
+| Press one key on a control | `{"view":"sample-view","ref":"e3","action":"press","key":"Tab"}` |
 | Scroll one viewport up or down, using `document` or a scrollable container ref | `{"view":"sample-view","ref":"document","action":"scroll","direction":"down"}` |
 
-Allowed keys are `Enter`, `Space`, `Escape`, `Tab`, `Shift+Tab`, `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, `Home`, `End`, `PageUp` and `PageDown`. The bridge masks password and recognized secret field values and excludes those fields from input. Controls belong to the presented document. Nested frames, popups, file inputs and navigation links supply no action targets.
+Allowed keys are `Enter`, `Space`, `Escape`, `Tab`, `Shift+Tab`, `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, `Home`, `End`, `PageUp` and `PageDown`. The bridge refuses Enter and Space on form controls because these keys can submit field data. The bridge masks password and recognized secret field values and excludes those fields from input. Controls belong to the presented document. Nested frames, popups, file inputs and navigation links supply no action targets.
 
 A successful action returns `data.dispatched: true`, a new `data.view` and any observed change in `focus`, `focused` (whether the target holds focus), `value` or `status`. Use the new view with surviving refs. `verified` means Chromium observed one of those changes. Read again to check delayed effects. Both tools share the per-TV lock. Allow one second between looks and 250 ms between actions.
 

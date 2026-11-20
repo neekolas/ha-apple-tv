@@ -102,3 +102,17 @@ async def test_uncertain_dispatch_is_never_replayed(service):
     control.last.clear()
     assert (await service.tools.call("tv_page_act", args))["error"]["code"] == "stale_view"
     handle.click.assert_awaited_once()
+
+
+@pytest.mark.parametrize("key", ["Enter", "Space"])
+async def test_form_activation_key_refused_before_dispatch(service, key):
+    control = service.tools.page_interaction
+    control.binding = control.check = AsyncMock()
+    control.view = "seen"
+    handle = SimpleNamespace(is_visible=AsyncMock(return_value=True), press=AsyncMock(),
+                             evaluate=AsyncMock(return_value={"blocked": False, "disabled": False,
+                                                              "value": "fixture", "formControl": True}))
+    control.target = AsyncMock(return_value=SimpleNamespace(handle=handle, row=Row("textbox", "Query", [], None)))
+    result = await service.tools.call("tv_page_act", {"view": "seen", "ref": "e1", "action": "press", "key": key})
+    assert result["error"]["code"] == "target_missing" and "form" in result["error"]["message"]
+    handle.press.assert_not_awaited()

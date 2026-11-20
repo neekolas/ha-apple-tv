@@ -99,6 +99,28 @@ async def exercise(tools, frame, mode):
     assert (await act(data["view"], next_button, "click"))["error"]["code"] == "stale_view"
 
 
+async def exercise_form(tools, frame, submissions):
+    await frame.evaluate("""() => {
+        const section = document.createElement('section');
+        section.innerHTML = '<form id="search" action="/submitted"><input name="q" aria-label="Form field"><button type="submit">Submit form</button></form>'
+          + '<input form="search" aria-label="External field">';
+        document.body.append(section);
+    }""")
+    await asyncio.sleep(1)
+    data = (await tools.call("tv_page_look", {"find": "field"}))["data"]
+    field = element(data["snapshot"], "textbox", "Form field")
+    external = element(data["snapshot"], "textbox", "External field")
+    url = frame.url
+    filled = await tools.call("tv_page_act", {"view": data["view"], "ref": field, "action": "fill", "text": "fixture"})
+    assert filled["ok"], filled
+    for ref, key in ((field, "Enter"), (external, "Space")):
+        await asyncio.sleep(.25)
+        result = await tools.call("tv_page_act", {"view": filled["data"]["view"], "ref": ref, "action": "press", "key": key})
+        assert result["error"]["code"] == "target_missing" and "form" in result["error"]["message"], result
+    assert frame.url == url and submissions == []
+    assert await frame.get_by_label("Form field").input_value() == "fixture"
+
+
 async def exercise_revision(tools, ops, options, frame):
     await frame.evaluate("""() => {
         for (let i=0; i<60; ++i) {
@@ -127,7 +149,11 @@ async def check(root):
     stage = Stage(root)
     site = web.Application()
 
+    submissions = []
+
     async def content(request):
+        if request.path == "/submitted":
+            submissions.append(request.query_string)
         if request.path.startswith("/browser-error") and "Chrom" in request.headers.get(
             "User-Agent", ""
         ):
@@ -216,6 +242,7 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
                     after = await tools.call("tv_page_look", {})
                     assert after["ok"] and 'status "Routed"' in after["data"]["snapshot"], after
                 if label == "direct":
+                    await exercise_form(tools, frame, submissions)
                     async with capture.expect_popup() as opened:
                         await capture.evaluate("() => { window.open(location.href) }")
                     popup = await opened.value

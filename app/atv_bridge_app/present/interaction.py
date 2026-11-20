@@ -31,6 +31,11 @@ def missing():
                  "Read tv_page_look and choose a supported control.")
 
 
+def form_key_blocked():
+    return Fault("target_missing", "Enter and Space can submit a form.",
+                 "Choose a control outside the form for this key.")
+
+
 def uncertain():
     # Native TV operations already translate delivery_uncertain to the v1 'uncertain' code.
     return Fault("page_delivery_uncertain", "Chromium could not confirm dispatch.",
@@ -96,6 +101,7 @@ INSPECT = r"""(el, name) => {
   const textField = el.matches('textarea,input:is([type=text],[type=search],[type=email],[type=tel],[type=url],:not([type]))') || el.isContentEditable;
   return {blocked:Boolean(blocked || secret), disabled:el.matches(':disabled,[aria-disabled=true]'),
     restrictedChild:Boolean(el.querySelector(restricted)), focused:el.matches(':focus'),
+    formControl:Boolean(el.form || el.closest('form') || el.closest('label')?.control?.form),
     secret, textField, select:el.tagName === 'SELECT', live:el.matches('[aria-live=polite],[aria-live=assertive]'),
     scroll: el.clientHeight > 0 && el.scrollHeight > el.clientHeight && /auto|scroll|overlay/.test(getComputedStyle(el).overflowY),
     value:secret ? '[masked]' : typeof el.value === 'string' ? el.value.slice(0,160) : el.isContentEditable ? el.innerText.slice(0,160) : null};
@@ -363,6 +369,9 @@ class PageInteraction:
                     old_value = info["value"]
                     if info["blocked"] or info["disabled"] or not await handle.is_visible():
                         raise missing()
+                    form_key = action == "press" and key in ("Enter", "Space")
+                    if form_key and info["formControl"]:
+                        raise form_key_blocked()
                     if action == "scroll" and not info["scroll"]:
                         raise missing()
                     if action != "scroll" and (target.row.role not in CONTROLS or info["restrictedChild"]):
@@ -385,6 +394,9 @@ class PageInteraction:
                     if not await handle.evaluate("el => el.matches(':focus')"):
                         dispatched = False  # Focus settled elsewhere. No key or text was sent.
                         raise missing()
+                    if form_key and (await handle.evaluate(INSPECT, name))["formControl"]:
+                        dispatched = False
+                        raise form_key_blocked()
                 if action == "click":
                     await handle.click(timeout=TIMEOUT)
                 elif action == "fill":
