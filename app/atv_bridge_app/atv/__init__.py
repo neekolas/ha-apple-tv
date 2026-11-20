@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import importlib
+import re
 from contextlib import suppress
 from functools import partial, wraps
 
@@ -409,6 +410,17 @@ class Session:
             # A socket close makes the fork's wait return "stopped"; the last
             # receiver event remains "playing". A normal EOF sends idle/stopped.
             return getattr(self.stream_protocol, "playback_state", None) in ("playing", "paused")
+        except exceptions.PlaybackError as exc:
+            # The fork reports receiver-requested (FCUP) fetch failures here.
+            # A media-origin 403 is independent of the AirPlay pairing.
+            reason = getattr(self.stream_protocol, "url_load_error", None)
+            if not reason:
+                raise
+            status = re.search(r" returned HTTP ([0-9]{3})$", reason)
+            message = (f"The media server returned HTTP {status[1]}." if status
+                       else "The media URL could not be fetched for the TV.")
+            raise Fault("page_unreachable", message,
+                        "Use a direct media URL that the Apple TV can fetch.") from exc
         finally:
             stream.create_airplay_protocol = original
             self.stream_protocol = None

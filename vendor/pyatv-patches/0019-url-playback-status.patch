@@ -1,0 +1,84 @@
+diff --git a/pyatv/protocols/airplay/__init__.py b/pyatv/protocols/airplay/__init__.py
+index 9d7cb98..afc8af7 100644
+--- a/pyatv/protocols/airplay/__init__.py
++++ b/pyatv/protocols/airplay/__init__.py
+@@ -129,6 +129,7 @@ class AirPlayStream(Stream):  # pylint: disable=too-few-public-methods
+             self._connection = await http_connect(
+                 str(self.config.address), self.service.port
+             )
++            self._connection.trace_airplay_url = True
+             rtsp = RtspSession(self._connection)
+             stream_protocol = self.create_airplay_protocol(self.service, rtsp)
+             player = AirPlayPlayer(rtsp, stream_protocol)
+diff --git a/pyatv/protocols/raop/protocols/airplayv2.py b/pyatv/protocols/raop/protocols/airplayv2.py
+index bdcb45c..d3d81c0 100644
+--- a/pyatv/protocols/raop/protocols/airplayv2.py
++++ b/pyatv/protocols/raop/protocols/airplayv2.py
+@@ -30,6 +30,7 @@ from pyatv.support.http import HttpResponse, decode_bplist_from_body
+ from pyatv.support.rtsp import HTTP_PROTOCOL, RtspSession
+ 
+ _LOGGER = logging.getLogger(__name__)
++_URL_STATUS = logging.getLogger("pyatv.airplay.url_status")
+ 
+ EVENTS_SALT = "Events-Salt"
+ EVENTS_WRITE_INFO = "Events-Write-Encryption-Key"
+@@ -250,6 +251,7 @@ class AirPlayV2(StreamProtocol):
+                 "Fetched %s for receiver: %d (%d bytes)", url, status, len(data)
+             )
+             if not 200 <= status < 300:
++                _URL_STATUS.info("AirPlay media origin returned HTTP %d", status)
+                 self._set_url_load_error(f"{url} returned HTTP {status}")
+             elif not request.get("FCUP_Response_IsContentKeyRequest") and not (
+                 data.lstrip().startswith(b"#EXTM3U")
+@@ -437,7 +439,7 @@ class AirPlayV2(StreamProtocol):
+                 )
+             }
+         }
+-        return await self.rtsp.exchange(
++        response = await self.rtsp.exchange(
+             "POST",
+             uri="/command",
+             protocol=HTTP_PROTOCOL,
+@@ -450,6 +452,8 @@ class AirPlayV2(StreamProtocol):
+             body=body,
+             allow_error=True,
+         )
++        _URL_STATUS.info("AirPlay URL command %s -> %d", command["type"], response.code)
++        return response
+ 
+     async def play_url(
+         self, timing_server_port: int, url: str, position: float = 0.0
+diff --git a/pyatv/support/http.py b/pyatv/support/http.py
+index f7d2d74..7448ab1 100644
+--- a/pyatv/support/http.py
++++ b/pyatv/support/http.py
+@@ -29,6 +29,7 @@ from pyatv.support import async_timeout, log_binary
+ from pyatv.support.net import unused_port
+ 
+ _LOGGER = logging.getLogger(__name__)
++_URL_STATUS = logging.getLogger("pyatv.airplay.url_status")
+ 
+ USER_AGENT = f"pyatv/{const.__version__}"
+ SERVER_NAME = f"pyatv-www/{const.__version__}"
+@@ -349,6 +350,7 @@ class HttpConnection(asyncio.Protocol):
+         )
+         self._local_ip: Optional[str] = None
+         self._remote_ip: Optional[str] = None
++        self.trace_airplay_url = False
+         self._requests: deque = deque()
+         self._buffer = b""
+ 
+@@ -479,6 +481,13 @@ class HttpConnection(asyncio.Protocol):
+ 
+         _LOGGER.debug("Got %s response: %s:", response.protocol, response)
+ 
++        if self.trace_airplay_url and (uri in {"/pair-verify", "/info", "/play", "/command", "/playback-info"}
++                                       or method in {"SETUP", "RECORD", "TEARDOWN"}):
++            # RTSP resource URLs contain receiver addresses. Headers and bodies
++            # may contain credentials or signed media URLs.
++            path = uri if uri.startswith("/") else "(session)"
++            _URL_STATUS.info("AirPlay URL control %s %s -> %d", method, path, response.code)
++
+         if response.code == 403:
+             raise exceptions.AuthenticationError("not authenticated")
+ 

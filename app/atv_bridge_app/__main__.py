@@ -20,6 +20,8 @@ async def main():
     logging.basicConfig(level=options.get("log_level", "info").upper())
     # pyatv's wire-level debug logs include keys, PINs and keyboard contents.
     logging.getLogger("pyatv").setLevel(logging.WARNING)
+    # Status-only AirPlay traces omit credentials, headers, URLs and payloads.
+    logging.getLogger("pyatv.airplay.url_status").setLevel(max(logging.INFO, logging.getLogger().level))
     service = Fleet(root, options)
     stopped = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):

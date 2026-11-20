@@ -304,3 +304,23 @@ async def test_repair_control_discards_only_local_control_credentials(service):
         assert "receiver" not in (state.root / "tvpipe/credentials.txt").read_text()
     finally:
         await service.pairing.stop()
+
+
+async def test_media_origin_denial_is_not_a_pairing_failure(service):
+    from pyatv import exceptions
+    from atv_bridge_app.atv import Session
+
+    url = "https://media.invalid/sample.mp4?private=example"
+    protocol = SimpleNamespace(url_load_error=f"{url} returned HTTP 403")
+    stream = SimpleNamespace(create_airplay_protocol=lambda: protocol)
+    async def refused(media, position):
+        stream.create_airplay_protocol()
+        raise exceptions.PlaybackError(protocol.url_load_error)
+    facade = SimpleNamespace(stream=SimpleNamespace(get=lambda _: stream, play_url=refused))
+    tv = await service.engine.ensure()
+    tv.play_url = lambda media, pos: Session.play_url(SimpleNamespace(facade=facade), media, pos)
+    service.engine.adapter.supports_play_url = True
+    service.tools.play_timeout = 2
+    result = await service.tools.call("tv_play", {"media": url})
+    assert result["error"]["code"] == "page_unreachable" and "HTTP 403" in result["error"]["message"]
+    assert "private=example" not in str(result)

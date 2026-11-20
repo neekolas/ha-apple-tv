@@ -52,6 +52,7 @@ class TvpipeSender(Sender):
         self.state = state
         self.executable = executable
         self.restart_delay = restart_delay
+        self.last_teardown = None
         self.url = None
         self.audio = "play"
         self.running_audio = None
@@ -325,10 +326,18 @@ class TvpipeSender(Sender):
             await asyncio.sleep(delay)
             delay = min(delay * 2, 60)
 
+    async def wait_for_airplay_handoff(self):
+        """Give the receiver a second after the last mirror TEARDOWN."""
+        if self.last_teardown is not None:
+            remaining = self.last_teardown + 1 - asyncio.get_running_loop().time()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+
     async def _clean_child(self, proc):
         async with self.child_lock:
             try:
                 await stop_sender(proc)
+                self.last_teardown = asyncio.get_running_loop().time()
             finally:
                 self.proc = None
                 try:

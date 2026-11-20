@@ -29,6 +29,7 @@ from pyatv.support import async_timeout, log_binary
 from pyatv.support.net import unused_port
 
 _LOGGER = logging.getLogger(__name__)
+_URL_STATUS = logging.getLogger("pyatv.airplay.url_status")
 
 USER_AGENT = f"pyatv/{const.__version__}"
 SERVER_NAME = f"pyatv-www/{const.__version__}"
@@ -349,6 +350,7 @@ class HttpConnection(asyncio.Protocol):
         )
         self._local_ip: Optional[str] = None
         self._remote_ip: Optional[str] = None
+        self.trace_airplay_url = False
         self._requests: deque = deque()
         self._buffer = b""
 
@@ -478,6 +480,13 @@ class HttpConnection(asyncio.Protocol):
                 self._requests.remove(pending_request)
 
         _LOGGER.debug("Got %s response: %s:", response.protocol, response)
+
+        if self.trace_airplay_url and (uri in {"/pair-verify", "/info", "/play", "/command", "/playback-info"}
+                                       or method in {"SETUP", "RECORD", "TEARDOWN"}):
+            # RTSP resource URLs contain receiver addresses. Headers and bodies
+            # may contain credentials or signed media URLs.
+            path = uri if uri.startswith("/") else "(session)"
+            _URL_STATUS.info("AirPlay URL control %s %s -> %d", method, path, response.code)
 
         if response.code == 403:
             raise exceptions.AuthenticationError("not authenticated")

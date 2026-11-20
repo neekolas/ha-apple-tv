@@ -738,6 +738,7 @@ class PublicTools:
                     "Media must be an HTTP or HTTPS URL.",
                     "Supply a receiver-accessible media URL.",
                 )
+            await self.ops.live_mirror.wait_for_airplay_handoff()
             await self.media.start(media)
             route = "airplay"
         elif link:

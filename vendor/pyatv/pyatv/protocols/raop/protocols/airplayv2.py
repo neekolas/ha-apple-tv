@@ -30,6 +30,7 @@ from pyatv.support.http import HttpResponse, decode_bplist_from_body
 from pyatv.support.rtsp import HTTP_PROTOCOL, RtspSession
 
 _LOGGER = logging.getLogger(__name__)
+_URL_STATUS = logging.getLogger("pyatv.airplay.url_status")
 
 EVENTS_SALT = "Events-Salt"
 EVENTS_WRITE_INFO = "Events-Write-Encryption-Key"
@@ -250,6 +251,7 @@ class AirPlayV2(StreamProtocol):
                 "Fetched %s for receiver: %d (%d bytes)", url, status, len(data)
             )
             if not 200 <= status < 300:
+                _URL_STATUS.info("AirPlay media origin returned HTTP %d", status)
                 self._set_url_load_error(f"{url} returned HTTP {status}")
             elif not request.get("FCUP_Response_IsContentKeyRequest") and not (
                 data.lstrip().startswith(b"#EXTM3U")
@@ -437,7 +439,7 @@ class AirPlayV2(StreamProtocol):
                 )
             }
         }
-        return await self.rtsp.exchange(
+        response = await self.rtsp.exchange(
             "POST",
             uri="/command",
             protocol=HTTP_PROTOCOL,
@@ -450,6 +452,8 @@ class AirPlayV2(StreamProtocol):
             body=body,
             allow_error=True,
         )
+        _URL_STATUS.info("AirPlay URL command %s -> %d", command["type"], response.code)
+        return response
 
     async def play_url(
         self, timing_server_port: int, url: str, position: float = 0.0

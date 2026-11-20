@@ -129,6 +129,7 @@ class AirPlayStream(Stream):  # pylint: disable=too-few-public-methods
             self._connection = await http_connect(
                 str(self.config.address), self.service.port
             )
+            self._connection.trace_airplay_url = True
             rtsp = RtspSession(self._connection)
             stream_protocol = self.create_airplay_protocol(self.service, rtsp)
             player = AirPlayPlayer(rtsp, stream_protocol)
