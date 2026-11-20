@@ -39,7 +39,7 @@ def dns_answers(monkeypatch, answers):
     ("10.0.0.0", "private"),
     ("172.16.0.0", "private"),
     ("172.31.255.255", "private"),
-    ("172.30.32.0", "private"),
+    ("172.30.32.0", "HA Supervisor"),
     ("192.168.0.0", "private"),
     ("127.0.0.1", "loopback"),
     ("127.255.255.255", "loopback"),
@@ -98,7 +98,7 @@ async def test_system_dns_returns_only_pinned_ips(monkeypatch):
     ]))
     policy = PageNetworkPolicy()
     assert await policy.resolve("Agent.TS.NET.", 443) == ["100.64.0.1", "fd7a:115c:a1e0::1"]
-    with pytest.raises(BlockedAddress, match="private"):
+    with pytest.raises(BlockedAddress, match="HA Supervisor"):
         await policy.resolve("agent.ts.net", 443)
     with pytest.raises(BlockedAddress, match="loopback"):
         await policy.resolve("mixed.example", 443)
@@ -139,6 +139,12 @@ async def test_extra_destinations_and_ports(monkeypatch):
     ]:
         with pytest.raises(BlockedAddress):
             await policy.resolve(host, port)
+
+
+async def test_broad_lan_grant_keeps_supervisor_protected():
+    policy = PageNetworkPolicy(allow=["172.16.0.0/12"])
+    with pytest.raises(BlockedAddress, match="HA Supervisor"):
+        await policy.resolve("::ffff:172.30.33.1", 80)
 
 
 async def test_own_host_and_local_network_checked_on_each_connect(monkeypatch):

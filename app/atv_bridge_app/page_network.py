@@ -12,6 +12,7 @@ from .state import Fault
 
 TAILNET_V4 = ipaddress.ip_network("100.64.0.0/10")
 TAILNET_V6 = ipaddress.ip_network("fd7a:115c:a1e0::/48")
+SUPERVISOR_NETWORK = ipaddress.ip_network("172.30.32.0/23")
 GLOBAL_UNICAST_V6 = ipaddress.ip_network("2000::/3")
 ULA = ipaddress.ip_network("fc00::/7")
 PRIVATE_V4 = tuple(map(ipaddress.ip_network, ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")))
@@ -119,6 +120,8 @@ def _classification(address):
         return "link-local"
     if address in TAILNET_V4 or address in TAILNET_V6:
         return "tailnet"
+    if address in SUPERVISOR_NETWORK:
+        return "HA Supervisor"
     if address in ULA:
         return "unique-local"
     if any(address in network for network in PRIVATE_V4):
@@ -172,7 +175,7 @@ class PageNetworkPolicy:
         local_addresses, local_networks = await asyncio.to_thread(_local_interfaces)
         for address in addresses:
             kind = _classification(address)
-            if kind in {"loopback", "unspecified", "multicast", "transition"}:
+            if kind in {"loopback", "unspecified", "multicast", "transition", "HA Supervisor"}:
                 raise BlockedAddress(kind, address)
             if address in local_addresses:
                 raise BlockedAddress("bridge host", address)
