@@ -20,6 +20,11 @@ NODE = re.compile(r'^(\w+)(?: ("(?:[^"\\]|\\.)*"))?((?: \[[^\]]+\])*)$')
 REF = re.compile(r'\[ref=((?:f\d+)?e\d+)\]')
 STATES = ("disabled", "checked", "selected", "expanded")
 TIMEOUT = 2000
+# YAML excludes surrogates and most control characters. Unicode reserves the
+# last two code points of each plane and U+FDD0..FDEF as noncharacters.
+INVALID_TEXT = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x84\x86-\x9f\ud800-\udfff\ufdd0-\ufdef"
+                          + "".join(chr(plane * 65536 + end) for plane in range(17)
+                                    for end in (65534, 65535)) + "]")
 
 
 def stale():
@@ -48,7 +53,7 @@ def uncertain():
 
 
 def quote(value):
-    return json.dumps(" ".join(str(value).split())[:96], ensure_ascii=False)
+    return json.dumps(INVALID_TEXT.sub("�", " ".join(str(value).split())[:96]), ensure_ascii=False)
 
 
 @dataclass
@@ -63,7 +68,7 @@ class Row:
         return " ".join(part for part in (self.ref, self.role, quote(self.name), *self.states) if part)
 
 
-def snapshot_rows(tree):
+def snapshot_rows(tree, *, scoped=False):
     """Project Playwright's YAML. Discard URLs, frame subtrees and raw editable values."""
     for entry in tree:
         key, children = next(iter(entry.items())) if isinstance(entry, dict) else (entry, None)
@@ -84,12 +89,15 @@ def snapshot_rows(tree):
                 name = " ".join(filter(None, (name, children)))
             yield Row(role, name, states, browser_ref)
         elif isinstance(children, str) and children.strip():
-            yield Row("text", children, [], browser_ref if role == "generic" else None)
+            yield Row("text", children, [], browser_ref)
         elif role == "generic" and browser_ref:
             # Inspect unnamed containers for live status and independent scrolling.
             yield Row("generic", name, [], browser_ref)
         if isinstance(children, list) and role not in CONTROLS:
-            yield from snapshot_rows(children)
+            yield from snapshot_rows(children, scoped=scoped)
+        elif scoped and isinstance(children, list) and role in ("combobox", "listbox", "treeitem"):
+            yield from (row for row in snapshot_rows(children, scoped=True)
+                        if row.role in ("option", "treeitem"))
 
 
 # Only fixed, bridge-owned browser functions are evaluated. Field values in the ARIA
@@ -236,7 +244,7 @@ class PageInteraction:
             info = await handle.evaluate(INSPECT, row.name)
             if info["focused"] and "focused" not in row.states:
                 row.states.append("focused")
-            if row.role == "text" and info["secret"]:
+            if info["secret"] and row.role not in FIELDS:
                 row.name = "[masked]"
             if row.role in FIELDS and info["value"] is not None:
                 row.states.append("value=" + quote(info["value"]))
@@ -277,12 +285,14 @@ class PageInteraction:
                     return self.slice(self.cursor[1])
                 frame, revision, mode = await self.binding()
                 scope_ref = None
+                options = []
                 if scope:
                     if not self.view:
                         raise stale()
                     await self.check()
                     target = await self.target(scope)
                     scope_ref = target.row.browser_ref
+                    options = await self.choices(target.row)
                 await self.clear(keep_document=scope is not None)
                 self.frame, self.revision, self.mode = frame, revision, mode
                 if scope is None:
@@ -293,7 +303,10 @@ class PageInteraction:
                 if len(snapshot) > 512_000:
                     raise Fault("page_unreachable", "The page exceeds the snapshot limit.", "Show a smaller page.")
                 loader = getattr(yaml, "CBaseLoader", yaml.BaseLoader)
-                rows = list(snapshot_rows(yaml.load(snapshot, Loader=loader) or []))
+                tree = yaml.load(INVALID_TEXT.sub("�", snapshot), Loader=loader) or []
+                rows = list(snapshot_rows(tree, scoped=scope is not None))
+                if options and rows and rows[0].browser_ref == scope_ref:
+                    rows = [rows[0], *options]
                 visible = []
                 for offset in range(0, len(rows), 16):
                     chunk = rows[offset:offset + 16]
@@ -301,8 +314,6 @@ class PageInteraction:
                         reads = [batch.create_task(self.read_row(row)) for row in chunk]
                     visible.extend(row for row, read in zip(chunk, reads) if read.result())
                 rows = visible
-                if scope_ref and rows and rows[0].browser_ref == scope_ref:
-                    rows[1:1] = await self.choices(rows[0])
                 await self.check()
                 if find:
                     query = find.casefold()

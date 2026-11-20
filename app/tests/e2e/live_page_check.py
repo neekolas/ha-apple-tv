@@ -99,6 +99,29 @@ async def exercise(tools, frame, mode):
     assert (await act(data["view"], next_button, "click"))["error"]["code"] == "stale_view"
 
 
+async def exercise_snapshot(tools, frame):
+    await frame.evaluate(r"""() => {
+        const section = document.createElement('section');
+        section.innerHTML = '<input type=password role=note value=private-note>'
+          + '<input type=password role=status value=private-status>'
+          + '<div role=listbox aria-label="Colors"><div role=option aria-selected=true>Red</div></div>'
+          + '<div role=tree><div role=treeitem aria-label="Folder"><div role=group>'
+          + '<div role=treeitem>Leaf</div></div></div></div><p></p>';
+        section.querySelector('p').textContent = 'broken\uD800text\uFFFE';
+        document.title = 'Recipe\uDFFF';
+        document.body.append(section);
+    }""")
+    for name, role, child in (("Colors", "listbox", 'option "Red" selected'),
+                              ("Folder", "treeitem", 'treeitem "Leaf"')):
+        await asyncio.sleep(1)
+        data = (await tools.call("tv_page_look", {}))["data"]
+        assert "private-" not in data["snapshot"] and 'status "[masked]"' in data["snapshot"], data
+        assert 'broken�text�' in data["snapshot"] and 'title="Recipe�"' in data["snapshot"]
+        await asyncio.sleep(1)
+        scoped = (await tools.call("tv_page_look", {"scope": element(data["snapshot"], role, name)}))["data"]
+        assert child in scoped["snapshot"], scoped
+
+
 async def exercise_form(tools, frame, submissions):
     await frame.evaluate("""() => {
         const section = document.createElement('section');
@@ -245,6 +268,7 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
                     assert after["ok"] and 'status "Routed"' in after["data"]["snapshot"], after
                 if label == "direct":
                     await exercise_form(tools, frame, submissions)
+                    await exercise_snapshot(tools, frame)
                     async with capture.expect_popup() as opened:
                         await capture.evaluate("() => { window.open(location.href) }")
                     popup = await opened.value

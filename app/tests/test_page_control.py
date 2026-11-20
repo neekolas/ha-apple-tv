@@ -132,3 +132,32 @@ async def test_lost_live_document_requires_new_show(service, frame_url, verified
     service.stage.direct_browser = service.operations.presenter = sender
     result = await service.tools.call("tv_page_look", {})
     assert result["error"]["code"] == "stale_view" and "tv_show" in result["error"]["fix"]
+
+
+def test_snapshot_sanitizes_invalid_yaml_and_utf8_text():
+    import yaml
+    from atv_bridge_app.present.interaction import INVALID_TEXT
+
+    bad = "bad\ud800\ufffe\U0001ffff"
+    tree = yaml.load(INVALID_TEXT.sub("�", "- paragraph: " + bad), Loader=yaml.BaseLoader)
+    assert next(snapshot_rows(tree)).line() == 'text "bad���"'
+    assert Row("heading", bad, [], None).line().encode().decode() == 'heading "bad���"'
+
+
+@pytest.mark.parametrize("role", ["note", "status", "alert", "heading"])
+async def test_secret_with_noncontrol_role_retains_handle_for_masking(role):
+    row, = snapshot_rows([{role + " [ref=e1]": "private"}])
+    control = PageInteraction(None)
+    info = dict(focused=False, secret=True, scroll=False, live=False, blocked=True)
+    handle = SimpleNamespace(owner_frame=AsyncMock(), evaluate=AsyncMock(return_value=info), dispose=AsyncMock())
+    control.frame = SimpleNamespace(locator=lambda expr: SimpleNamespace(element_handles=AsyncMock(return_value=[handle])))
+    handle.owner_frame.return_value = control.frame
+    assert row.browser_ref == "e1" and await control.read_row(row)
+    assert "[masked]" in row.line() and "private" not in row.line() and row.ref is None
+
+
+def test_scoped_composites_project_options_and_nested_treeitems_only():
+    tree = [{'listbox [ref=e1]': ['option "Red" [ref=e2]']},
+            {'treeitem "Folder" [ref=e3]': [{'text': 'Folder'}, {'group': ['treeitem "Leaf" [ref=e4]']}]},
+            {'textbox [ref=e5]': [{'text': 'private'}]}]
+    assert [r.browser_ref for r in snapshot_rows(tree, scoped=True)] == ["e1", "e2", "e3", "e4", "e5"]
