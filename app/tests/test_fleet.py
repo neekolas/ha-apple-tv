@@ -2,6 +2,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock
 
+from jsonschema import Draft202012Validator
 import pytest
 
 from atv_bridge_app.fleet import Fleet
@@ -9,6 +10,17 @@ from atv_bridge_app.present import browsers
 from atv_bridge_app.server import TVRuntime
 from atv_bridge_app.state import State
 from conftest import FakeAdapter
+
+
+def check_property_descriptions(node, path):
+    if isinstance(node, list):
+        for child in node:
+            check_property_descriptions(child, path)
+    if isinstance(node, dict):
+        for name, prop in node.get("properties", {}).items():
+            assert prop.get("description", "").strip(), f"{path}.{name}"
+        for key, child in node.items():
+            check_property_descriptions(child, f"{path}.{key}")
 
 
 def rooms(tmp_path, limit=1):
@@ -169,8 +181,21 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
     ):
         await session.initialize()
         listed = await session.list_tools()
-        assert all("tv" in t.inputSchema["properties"] for t in listed.tools)
-        uris = {str(r.uri).rstrip("/") for r in (await session.list_resources()).resources}
+        assert {tool.name for tool in listed.tools} == {
+            "tv_show", "tv_update", "tv_play", "tv_open", "tv_look", "tv_navigate",
+            "tv_remote", "tv_sequence", "tv_power", "tv_pair", "tv_status",
+        }
+        for tool in listed.tools:
+            assert tool.description and tool.description.strip(), tool.name
+            assert "tv" in tool.inputSchema["properties"]
+            check_property_descriptions(tool.inputSchema, tool.name)
+            example = tool.description.split(f"For example, {tool.name} ")[1].removesuffix(".")
+            Draft202012Validator(tool.inputSchema).validate(json.loads(example))
+        resources = (await session.list_resources()).resources
+        assert all(r.description and r.description.strip() for r in resources)
+        prompt, = (await session.list_prompts()).prompts
+        assert prompt.description.strip() and prompt.arguments[0].description.strip()
+        uris = {str(r.uri).rstrip("/") for r in resources}
         assert "tv://tvs" in uris and "tv://apps/" + b.metadata["id"] in uris
         screen = await session.read_resource("tv://screen/" + a.metadata["id"])
         assert json.loads(screen.contents[0].text)["screen"]["tv"] == "Living Room"

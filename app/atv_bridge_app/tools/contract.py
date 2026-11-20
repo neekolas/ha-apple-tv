@@ -72,14 +72,22 @@ def sequence_schema():
 
 
 DIRECTIONS = ["up", "down", "left", "right"]
+TV = described(TEXT, "Receiver name or ID from tv://tvs. Supply it when the target is ambiguous.")
+APP = described(TEXT, "Installed app name or bundle ID from tv://apps.")
+HOLD = "Hold each HID key for this many milliseconds. Media commands require zero."
+KEYS_HELP = "Ordered keys. Stop on lost acknowledgment or unreadable focus between presses."
 SHOW = {
-    "url": TEXT,
-    "html": TEXT,
-    "files": {"type": "object", "required": ["index.html"], "additionalProperties": {"type": "string"}},
-    "bundle": TEXT,
-    "title": TEXT,
-    "audio": {"enum": ["play", "mute"]},
-    "keep_awake": BOOL,
+    "url": described(TEXT, "Live HTTP(S) page reachable from the HA host."),
+    "html": described(TEXT, "Contents of a standalone HTML page."),
+    "files": described({
+        "type": "object", "required": ["index.html"],
+        "properties": {"index.html": described({"type": "string"}, "Main HTML document at the root of the page.")},
+        "additionalProperties": described({"type": "string"}, "File content as text or base64:-prefixed binary."),
+    }, "Map relative paths to text or base64:-prefixed binary content. Include index.html at the root."),
+    "bundle": described(TEXT, "Page bundle ID returned by the ZIP upload endpoint."),
+    "title": described(TEXT, "Title to report in screen.presenting."),
+    "audio": described({"enum": ["play", "mute"]}, "Play or mute page audio.", default="play"),
+    "keep_awake": described(BOOL, "Request a browser wake lock while presenting.", default=True),
 }
 SCHEMAS = {
     "tv_show": schema(
@@ -89,60 +97,83 @@ SCHEMAS = {
             *[{"required": [key]} for key in ("url", "html", "files", "bundle")],
         ],
     ),
-    "tv_update": schema({"data": {}}, ["data"]),
+    "tv_update": schema({"data": described({}, "Any JSON value to send to the page's message handler.")}, ["data"]),
     "tv_play": schema(
-        {"youtube": TEXT, "media": TEXT, "link": TEXT, "title": TEXT, "app": TEXT},
+        {
+            "youtube": described(TEXT, "YouTube video URL or 11-character video ID."),
+            "media": described(TEXT, "Direct HTTP(S) media URL the Apple TV can fetch over AirPlay."),
+            "link": described(TEXT, "Web or custom-scheme deep link to open and inspect in the target app."),
+            "title": described(TEXT, "Title to find and play in the specified app."),
+            "app": APP,
+        },
         oneOf=[{"required": [key]} for key in ("youtube", "media", "link")]
         + [{"required": ["app", "title"]}],
         dependentRequired={"title": ["app"], "app": ["title"]},
     ),
     "tv_open": schema(
-        {"app": TEXT, "search": TEXT, "path": {"type": "array", "items": TEXT, "minItems": 1}},
+        {"app": APP,
+         "search": described(TEXT, "Search query to enter or launch in the app. Choose search or path."),
+         "path": described({"type": "array", "items": TEXT, "minItems": 1}, "Menu labels to focus and select in order. Settings starts at its root.")},
         ["app"],
         **{"not": {"required": ["search", "path"]}},
     ),
-    "tv_look": schema({"image": BOOL, "max_width": number(1, 4096)}),
-    "tv_navigate": schema({"to": TEXT, "within": TEXT, "select": BOOL}, ["to"]),
+    "tv_look": schema({
+        "image": described(BOOL, "Also capture a PNG. tvOS shows a screenshot toast.", default=False),
+        "max_width": described(number(1, 4096), "Maximum PNG width in pixels when image is true.", default=1280),
+    }),
+    "tv_navigate": schema({
+        "to": described(TEXT, "Accessible label to focus. Matching accepts case-insensitive prefixes."),
+        "within": described(TEXT, "Prefer matching items in this accessibility container if available."),
+        "select": described(BOOL, "Press Select once the target has focus.", default=False),
+    }, ["to"]),
     "tv_remote": schema(
         {
-            "keys": {"type": "array", "minItems": 1, "maxItems": 50, "items": {"enum": list(KEYS)}},
-            "hold_ms": number(0, 10000),
-            "text": TEXT,
-            "submit": BOOL,
-            "swipe": {"enum": DIRECTIONS},
+            "keys": described({"type": "array", "minItems": 1, "maxItems": 50, "items": {"enum": list(KEYS)}}, KEYS_HELP),
+            "hold_ms": described(number(0, 10000), HOLD, default=0),
+            "text": described(TEXT, "Replace the contents of the focused keyboard field and check readback."),
+            "submit": described(BOOL, "Press Select after successful text entry.", default=False),
+            "swipe": described({"enum": DIRECTIONS}, "Send one directional swipe."),
         },
         oneOf=[{"required": [key]} for key in ("keys", "text", "swipe")],
         dependentRequired={"hold_ms": ["keys"], "submit": ["text"]},
         **{
-            "if": {"required": ["hold_ms"], "properties": {"hold_ms": {"exclusiveMinimum": 0}}},
-            "then": {"properties": {"keys": {"items": {"not": {"enum": list(MEDIA_COMMANDS)}}}}},
+            "if": {"required": ["hold_ms"], "properties": {"hold_ms": described({"exclusiveMinimum": 0}, HOLD)}},
+            "then": {"properties": {"keys": described({"items": {"not": {"enum": list(MEDIA_COMMANDS)}}}, KEYS_HELP)}},
         },
     ),
     "tv_sequence": sequence_schema(),
-    "tv_power": schema({"on": BOOL}, ["on"]),
+    "tv_power": schema({"on": described(BOOL, "True to wake, false to sleep.")}, ["on"]),
     "tv_pair": schema({
-        "kind": {"enum": ["control", "screen"]}, "code": {"type": "string", "pattern": "^[0-9]{4}([0-9]{2})?$"},
-        "pairing_id": TEXT, "read_code_from_screen": BOOL, "notify": BOOL, "cancel": BOOL,
+        "kind": described({"enum": ["control", "screen"]}, "Pair remote control and AirPlay, or pair the accessibility and screenshot service."),
+        "code": described({"type": "string", "pattern": "^[0-9]{4}([0-9]{2})?$"}, "On-screen PIN as text, including leading zeros. Control uses four digits and screen uses six."),
+        "pairing_id": described(TEXT, "Exchange ID returned on start. Use it to poll, submit or cancel the same exchange."),
+        "read_code_from_screen": described(BOOL, "With user approval and working screen pairing, try to read and submit the control PIN.", default=False),
+        "notify": described(BOOL, "Request a reply notification on the phone configured in HA.", default=False),
+        "cancel": described(BOOL, "Close the pending exchange for this kind.", default=False),
     }, ["kind"]),
     "tv_status": schema(),
 }
 # The dispatcher consumes routing fields before invoking the per-TV operation.
 ROUTED_SCHEMAS = {
-    name: spec | {"properties": spec["properties"] | {"tv": TEXT}} for name, spec in SCHEMAS.items()
+    name: spec | {"properties": spec["properties"] | {"tv": TV}} for name, spec in SCHEMAS.items()
 }
 ROUTED_SCHEMAS["tv_show"] = ROUTED_SCHEMAS["tv_show"] | {
-    "properties": ROUTED_SCHEMAS["tv_show"]["properties"] | {"replace": BOOL},
+    "properties": ROUTED_SCHEMAS["tv_show"]["properties"] | {
+        "replace": described(BOOL, "When mirror slots are full, stop the oldest holder's presentation to make room.", default=False),
+    },
     "oneOf": [
-        {"properties": {"tv": TEXT}, "additionalProperties": False},
+        {"properties": {"tv": TV}, "additionalProperties": False},
         *SCHEMAS["tv_show"]["oneOf"][1:],
     ],
 }
 INSTRUCTIONS = (
-    "Select an Apple TV by name or ID with tv. Read tv://tvs to see the rooms. With several paired TVs, name the target before acting. To put your own content on it, host a web page "
-    "(or a local web server shared with `tailscale serve`) and call `tv_show`. Use `tv_update` to change what the page "
-    "shows. To watch something, use `tv_play`. To drive an app, use `tv_open`, then `tv_look` and "
-    "`tv_navigate`. Use `tv_remote` only when nothing else fits. Use tv_pair for a missing or invalid control or screen pairing. Name the TV and relay ask_user. Poll with the same kind and pairing_id while waiting_for_pairing_screen. Submit the code as text at code_on_screen. Read the returned `screen` "
-    "before your next step. Ask the user before anything that costs money."
+    "Choose a receiver from tv://tvs. Supply its name or ID in tv when there is no default. "
+    "Use tv_status for health and pairing, and tv_pair to repair missing access. "
+    "Read tv_look before interrupting someone. Use tv_open to launch or search, tv_navigate for a labeled item, "
+    "tv_remote for individual keys, text or a swipe, and tv_sequence for repeated work with explicit screen checkpoints. "
+    "Use tv_power for wake or sleep, tv_play for media and deep links, tv_show for web pages, and tv_update for page messages. "
+    "Actions can wake the receiver and dismiss a screen saver or profile prompt. Inspect verified, evidence and screen. "
+    "After uncertain delivery, look before sending further input. Ask before purchases, rentals or upgrades."
 )
 PAGE_GUIDE = """Design for a 1920×1080 canvas with body text of at least 28 px. Put index.html at the root of
 inline files or an uploaded ZIP. Use the base64: prefix for binary inline files. HTML and bundle pages

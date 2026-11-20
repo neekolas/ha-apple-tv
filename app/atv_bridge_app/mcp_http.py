@@ -19,6 +19,17 @@ class MCP:
 
         fleet = hasattr(tools, "inventory")
 
+        resource_help = {
+            "screen": "Accessible focus, app and screen state for the default TV, or per-TV text summaries when selection is ambiguous.",
+            "apps": "Installed app names and bundle IDs. With several paired TVs, lists are keyed by receiver ID.",
+            "page-guide": "Page sizing, bundle layout, live URLs and the JavaScript update interface for tv_show.",
+            "tvs": "Registered receiver names, IDs, identifiers and pairing status. Use the ID as the tv selector.",
+        }
+        scoped_help = {
+            "screen": "Read this receiver's current accessible items, focus and screen state.",
+            "apps": "List this receiver's installed app names and bundle IDs for tv_open and tv_play.",
+        }
+
         @server.list_resources()
         async def resources():
             names = [
@@ -31,7 +42,10 @@ class MCP:
                 for tv in tools.inventory():
                     names.extend((kind + "/" + tv["id"], "application/json") for kind in ("screen", "apps"))
             return [
-                types.Resource(uri=f"tv://{name}", name=name, mimeType=mime)
+                types.Resource(
+                    uri=f"tv://{name}", name=name, mimeType=mime,
+                    description=scoped_help[name.split("/")[0]] if "/" in name else resource_help[name],
+                )
                 for name, mime in names
             ]
 
@@ -77,8 +91,8 @@ class MCP:
             return [
                 types.Prompt(
                     name="present",
-                    description="Create a TV-ready page about a topic.",
-                    arguments=[types.PromptArgument(name="topic", required=True)],
+                    description="Get page design guidance and an HTML starter for a topic. Use tv_show to display the finished page.",
+                    arguments=[types.PromptArgument(name="topic", required=True, description="Subject or purpose of the page to design.")],
                 )
             ]
 
@@ -106,8 +120,7 @@ class MCP:
             return [
                 types.Tool(
                     name=name,
-                    description=getattr(PublicTools, name).__doc__
-                    + (" Select a receiver with tv." if fleet else ""),
+                    description=" ".join(getattr(PublicTools, name).__doc__.split()),
                     inputSchema=schema,
                 )
                 for name, schema in (ROUTED_SCHEMAS if fleet else SCHEMAS).items()

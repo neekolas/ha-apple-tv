@@ -168,7 +168,9 @@ class PublicTools:
             await self.ops.tv_hide()
 
     async def tv_power(self, on):
-        """Turn the TV on or off and check its power state."""
+        """Wake or sleep the receiver explicitly. Ends its bridge presentation, requests power and checks the reported state.
+        Verified means screen.power reached on/screensaver or off. An unconfirmed transition returns uncertain.
+        For example, tv_power {"on":false}."""
         await self.takeover()
         if not on:
             await self.engine.sleep_verified()
@@ -249,11 +251,15 @@ class PublicTools:
         raise Fault("uncertain", "Could not verify the Settings root menu.", "Open Settings on the TV and retry the path.")
 
     async def tv_pair(self, kind, **args):
-        """Pair control or screen for a registered TV. Poll with pairing_id, ask for digits at code_on_screen, then submit or cancel."""
+        """Start or repair access for a registered receiver after checking tv_status. Starts a PIN exchange and can open Settings for screen pairing.
+        Relay data.ask_user, poll with pairing_id and submit the code as text. Pending exchanges return verified=false and an unknown screen.
+        Completion verifies a Companion app list or accessibility read. For example, tv_pair {"kind":"screen"}."""
         return await exchange(self, kind, **args)
 
     async def tv_status(self):
-        """Report reachability, pairing, capabilities and current problems."""
+        """Check health before setup or troubleshooting. Reads connection state, pairings and capabilities without waking the TV.
+        A verified check can still list problems in data.problems. With no default, inspect each row of data.tvs.
+        For example, tv_status {}."""
         s = await self.engine.status()
         h = await self.ops.tv_health()
         p = h["pairings"]
@@ -339,7 +345,9 @@ class PublicTools:
         return observation["focused"], observation["items"]
 
     async def tv_look(self, image=False, max_width=1280):
-        """Read screen labels and focus, optionally capturing a screenshot."""
+        """Inspect the UI before acting or after uncertain input. Reads accessibility without waking the TV. Use tv_status for connection health.
+        A verified read returns labels in data.items and focus in screen, or a requested PNG capture. Images take an extra capture and show a tvOS toast.
+        With no default, returns text summaries in data.tvs. For example, tv_look {"image":true}."""
         observation = {"app": None}
         try:
             observation = await self.read_observation()
@@ -403,7 +411,9 @@ class PublicTools:
         )
 
     async def tv_remote(self, keys=None, text=None, submit=False, hold_ms=0, swipe=None):
-        """Send one remote gesture or key at a time, or type into a focused field."""
+        """Send keys, a swipe or text when a labeled target is unavailable. Can wake the TV. Reads the screen after each key and checks keyboard readback for text.
+        data.confirmed_keys counts acknowledgments. verified=false means an effect was unclear. On lost delivery inspect screen before sending more.
+        Use tv_sequence for checkpointed runs. For example, tv_remote {"keys":["menu"]}."""
         path = []
         screen = await self.snapshot()
         verified = True
@@ -459,11 +469,15 @@ class PublicTools:
         return result | ({"screen": screen} if screen else {})
 
     async def tv_sequence(self, steps, for_each=None):
-        """Run bounded remote steps on one receiver, stopping at the first failure."""
+        """Run repeated remote work in one call on one TV. Can wake the receiver. Holds its tool lock across up to 50 expanded steps and a 90-second execution deadline.
+        Keys skip per-key screen reads. Use expect to check the next action's preconditions. On failure inspect data.steps, data.stopped_at and the final screen before continuing.
+        An acknowledged raw key leaves verified=false even when a later checkpoint passes. For example, tv_sequence {"steps":[{"key":"menu"},{"expect":{"app":"Settings"}}]}."""
         return await run_sequence(self, steps, for_each)
 
     async def tv_navigate(self, to, select=False, within=None, *, exact=False):
-        """Move focus to an accessible label and optionally select it."""
+        """Focus one accessible label, optionally selecting it. Can wake the TV. Reads focus between direction keys, with a 40-press limit.
+        Inspect data.path and screen.focus. Selection is verified when focus moves or the row value changes. Use tv_sequence for several guarded actions.
+        For example, tv_navigate {"to":"General"}."""
         previous_value = None
         async def observe_target():
             nonlocal previous_value
@@ -519,7 +533,10 @@ class PublicTools:
         return "in_app_search"
 
     async def tv_open(self, app, search=None, path=None, *, require_verified_launch=False):
-        """Open an installed app by name or bundle ID, then search or follow a menu path."""
+        """Launch or search an installed app, or follow a menu path. Can wake the TV and ends its bridge presentation.
+        Matches an installed name or ID, checks the reported app, and uses search links, keyboard readback or accessibility for the next step.
+        Inspect data.app, data.steps for a path, and screen. A search can succeed with verified=false. Use tv_play to start a title.
+        For example, tv_open {"app":"Settings"}."""
         await self.takeover()
         match = await self.open_app(app, require_verified_launch=require_verified_launch)
         data = {"app": match}
@@ -696,7 +713,10 @@ class PublicTools:
             await asyncio.sleep(0.25)
 
     async def tv_play(self, youtube=None, media=None, link=None, title=None, app=None):
-        """Play a video or title, or open a deep link and report where it landed."""
+        """Start a video, media URL or title, or inspect a deep link. Can wake the TV and takes over its presentation.
+        Launches a link, searches the app or streams over AirPlay, then checks playback or the foreground destination. A custom link can trigger a screenshot toast.
+        Inspect data.path and screen.playing. For links, verified can mean data.landed is title_page or app_home. Use tv_open for browsing.
+        For example, tv_play {"youtube":"jNQXAC9IVRw"}."""
         await self.takeover()
         before = (await self.engine.status()).get("now_playing")
         expected = None
@@ -759,7 +779,10 @@ class PublicTools:
     async def tv_show(
         self, url=None, html=None, files=None, bundle=None, title=None, audio="play", keep_awake=True
     ):
-        """Show a live URL, HTML, inline files or an uploaded bundle. Use {} to hide."""
+        """Present a page, or dismiss it by omitting the source. Can wake the TV and replaces its bridge media or page.
+        The HA host renders the page and mirrors it or plays a recording. Live URLs use a mirror. The default fleet limit is one active mirror.
+        Inspect data.transport and screen.presenting. verified means frames were sent or playback was observed. Use tv_update to send new data.
+        For example, tv_show {"html":"<h1>Hello</h1>"}."""
         await self.media.stop()
         if all(source is None for source in (url, html, files, bundle)):
             await self.ops.tv_hide()
@@ -788,7 +811,9 @@ class PublicTools:
         )
 
     async def tv_update(self, data):
-        """Deliver JSON to the current page and read its latest state."""
+        """Send data to the current page after tv_show. Can wake the TV. The browser posts a message and recorded presentations are rendered again.
+        verified and data.delivered confirm dispatch. Check data.page_state for the page's response and screen.presenting for the active page.
+        For example, tv_update {"data":{"step":2}}."""
         await self.ops.update_page(data)
         return outcome(
             "Delivered the page update.",
