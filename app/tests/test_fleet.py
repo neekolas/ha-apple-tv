@@ -159,7 +159,7 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
-    fleet = rooms(tmp_path)
+    fleet = rooms(tmp_path, page_network_allow=["192.0.2.8:8443"])
     a, b = fleet.runtimes.values()
     for rt in (a, b):
         rt.state.save_pairings(airplay={"ltpk": "test"})
@@ -173,6 +173,10 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
     from urllib.parse import urlsplit
     ports = {urlsplit(rt.stage.origin).port for rt in (a, b)}
     assert a.stage.stage_ports == b.stage.stage_ports == ports
+    assert a.stage.page_network is b.stage.page_network is fleet.page_network
+    for port in ports:
+        assert await fleet.page_network.resolve("127.0.0.1", port) == ["127.0.0.1"]
+    assert await fleet.page_network.resolve("192.0.2.8", 8443) == ["192.0.2.8"]
     assert a.stage.origin != b.stage.origin
     assert a.stage.media_origin == b.stage.media_origin
     for rt in (a, b):

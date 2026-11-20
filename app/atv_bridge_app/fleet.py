@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator
 
 from .atv.discovery import describe
 from .mcp_http import MCP
+from .page_network import PageNetworkPolicy
 from .server import TVRuntime
 from .stage import ContentStore
 from .state import Fault, State, write_private
@@ -104,6 +105,7 @@ class Fleet:
         self.controller = State(root)
         self.stage_port = stage_port
         self.stage_ports = set()
+        self.page_network = PageNetworkPolicy(options.get("page_network_allow", []), self.stage_ports)
         self.options = options
         self.factory = factory
         self.runtimes = {}
@@ -183,8 +185,8 @@ class Fleet:
                 await rt.close()
                 if runner := self.runners.pop(rt, None):
                     port = runner.addresses[0][1]
-                    await runner.cleanup()
                     self.stage_ports.discard(port)
+                    await runner.cleanup()
                 self.mirrors.pop(key, None)
                 self.runtimes.pop(key)
                 if rt is self.public_receiver:
@@ -208,8 +210,6 @@ class Fleet:
                 if k in self.options
             },
         )
-        rt.tools.page_interaction.debug_ports = lambda: {runtime.operations.live_mirror.debug_port
-                                                         for runtime in self.runtimes.values()}
         rt.metadata = meta
         rt.stage.store = self.store
         rt.tools.admit = lambda replace: self.reserve(rt, replace)
@@ -484,6 +484,7 @@ class Fleet:
             rt.stage.origin = f"http://127.0.0.1:{port}"
             self.stage_ports.add(port)
         rt.stage.stage_ports = self.stage_ports
+        rt.stage.page_network = self.page_network
         if rt in self.runtimes.values():
             rt.stage.media_origin = self.primary.stage.origin
             rt.stage.media_prefix = rt.metadata["id"]
@@ -504,6 +505,7 @@ class Fleet:
 
     async def close(self):
         self.started = False
+        self.stage_ports.clear()
 
         async def stop(rt, runner):
             try:
@@ -516,7 +518,6 @@ class Fleet:
             *(stop(rt, runner) for rt, runner in self.runners.items()), return_exceptions=True
         )
         self.runners.clear()
-        self.stage_ports.clear()
         for result in results:
             if isinstance(result, BaseException):
                 raise result

@@ -4,6 +4,7 @@ import asyncio
 import errno
 import socket
 import ssl
+from contextvars import ContextVar
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -15,9 +16,9 @@ from aiohttp import (
     ClientSSLError,
     ClientTimeout,
     TCPConnector,
-    ThreadedResolver,
 )
 
+from .page_network import BlockedAddress
 from .processes import supervisor_token
 from .state import Fault
 
@@ -94,6 +95,40 @@ def page_failure(host, exc):
     return Fault("page_unreachable", f"Could not load {host}: {detail}", fix, True)
 
 
+class ProbeConnector(TCPConnector):
+    """Give aiohttp only approved numeric peers, retaining the URL for Host, SNI and redirects."""
+
+    def __init__(self, policy):
+        super().__init__(force_close=True, use_dns_cache=False)
+        self.policy = policy
+        self.stage_allowed = ContextVar("probe_stage_allowed", default=False)
+
+    async def connect(self, req, traces, timeout):
+        token = self.stage_allowed.set(req.url.scheme == "http")
+        try:
+            connection = await super().connect(req, traces, timeout)
+        finally:
+            self.stage_allowed.reset(token)
+        # Removing a receiver can revoke its stage port while TCP is connecting.
+        if req.url.raw_host == "127.0.0.1" and req.port not in self.policy.stage_ports:
+            connection.close()
+            raise BlockedAddress("loopback", req.url.raw_host)
+        return connection
+
+    async def _resolve_host(self, host, port, traces=None):
+        # An aiohttp resolver alone would never see IP literals. This connector
+        # hook runs for both literals and names, including on redirect hops.
+        addresses = await self.policy.resolve(host, port, stage_allowed=self.stage_allowed.get())
+        return [
+            {
+                "hostname": host, "host": ip, "port": port,
+                "family": socket.AF_INET6 if ":" in ip else socket.AF_INET,
+                "proto": socket.IPPROTO_TCP, "flags": socket.AI_NUMERICHOST,
+            }
+            for ip in addresses
+        ]
+
+
 async def probe(stage, url):
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
@@ -101,11 +136,10 @@ async def probe(stage, url):
             "invalid_arguments", "Page URLs require HTTP or HTTPS.", "Supply a complete live URL."
         )
     host = parts.hostname
-    # Use the same system resolver as the health check. The total timeout
-    # includes DNS, TLS and every redirect.
+    # The total timeout includes policy checks, DNS, TLS and every redirect.
     try:
         async with ClientSession(
-            timeout=ClientTimeout(total=8), connector=TCPConnector(resolver=ThreadedResolver())
+            timeout=ClientTimeout(total=8), connector=ProbeConnector(stage.page_network)
         ) as http:
             async with http.get(url, allow_redirects=True) as response:
                 host = response.url.host

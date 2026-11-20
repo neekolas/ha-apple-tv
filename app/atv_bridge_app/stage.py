@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 
 from aiohttp import WSMsgType, web
 
+from .page_network import PageNetworkPolicy
 from .state import Fault, success
 
 MAX_UPLOAD = 50 * 1024**2
@@ -147,6 +148,7 @@ class Stage:
     def __init__(self, root, store=None):
         self.origin = "http://127.0.0.1:8766"
         self.stage_ports = set()
+        self.page_network = PageNetworkPolicy(stage_ports=self.stage_ports)
         self.store = store or ContentStore(root / "content")
         self.media_origin = self.media_prefix = None
         self.media = root / "media"

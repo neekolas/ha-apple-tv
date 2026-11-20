@@ -77,7 +77,7 @@ APP = described(TEXT, "Installed app name or bundle ID from tv://apps.")
 HOLD = "Hold each HID key for this many milliseconds. Media commands require zero."
 KEYS_HELP = "Ordered keys. Stop on lost acknowledgment or unreadable focus between presses."
 SHOW = {
-    "url": described(TEXT, "Live HTTP(S) page reachable from the HA host."),
+    "url": described(TEXT, "Live HTTP(S) page on the public internet, tailnet or a destination permitted by page_network_allow."),
     "html": described(TEXT, "Contents of a standalone HTML page."),
     "files": described({
         "type": "object", "required": ["index.html"],
@@ -218,7 +218,8 @@ inline files or an uploaded ZIP. Use the base64: prefix for binary inline files.
 expose named functions on window and call them with tv_page_run.
 For live URLs, keep the server running. The Green loads the real site, including scripts, fetches,
 WebSockets and reloads. For a local server, use tailscale serve and pass its HTTPS MagicDNS URL.
-Pages that block framing open at the top level.
+Pages that block framing open at the top level. Bundle-relative links and assets work.
+Page requests to Home Assistant and other LAN services are blocked by default.
 Page audio plays by default. Use audio: "mute" for a silent presentation."""
 RETRYABLE = {"tv_unreachable", "page_unreachable", "screen_unavailable", "busy"}
 CODES = {
@@ -245,6 +246,7 @@ CODES = {
     "playback_unverified": "uncertain",
 }
 STABLE = RETRYABLE | {
+    "blocked_address",
     "scripts_disabled", "script_error", "stale_view", "target_missing", "page_not_live", "nothing_showing",
     "launch_refused", "tv_required", "mirror_busy", "tv_not_found",
     "not_paired",

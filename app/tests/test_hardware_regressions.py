@@ -11,6 +11,7 @@ import pytest
 from aiohttp import web
 from atv_bridge_app import live
 from atv_bridge_app.atv import RtspSession, hap, install_sender_identity
+from atv_bridge_app.page_network import PageNetworkPolicy
 from atv_bridge_app.state import Fault, State
 
 
@@ -27,6 +28,7 @@ async def test_probe_follows_redirect_and_accepts_client_errors(service, aiohttp
     app = web.Application()
     app.router.add_get("/{path}", page)
     server = await aiohttp_server(app)
+    service.stage.page_network = PageNetworkPolicy(stage_ports={server.port})
     url = str(server.make_url("/first"))
     if status >= 500:
         with pytest.raises(Fault, match=f"HTTP {status}") as caught:
@@ -41,12 +43,72 @@ async def test_probe_refused_port_and_tls_diagnostics(service):
     with socket.socket() as reserved:
         reserved.bind(("127.0.0.1", 0))
         port = reserved.getsockname()[1]
+    service.stage.page_network = PageNetworkPolicy(stage_ports={port})
     with pytest.raises(Fault) as caught:
         await live.probe(service.stage, f"http://127.0.0.1:{port}/")
     assert caught.value.code == "page_unreachable"
     assert "connect" in str(caught.value).lower() and caught.value.remediation == live.REFUSED_FIX
     failure = live.page_failure("example.ts.net", ssl.SSLCertVerificationError("certificate expired"))
     assert "certificate expired" in str(failure) and "TLS certificate" in failure.remediation
+
+
+async def test_probe_checks_redirect_before_connecting(service, aiohttp_server):
+    visits = []
+
+    async def destination(request):
+        visits.append(request.path)
+        return web.Response(text="Destination")
+
+    blocked = web.Application()
+    blocked.router.add_get("/", destination)
+    listener = await aiohttp_server(blocked)
+
+    async def redirect(request):
+        raise web.HTTPFound(location=str(listener.make_url("/")))
+
+    start = web.Application()
+    start.router.add_get("/", redirect)
+    allowed = await aiohttp_server(start)
+    service.stage.page_network = PageNetworkPolicy(stage_ports={allowed.port})
+    with pytest.raises(Fault) as caught:
+        await live.probe(service.stage, str(allowed.make_url("/")))
+    assert caught.value.code == "blocked_address"
+    assert "page_network_allow" in caught.value.remediation
+    assert visits == []
+
+
+async def test_probe_does_not_write_to_retired_stage_port(service, aiohttp_server):
+    visits = []
+
+    async def destination(request):
+        visits.append(request.path)
+        return web.Response()
+
+    target = web.Application()
+    target.router.add_get("/", destination)
+    listener = await aiohttp_server(target)
+    ports = {listener.port}
+    policy = PageNetworkPolicy(stage_ports=ports)
+
+    async def retire_after_resolution(host, port, **options):
+        peers = await policy.resolve(host, port, **options)
+        ports.remove(port)
+        return peers
+
+    service.stage.page_network = SimpleNamespace(stage_ports=ports, resolve=retire_after_resolution)
+    with pytest.raises(Fault) as caught:
+        await live.probe(service.stage, str(listener.make_url("/")))
+    assert caught.value.code == "blocked_address"
+    assert visits == []
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "2130706433", "0177.0.0.1", "0x7f000001", "[::ffff:127.0.0.1]"])
+async def test_show_returns_policy_error_before_starting_sender(service, host):
+    service.stage.page_network = PageNetworkPolicy()
+    result = await service.tools.call("tv_show", {"url": f"http://{host}:8765/"})
+    assert result["error"]["code"] == "blocked_address"
+    assert "page_network_allow" in result["error"]["fix"]
+    assert service.stage.page is None
 
 
 async def test_tailnet_dns_system_lookup_takes_precedence(monkeypatch, tmp_path):
@@ -208,12 +270,19 @@ async def test_probe_rejects_untrusted_https_certificate(service, tmp_path):
     )
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(tmp_path / "cert.pem", tmp_path / "key.pem")
+    sni = []
+    context.sni_callback = lambda ssl_socket, name, context: sni.append(name)
     async with await asyncio.start_server(
         lambda reader, writer: writer.close(), "127.0.0.1", 0, ssl=context
     ) as server:
         port = server.sockets[0].getsockname()[1]
+        # Exercise a permitted DNS answer without needing a routed test host.
+        resolve = AsyncMock(return_value=["127.0.0.1"])
+        service.stage.page_network = SimpleNamespace(resolve=resolve)
         with pytest.raises(Fault) as caught:
-            await live.probe(service.stage, f"https://127.0.0.1:{port}/")
+            await live.probe(service.stage, f"https://page.example.test:{port}/")
+        resolve.assert_awaited_once_with("page.example.test", port, stage_allowed=False)
+        assert sni == ["page.example.test"]
     assert caught.value.code == "page_unreachable" and "certificate" in str(caught.value).lower()
     assert "TLS certificate" in caught.value.remediation
 

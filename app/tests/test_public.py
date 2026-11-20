@@ -357,6 +357,7 @@ async def test_live_page_frame_fallback_and_return(
     app = web.Application()
     app.router.add_get("/", site)
     server = await aiohttp_server(app)
+    service.stage.stage_ports.add(server.port)
     url = str(server.make_url("/"))
     mirror = service.operations.live_mirror
     mirror.start = AsyncMock(side_effect=[TimeoutError(), None, None] if timeout else None)
@@ -395,6 +396,7 @@ async def test_missing_bundle_bad_inline_and_http_error(ui, aiohttp_server):
     app = web.Application()
     app.router.add_get("/missing", unavailable)
     server = await aiohttp_server(app)
+    service.stage.stage_ports.add(server.port)
     assert (await call("tv_show", {"url": str(server.make_url("/missing"))}))["error"][
         "code"
     ] == "page_unreachable"
