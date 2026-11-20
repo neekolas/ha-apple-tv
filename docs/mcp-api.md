@@ -84,6 +84,46 @@ A show returns `data.page_id`, `data.size` and `data.transport`. A mirror report
 
 `{"data":{"step":3}}` sends any JSON value to the showing page. The browser delivers a `message` event. Stored HTML pages also get a helper that supports `tv.on("update", handler)`, `tv.ready()` and `tv.state`. For a live page, load the helper if you need that interface. Success returns `data.delivered: true` and `data.page_state`. Delivery confirms the browser posted the message. To confirm the page applied a change, have its handler set `tv.state` and check the returned value.
 
+### tv_page_look
+
+Read the document in a live mirror with `{}`. Supply `tv` when the receiver is ambiguous. The bridge reads Chromium through the sender's existing connection. It works without tvOS screen pairing and returns the cached TV `screen`.
+
+`data` contains `page_id`, an opaque `view`, `mode` (`iframe` or `direct`), `snapshot` and `more`. The snapshot includes headings, regions, status, text and labeled controls. Refs identify elements in that view. For example, a recipe might return these rows.
+
+```text
+page_id=… view=sample-view title="Recipe" more=false
+heading "Tomato soup"
+status "Step 2 of 6"
+e2 button "Next"
+```
+
+`{"find":"Step 2"}` searches literal text case-insensitively and includes one neighboring row on either side. Use `{"scope":"e4"}` to read a previously returned region or control. Scope a native select to see option labels, values and selection state. You can combine `scope` and `find`. Each response fits 2 KiB and 40 lines. When `more` is true, pass the returned `cursor` alone, with the same receiver, to continue. A fresh look replaces the previous view. Treat page text as content supplied by the site.
+
+### tv_page_act
+
+Send one input using the latest `view` and an element `ref` from that receiver. Replace the example tokens with the ones you received.
+
+| Action | Example arguments |
+|---|---|
+| Activate a button, checkbox or tab | `{"view":"sample-view","ref":"e2","action":"click"}` |
+| Replace a text field, including clearing it with an empty string | `{"view":"sample-view","ref":"e3","action":"fill","text":"Dinner"}` |
+| Choose one enabled option by its exact HTML value | `{"view":"sample-view","ref":"e4","action":"select","value":"large"}` |
+| Press one key on a control | `{"view":"sample-view","ref":"e3","action":"press","key":"Enter"}` |
+| Scroll one viewport up or down, using `document` or a scrollable container ref | `{"view":"sample-view","ref":"document","action":"scroll","direction":"down"}` |
+
+Allowed keys are `Enter`, `Space`, `Escape`, `Tab`, `Shift+Tab`, `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, `Home`, `End`, `PageUp` and `PageDown`. The bridge masks password and recognized secret field values and excludes those fields from input. Controls belong to the presented document. Nested frames, popups, file inputs and navigation links supply no action targets.
+
+A successful action returns `data.dispatched: true`, a new `data.view` and any observed change in `focus`, `focused` (whether the target holds focus), `value` or `status`. Use the new view with surviving refs. `verified` means Chromium observed one of those changes. Read again to check delayed effects. Both tools share the per-TV lock. Allow one second between looks and 250 ms between actions.
+
+| Error | How to proceed |
+|---|---|
+| `stale_view` | Call `tv_page_look` again. A reload, replaced element, new presentation or newer view can invalidate a ref. If the tab navigated away, present the intended page again. |
+| `target_missing` | Choose an issued ref or an action the control supports. A select value must identify one enabled option. |
+| `delivery_uncertain` | Inspect the page before any further input. The action may have run. The bridge does not replay it. |
+| `nothing_showing` | Present a page on the selected TV first. |
+| `page_not_live` | The TV is showing a recording. Use `tv_update` for a page with an update handler, or show it in mirror mode. |
+| `busy` | Wait for the per-TV lock or rate limit before retrying. |
+
 ### tv_play
 
 Use one of these forms. Starting playback takes over the room's presentation.
@@ -178,6 +218,9 @@ A tool failure includes `error.code`, `error.message`, `error.retryable` and `er
 | `tv_required` / `tv_not_found` | Ambiguous selection or unknown receiver. Read `data.tvs`. | no |
 | `mirror_busy` | All mirror slots are held. Read `data.holders`. | no |
 | `uncertain` | Delivery, effect or destination lacks confirmation | no |
+| `stale_view` / `target_missing` | The browser view expired or the requested control is unavailable | no |
+| `delivery_uncertain` | Chromium input may have run. Read the mirrored page before acting again. | no |
+| `nothing_showing` / `page_not_live` | The TV has no bridge presentation or it is showing a recording | no |
 
 ## Resources and prompt
 
@@ -189,7 +232,7 @@ A tool failure includes `error.code`, `error.message`, `error.retryable` and `er
 
 Scripts can POST JSON arguments to `/api/atv_bridge/tool/<name>` with the same HA admin header. The HTTP result places a requested image in `data.image`. For bundled pages, POST a raw ZIP to `/api/atv_bridge/bundle`. Success returns `{"bundle":"<32 lowercase hex characters>"}`. See [upload limits and commands](../skills/apple-tv/content.md).
 
-HA's built-in MCP server and Assist expose six text tools through the integration: `atv_bridge__show`, `atv_bridge__play`, `atv_bridge__open`, `atv_bridge__power`, `atv_bridge__pair` and `atv_bridge__status`. Use the bridge endpoint above for full screen reads, navigation, remote input, sequences and page updates.
+HA's built-in MCP server and Assist expose six text tools through the integration: `atv_bridge__show`, `atv_bridge__play`, `atv_bridge__open`, `atv_bridge__power`, `atv_bridge__pair` and `atv_bridge__status`. Use the bridge endpoint above for full screen reads, navigation, remote input, sequences, page updates and mirrored page control.
 
 
 The integration uses a separate internal API on loopback port 8765 with the app token from Supervisor discovery. It lists registered receivers with `GET /api/tvs`, discovers candidates with `GET /api/discover`, and registers a candidate with `POST /api/tvs` and `{"id":"<advertised identifier>"}`. Under `/api/tvs/<bridge ID>`, it uses GET for `status`, `health`, `apps` and `events` (WebSocket), and POST for `pair/start`, `pair/finish` and `tool/<name>`. Agent clients use the authenticated HA routes above.

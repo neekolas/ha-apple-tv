@@ -22,6 +22,10 @@ These examples assume a default TV. With several paired TVs, add the same `tv` n
 2. When the user says “next”, call `tv_update {"data":{"step":2}}`. Check that `data.page_state.step` is 2.
 3. When cooking is done, call `tv_show {}`.
 
+## Click Next on the recipe page
+
+When the user asks for the next step on a mirrored recipe with a **Next** button, read `tv_page_look {"find":"Next"}`. If the snapshot shows `e2 button "Next"`, send `tv_page_act {"view":"<returned view>","ref":"e2","action":"click"}` to the same TV. Check `data.status` for the new step. If the page updates later, read `tv_page_look {"find":"Step 3"}` after one second. A click can succeed before the page displays the next step.
+
 ## Find a YouTube podcast and play it
 
 1. Check `screen.playing` with `tv_look {}`. If something is playing, ask before you replace it.

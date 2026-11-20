@@ -74,6 +74,8 @@ Use `tv://apps` for installed names and IDs, `tv://screen` for the latest text o
 
 ### Presenting pages
 
+On a live mirror, use `tv_page_look {"find":"Next"}` to read a button ref and view. Send them to `tv_page_act` with `action: "click"` and check the returned status. These admin tools operate the mirrored browser without waking the TV or requiring screen pairing. Recorded pages support `tv_update`.
+
 Pass one of `url`, `html`, `files` or `bundle` to `tv_show`. Inline files need an `index.html` entry and relative asset paths. Prefix binary contents with `base64:`. For larger pages, POST a ZIP with `index.html` at its root to `/api/atv_bridge/bundle` and pass the returned `bundle`. The ZIP and its unpacked contents each have a 50 MiB limit. A ZIP may contain up to 8,192 entries. Stored pages share a 500 MiB cache.
 
 For a live web app, keep its server running and pass its URL. Chromium on the Green loads the site, including its JavaScript, fetch requests and WebSockets. For a server on your own machine, share it with `tailscale serve`. Enable kernel networking in the HA Tailscale app. If HA cannot resolve MagicDNS names, record the existing upstream servers with `ha dns info` before running `ha dns options --servers dns://100.100.100.100`. That command replaces the Supervisor DNS server list. For LAN URLs, Tailscale is optional. The bridge checks tailnet DNS in `tv_status` even before a page is shown. The `tailnet_dns_missing` problem includes the HA DNS command. For each live URL, the bridge probes the server and checks the loaded Chromium document. A `page_unreachable` result includes the network error and a suggested fix. A site that refuses framing opens in the captured tab. The next show returns to the stage.
