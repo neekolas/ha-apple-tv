@@ -1,0 +1,7 @@
+[package]
+name = "atvlab-canvas-handshake"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tvpipe-fairplay = {git = "https://github.com/mitsuhiko/tvpipe", rev = "c2456d29a0cb71cf169dfa8edc184e9f7b05931d"}

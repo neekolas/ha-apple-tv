@@ -1,0 +1,177 @@
+diff --git a/pyatv/protocols/airplay/auth/__init__.py b/pyatv/protocols/airplay/auth/__init__.py
+index 94f6b87..19c3e63 100644
+--- a/pyatv/protocols/airplay/auth/__init__.py
++++ b/pyatv/protocols/airplay/auth/__init__.py
+@@ -1,7 +1,7 @@
+ """Pick authentication type based on device support."""
+ 
+ import logging
+-from typing import Tuple
++from typing import Optional, Tuple
+ 
+ from pyatv import exceptions
+ from pyatv.auth.hap_pairing import (
+@@ -56,9 +56,11 @@ class NullPairVerifyProcedure(PairVerifyProcedure):
+ 
+ 
+ def pair_setup(
+-    auth_type: AuthenticationType, connection: HttpConnection
++    auth_type: AuthenticationType,
++    connection: HttpConnection,
++    display_name: Optional[str] = None,
+ ) -> PairSetupProcedure:
+-    """Return procedure object used for Pair-Setup."""
++    """Return Pair-Setup procedure with an optional receiver-visible name."""
+     _LOGGER.debug("Setting up new AirPlay Pair-Setup procedure with type %s", auth_type)
+ 
+     if auth_type == AuthenticationType.Legacy:
+@@ -68,7 +70,7 @@ def pair_setup(
+     if auth_type == AuthenticationType.HAP:
+         srp = SRPAuthHandler()
+         srp.initialize()
+-        return AirPlayHapPairSetupProcedure(connection, srp)
++        return AirPlayHapPairSetupProcedure(connection, srp, display_name)
+ 
+     raise exceptions.NotSupportedError(
+         f"authentication type {auth_type} does not support Pair-Setup"
+diff --git a/pyatv/protocols/airplay/auth/hap.py b/pyatv/protocols/airplay/auth/hap.py
+index 8e6ab4a..df062a5 100644
+--- a/pyatv/protocols/airplay/auth/hap.py
++++ b/pyatv/protocols/airplay/auth/hap.py
+@@ -35,10 +35,18 @@ def _get_pairing_data(resp: HttpResponse):
+ class AirPlayHapPairSetupProcedure(PairSetupProcedure):
+     """Authenticate a device for AirPlay playback."""
+ 
+-    def __init__(self, http: HttpConnection, auth_handler: SRPAuthHandler):
+-        """Initialize a new DeviceAuthenticator."""
++    def __init__(
++        self,
++        http: HttpConnection,
++        auth_handler: SRPAuthHandler,
++        display_name: Optional[str] = None,
++    ):
++        """Initialize HAP pairing with an optional receiver-visible name."""
+         self.http = http
+         self.srp = auth_handler
++        self._headers = copy(_AIRPLAY_HEADERS)
++        if display_name:
++            self._headers["X-Apple-Client-Name"] = display_name
+         self._atv_salt = None
+         self._atv_pub_key = None
+ 
+@@ -49,11 +57,11 @@ class AirPlayHapPairSetupProcedure(PairSetupProcedure):
+         """
+         self.srp.initialize()
+ 
+-        await self.http.post("/pair-pin-start", headers=_AIRPLAY_HEADERS)
++        await self.http.post("/pair-pin-start", headers=self._headers)
+ 
+         data = {hap_tlv8.TlvValue.Method: b"\x00", hap_tlv8.TlvValue.SeqNo: b"\x01"}
+         resp = await self.http.post(
+-            "/pair-setup", body=hap_tlv8.write_tlv(data), headers=_AIRPLAY_HEADERS
++            "/pair-setup", body=hap_tlv8.write_tlv(data), headers=self._headers
+         )
+         pairing_data = _get_pairing_data(resp)
+ 
+@@ -78,7 +86,7 @@ class AirPlayHapPairSetupProcedure(PairSetupProcedure):
+             hap_tlv8.TlvValue.Proof: proof,
+         }
+         await self.http.post(
+-            "/pair-setup", body=hap_tlv8.write_tlv(data), headers=_AIRPLAY_HEADERS
++            "/pair-setup", body=hap_tlv8.write_tlv(data), headers=self._headers
+         )
+ 
+         data = {
+@@ -86,7 +94,7 @@ class AirPlayHapPairSetupProcedure(PairSetupProcedure):
+             hap_tlv8.TlvValue.EncryptedData: self.srp.step3(name=display_name),
+         }
+         resp = await self.http.post(
+-            "/pair-setup", body=hap_tlv8.write_tlv(data), headers=_AIRPLAY_HEADERS
++            "/pair-setup", body=hap_tlv8.write_tlv(data), headers=self._headers
+         )
+         pairing_data = _get_pairing_data(resp)
+ 
+diff --git a/pyatv/protocols/airplay/pairing.py b/pyatv/protocols/airplay/pairing.py
+index 77d8684..1cd5d52 100644
+--- a/pyatv/protocols/airplay/pairing.py
++++ b/pyatv/protocols/airplay/pairing.py
+@@ -54,6 +54,7 @@ class AirPlayPairingHandler(PairingHandler):
+                 else AuthenticationType.Legacy
+             ),
+             self.http,
++            self._name,
+         )
+         self._has_paired = False
+         return await error_handler(
+diff --git a/tests/fake_device/airplay.py b/tests/fake_device/airplay.py
+index 80e5f95..6207db1 100644
+--- a/tests/fake_device/airplay.py
++++ b/tests/fake_device/airplay.py
+@@ -48,6 +48,7 @@ class FakeAirPlayState:
+         self.airplay_responses = []
+         self.has_authenticated = True
+         self.always_auth_fail = False
++        self.pairing_client_names = []
+         self.last_airplay_url = None
+         self.last_airplay_start = None
+         self.last_airplay_uuid = None
+@@ -80,6 +81,20 @@ class FakeAirPlayService(AirPlayServerAuth):
+         if self.server:
+             self.server.close()
+ 
++    def handle_pair_pin_start(self, request):
++        """Record and handle an incoming pairing start request."""
++        self.state.pairing_client_names.append(
++            (request.path, request.headers.get("X-Apple-Client-Name"))
++        )
++        return super().handle_pair_pin_start(request)
++
++    def handle_pair_setup(self, request):
++        """Record and handle an incoming pairing setup request."""
++        self.state.pairing_client_names.append(
++            (request.path, request.headers.get("X-Apple-Client-Name"))
++        )
++        return super().handle_pair_setup(request)
++
+     def handle_airplay_play(self, request):
+         """Handle AirPlay play requests."""
+         self.state.play_count += 1
+diff --git a/tests/protocols/airplay/test_airplay_pair.py b/tests/protocols/airplay/test_airplay_pair.py
+index ea4e03c..47d7828 100644
+--- a/tests/protocols/airplay/test_airplay_pair.py
++++ b/tests/protocols/airplay/test_airplay_pair.py
+@@ -80,6 +80,34 @@ async def test_pairing_exception_invalid_pin(airplay_conf, expected_credentials)
+         )
+ 
+ 
++@pytest.mark.parametrize(
++    "airplay_properties",
++    [{"features": "0x00000000,0x00010000"}],
++)
++async def test_pairing_sends_client_name(airplay_conf, airplay_state):
++    client_name = "Home Assistant"
++    pairing = await pair(
++        airplay_conf,
++        Protocol.AirPlay,
++        asyncio.get_event_loop(),
++        name=client_name,
++    )
++
++    try:
++        await pairing.begin()
++        pairing.pin(DEVICE_PIN)
++        await pairing.finish()
++
++        assert airplay_state.pairing_client_names == [
++            ("/pair-pin-start", client_name),
++            ("/pair-setup", client_name),
++            ("/pair-setup", client_name),
++            ("/pair-setup", client_name),
++        ]
++    finally:
++        await pairing.close()
++
++
+ @pytest.mark.parametrize(
+     "airplay_properties,expected_credentials",
+     [

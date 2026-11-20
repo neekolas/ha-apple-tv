@@ -1,0 +1,39 @@
+youtube:
+  hosts: [youtube.com, www.youtube.com, m.youtube.com, music.youtube.com, youtube-nocookie.com, www.youtube-nocookie.com, youtu.be]
+  schemes: [youtube]
+  bundle_id: com.google.ios.youtube
+  names: [YouTube]
+  forms:
+    - "youtube://www.youtube.com/watch?v={id}"
+    - "youtube://watch/{id}"
+apple_tv:
+  hosts: [tv.apple.com]
+  bundle_id: com.apple.TVWatchList
+  names: [TV, Apple TV]
+  query: {action: play}
+disney:
+  hosts: [disneyplus.com, www.disneyplus.com]
+  schemes: [disneyplus]
+  bundle_id: com.disney.disneyplus
+  names: [Disney+]
+hulu:
+  hosts: [hulu.com, www.hulu.com]
+  schemes: [hulu]
+  bundle_id: com.hulu.plus
+  names: [Hulu]
+netflix:
+  hosts: [netflix.com, www.netflix.com]
+  schemes: [nflx]
+  bundle_id: com.netflix.Netflix
+  names: [Netflix]
+  reliability: "Netflix title URLs may open the app without selecting the title."
+spotify:
+  hosts: [open.spotify.com]
+  schemes: [spotify]
+  bundle_id: com.spotify.client
+  names: [Spotify]
+apple_music:
+  hosts: [music.apple.com]
+  schemes: [music, musics]
+  bundle_id: com.apple.TVMusic
+  names: [Music, Apple Music]

@@ -1,0 +1,210 @@
+diff --git a/.gitignore b/.gitignore
+index 2c3916e..e2bc21d 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -47,6 +47,7 @@ pip-log.txt
+ 
+ # Unit test / coverage reports
+ .coverage*
++!.coveragerc
+ .tox
+ nosetests.xml
+ 
+diff --git a/pyatv/auth/convert.py b/pyatv/auth/convert.py
+index d247e4d..6d89b72 100644
+--- a/pyatv/auth/convert.py
++++ b/pyatv/auth/convert.py
+@@ -41,7 +41,7 @@ def companion_credentials(airplay: str) -> str:
+ 
+ 
+ def _single_line(value: str) -> str:
+-    if value.strip() != value or not value.isprintable() and value:
++    if value.strip() != value or (value and not value.isprintable()):
+         raise InvalidCredentialsError(
+             "tvpipe fields must be printable single-line text"
+         )
+diff --git a/pyatv/core/protocol.py b/pyatv/core/protocol.py
+index c6d2a3d..0b6e49b 100644
+--- a/pyatv/core/protocol.py
++++ b/pyatv/core/protocol.py
+@@ -96,9 +96,14 @@ class MessageDispatcher(Generic[DispatchType, DispatchMessage]):
+         entry = (message_filter, func)
+         listeners.append(entry)
+ 
++        removed = False
++
+         def remove() -> None:
+-            if entry in listeners:
+-                listeners.remove(entry)
++            nonlocal removed
++            if removed:
++                return
++            removed = True
++            listeners.remove(entry)
+             if not listeners and self.__listeners.get(dispatch_type) is listeners:
+                 del self.__listeners[dispatch_type]
+ 
+diff --git a/pyatv/protocols/airplay/__init__.py b/pyatv/protocols/airplay/__init__.py
+index a60328a..9d7cb98 100644
+--- a/pyatv/protocols/airplay/__init__.py
++++ b/pyatv/protocols/airplay/__init__.py
+@@ -165,7 +165,9 @@ class AirPlayStream(Stream):  # pylint: disable=too-few-public-methods
+             == AirPlayMajorVersion.AirPlayV1
+         ):
+             return airplayv1.AirPlayV1(context, rtsp)
+-        flags = parse_features(service.properties.get("features", "0x0"))
++        flags = parse_features(
++            service.properties.get("ft") or service.properties.get("features", "0x0")
++        )
+         return airplayv2.AirPlayV2(
+             context, rtsp, url_ptp=bool(flags & AirPlayFlags.SupportsPTP)
+         )
+diff --git a/pyatv/protocols/companion/auth.py b/pyatv/protocols/companion/auth.py
+index 31c5f48..7ae9238 100644
+--- a/pyatv/protocols/companion/auth.py
++++ b/pyatv/protocols/companion/auth.py
+@@ -150,7 +150,7 @@ class CompanionPairVerifyProcedure(PairVerifyProcedure):
+ 
+         encrypted_data = self.srp.verify1(self.credentials, server_pub_key, encrypted)
+ 
+-        await self.protocol.exchange_auth(
++        resp = await self.protocol.exchange_auth(
+             FrameType.PV_Next,
+             {
+                 PAIRING_DATA_KEY: write_tlv(
+@@ -159,7 +159,8 @@ class CompanionPairVerifyProcedure(PairVerifyProcedure):
+             },
+         )
+ 
+-        # TODO: check status code
++        if _get_pairing_data(resp).get(TlvValue.SeqNo) != b"\x04":
++            raise exceptions.AuthenticationError("Expected Companion pair-verify M4")
+ 
+         return True
+ 
+diff --git a/pyatv/protocols/companion/protocol.py b/pyatv/protocols/companion/protocol.py
+index 79ac318..7abd826 100644
+--- a/pyatv/protocols/companion/protocol.py
++++ b/pyatv/protocols/companion/protocol.py
+@@ -102,8 +102,6 @@ class CompanionProtocol(
+         if self.service.credentials:
+             self.srp.pairing_id = parse_credentials(self.service.credentials).client_id
+ 
+-        _LOGGER.debug("Companion credentials: %s", self.service.credentials)
+-
+         await error_handler(self._setup_encryption, exceptions.AuthenticationError)
+ 
+     def stop(self):
+diff --git a/pyatv/protocols/raop/protocols/airplayv2.py b/pyatv/protocols/raop/protocols/airplayv2.py
+index 2343dc3..bdcb45c 100644
+--- a/pyatv/protocols/raop/protocols/airplayv2.py
++++ b/pyatv/protocols/raop/protocols/airplayv2.py
+@@ -195,6 +195,8 @@ class AirPlayV2(StreamProtocol):
+ 
+     def _handle_event(self, event: Dict[str, Any]) -> None:
+         if event.get("type") == "unhandledURL" and event.get("kind") == "request":
++            if self._stream_id is None:
++                return
+             task = asyncio.ensure_future(self._answer_unhandled_url(event))
+             self._fcup_tasks.add(task)
+             task.add_done_callback(self._fcup_tasks.discard)
+@@ -350,6 +352,7 @@ class AirPlayV2(StreamProtocol):
+         for task in self._fcup_tasks:
+             task.cancel()
+         self._fcup_tasks.clear()
++        self._stream_id = None
+         if self.event_transport:
+             self.event_transport.close()
+             self.event_transport = None
+@@ -496,6 +499,15 @@ class AirPlayV2(StreamProtocol):
+         self, previous_state: Optional[str], timeout: float
+     ) -> Optional[str]:
+         """Wait for the event channel to report a new playback state."""
++        if self.rtsp.connection.transport is None:
++            # AirPlayStream.stop closes the control socket to end playback.
++            if self._playback_state in ("playing", "paused"):
++                return "stopped"
++            raise exceptions.ConnectionLostError(
++                "URL playback control connection closed"
++            )
++        if self.event_transport and self.event_transport.is_closing():
++            raise exceptions.ConnectionLostError("URL playback event connection closed")
+         self._playback_state_changed.clear()
+         if self._playback_state != previous_state:
+             return self._playback_state
+diff --git a/tests/protocols/airplay/test_url_timing.py b/tests/protocols/airplay/test_url_timing.py
+index 9361d75..4f2fd1c 100644
+--- a/tests/protocols/airplay/test_url_timing.py
++++ b/tests/protocols/airplay/test_url_timing.py
+@@ -39,3 +39,12 @@ async def test_url_setup_timing(ptp):
+     else:
+         assert (body["timingProtocol"], body["timingPort"]) == ("NTP", 9876)
+     stream.teardown()
++
++
++@pytest.mark.asyncio
++async def test_control_socket_close_ends_playback():
++    rtsp = MagicMock()
++    rtsp.connection.transport = None
++    stream = AirPlayV2(StreamContext(), rtsp)
++    stream._handle_event({"type": "playbackState", "name": "playing"})
++    assert await stream.wait_for_playback_state_change("playing", 1) == "stopped"
+diff --git a/tests/protocols/airplay/test_utils.py b/tests/protocols/airplay/test_utils.py
+index 69e2e46..757528b 100644
+--- a/tests/protocols/airplay/test_utils.py
++++ b/tests/protocols/airplay/test_utils.py
+@@ -36,6 +36,7 @@ LEGACY_CREDS = parse_credentials(":aa::bb")
+             | AirPlayFlags.SupportsAirPlayPhoto
+             | AirPlayFlags.SupportsAirPlayVideoV1,
+         ),
++        ("0x0,0x200", AirPlayFlags.SupportsPTP),
+         # Dual feature flag
+         (
+             "0x00000003,0x00000001",
+diff --git a/tests/protocols/companion/test_companion_functional.py b/tests/protocols/companion/test_companion_functional.py
+index db55780..8884ed5 100644
+--- a/tests/protocols/companion/test_companion_functional.py
++++ b/tests/protocols/companion/test_companion_functional.py
+@@ -472,3 +472,42 @@ async def test_converted_hap_pairing_connects(companion_conf, companion_state):
+         assert companion_state.latest_button == "menu"
+     finally:
+         await asyncio.gather(*atv.close())
++
++
++async def test_airplay_pin_pairing_used_on_companion(companion_conf, companion_state):
++    from pyatv.auth.convert import companion_credentials
++    from tests.fake_device import FakeAppleTV
++    from tests.fake_device.airplay import DEVICE_PIN
++
++    loop = asyncio.get_running_loop()
++    fake = FakeAppleTV(loop, test_mode=False)
++    fake.add_service(Protocol.AirPlay)
++    await fake.start()
++    try:
++        conf = AppleTV("127.0.0.1", "Paired TV")
++        conf.add_service(
++            ManualService(
++                "airplay",
++                Protocol.AirPlay,
++                fake.get_port(Protocol.AirPlay),
++                {"features": "0x00000000,0x00010000"},
++            )
++        )
++        pairing = await pyatv.pair(conf, Protocol.AirPlay, loop)
++        try:
++            await pairing.begin()
++            pairing.pin(DEVICE_PIN)
++            await pairing.finish()
++            companion_conf.get_service(Protocol.Companion).credentials = (
++                companion_credentials(pairing.service.credentials)
++            )
++        finally:
++            await pairing.close()
++        atv = await pyatv.connect(companion_conf, loop)
++        try:
++            await atv.remote_control.menu()
++            assert companion_state.latest_button == "menu"
++        finally:
++            await asyncio.gather(*atv.close())
++    finally:
++        await fake.stop()

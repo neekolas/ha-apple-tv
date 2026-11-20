@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>S2b apps</title>
+<style>
+* { box-sizing:border-box }
+body { margin:0; background:#faf4e5; color:#242b30; font:3.2vh "Liberation Sans",sans-serif }
+main { margin:8vh 10vw }
+h1 { margin:0 0 2vh; font:bold 8vh "Liberation Serif",serif }
+section { display:grid; grid-template-columns:2fr 1fr; gap:3vw }
+article { background:#fffdf8; padding:3vh 2vw; border:2px solid #d8cbb4; border-radius:1vw }
+canvas, svg { display:block; width:100%; height:auto }
+button { padding:1vh 2vw; font:inherit; border:0; border-radius:0.4vw; background:#325e54; color:white }
+meter { width:13vw }
+</style>
+<main id="root"></main>
+<script>
+const params = new URLSearchParams(location.search);
+const root = document.getElementById('root');
+if (params.get('page') === 'chart') {
+  root.innerHTML = '<h1>Kitchen dashboard</h1><p>Meal prep · Monday to Sunday</p><section><article>Servings planned<canvas width="840" height="380"></canvas></article><article>Weekly progress<svg viewBox="0 0 300 300"><circle cx="150" cy="150" r="100" fill="none" stroke="#ede0c4" stroke-width="32"/><circle cx="150" cy="150" r="100" fill="none" stroke="#325e54" stroke-width="32" stroke-dasharray="420 630" transform="rotate(-90 150 150)"/><text x="150" y="164" text-anchor="middle" font-size="44" fill="#242b30">67%</text></svg></article></section>';
+  const ctx = document.querySelector('canvas').getContext('2d');
+  const values = [4, 7, 5, 9, 6, 8, 5];
+  function draw(offset) {
+    ctx.clearRect(0, 0, 840, 380);
+    ctx.font = '24px "Liberation Sans", sans-serif';
+    for (let index = 0; index < values.length; index++) {
+      const height = values[index] * 27 + (index === 0 ? offset : 0);
+      ctx.fillStyle = '#325e54';
+      ctx.fillRect(28 + 116 * index, 310 - height, 68, height);
+      ctx.fillStyle = '#242b30';
+      ctx.fillText(['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][index], 32+116*index, 350);
+    }
+  }
+  draw(0);
+  if (!params.has('freeze')) {
+    setInterval(() => draw(Math.round(20 * (1 + Math.sin(performance.now()/380)))), 100);
+  }
+} else {
+  root.innerHTML = '<h1>Lemon chickpea soup</h1><p id="progress"></p><section><article><p id="instruction"></p><button id="advance">Next step</button></article><article><label for="done">Steps shown</label><br><meter id="done" min="0" max="3"></meter></article></section><audio src="/tone.wav" preload="auto"></audio>';
+  const instructions = ['Soften a diced onion in olive oil.', 'Add chickpeas and vegetable stock.', 'Finish with lemon, dill and black pepper.'];
+  const button = document.getElementById('advance');
+  const audio = document.querySelector('audio');
+  let step = 0;
+  function show() {
+    document.getElementById('progress').textContent = 'Step ' + (step + 1) + ' of ' + instructions.length;
+    document.getElementById('instruction').textContent = instructions[step];
+    document.getElementById('done').value = step + 1;
+  }
+  button.addEventListener('click', () => {
+    step = (step + 1) % instructions.length;
+    show();
+    if (!params.has('freeze')) {
+      const playing = audio.play();
+      if (playing) playing.catch(() => {});
+    }
+    fetch('/observed?step=' + (step + 1)).catch(() => {});
+  });
+  window.addEventListener('message', event => {
+    if (event.data && event.data.command === 'next') button.click();
+  });
+  show();
+}
+</script>

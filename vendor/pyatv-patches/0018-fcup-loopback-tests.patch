@@ -1,0 +1,87 @@
+diff --git a/tests/protocols/airplay/test_airplay_v2_player.py b/tests/protocols/airplay/test_airplay_v2_player.py
+index b07110a..607a047 100644
+--- a/tests/protocols/airplay/test_airplay_v2_player.py
++++ b/tests/protocols/airplay/test_airplay_v2_player.py
+@@ -3,13 +3,14 @@
+ # pylint: disable=protected-access
+ 
+ import asyncio
++import gzip
+ import plistlib
+ from typing import Dict, List, Mapping, Tuple
+ from unittest.mock import AsyncMock, MagicMock
+ 
+ import aiohttp
++from aiohttp import web
+ import pytest
+-from pytest_httpserver import HTTPServer
+ 
+ from pyatv import exceptions
+ from pyatv.protocols.airplay.channels import EventChannel
+@@ -324,35 +325,49 @@ async def test_teardown_cancels_pending_unhandled_url_requests() -> None:
+     exchange.assert_not_awaited()
+ 
+ 
+-async def test_fetch_unhandled_url_returns_decoded_response(
+-    httpserver: HTTPServer,
+-) -> None:
+-    httpserver.expect_request(
+-        "/master.m3u8", headers={"User-Agent": "AppleCoreMedia"}
+-    ).respond_with_data(PLAYLIST, content_type="application/vnd.apple.mpegurl")
++@pytest.fixture
++def serve(aiohttp_server):
++    async def start(path, handler):
++        app = web.Application()
++        app.router.add_get(path, handler)
++        server = await aiohttp_server(app)
++        return str(server.make_url(path))
+ 
++    return start
++
++
++async def test_fetch_unhandled_url_returns_decoded_response(serve) -> None:
++    async def playlist(request):
++        assert request.headers["User-Agent"] == "AppleCoreMedia"
++        return web.Response(
++            body=gzip.compress(PLAYLIST),
++            content_type="application/vnd.apple.mpegurl",
++            headers={"Content-Encoding": "gzip"},
++        )
++
++    url = await serve("/master.m3u8", playlist)
+     status, headers, data = await fetch_unhandled_url(
+-        httpserver.url_for("/master.m3u8"), {"User-Agent": "AppleCoreMedia"}
++        url, {"User-Agent": "AppleCoreMedia"}
+     )
+ 
+     assert (status, data) == (200, PLAYLIST)
+     assert headers["Content-Type"] == "application/vnd.apple.mpegurl"
+     assert headers["Content-Length"] == str(len(PLAYLIST))
++    assert "Content-Encoding" not in headers
+ 
+ 
+-async def test_fetch_unhandled_url_passes_error_status(httpserver: HTTPServer) -> None:
+-    httpserver.expect_request("/denied").respond_with_data(b"no", status=403)
+-
+-    status, _, data = await fetch_unhandled_url(httpserver.url_for("/denied"), {})
++async def test_fetch_unhandled_url_passes_error_status(serve) -> None:
++    async def denied(request):
++        return web.Response(status=403, body=b"no")
+ 
++    status, _, data = await fetch_unhandled_url(await serve("/denied", denied), {})
+     assert (status, data) == (403, b"no")
+ 
+ 
+-async def test_fetch_unhandled_url_refuses_large_response(
+-    httpserver: HTTPServer, monkeypatch: pytest.MonkeyPatch
+-) -> None:
+-    monkeypatch.setattr(airplayv2, "FCUP_MAX_RESPONSE_SIZE", 4)
+-    httpserver.expect_request("/big").respond_with_data(b"12345")
++async def test_fetch_unhandled_url_refuses_large_response(serve, monkeypatch) -> None:
++    async def big(request):
++        return web.Response(body=b"12345")
+ 
++    monkeypatch.setattr(airplayv2, "FCUP_MAX_RESPONSE_SIZE", 4)
+     with pytest.raises(exceptions.ProtocolError):
+-        await fetch_unhandled_url(httpserver.url_for("/big"), {})
++        await fetch_unhandled_url(await serve("/big", big), {})

@@ -1,0 +1,23 @@
+[project]
+name = "atvlab"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = ["pyatv==0.18.0+atvbridge.1", "pymobiledevice3==11.61.0", "Pillow>=11,<14", "PyYAML>=6,<7", "zeroconf>=0.145,<1"]
+
+[project.scripts]
+atvlab = "atvlab.cli:main"
+
+[tool.uv.sources]
+pyatv = {path = "../../vendor/pyatv", editable = true}
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=1"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

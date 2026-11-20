@@ -1,0 +1,82 @@
+diff --git a/pyatv/protocols/companion/api.py b/pyatv/protocols/companion/api.py
+index cd52405..88ce74c 100644
+--- a/pyatv/protocols/companion/api.py
++++ b/pyatv/protocols/companion/api.py
+@@ -344,6 +344,7 @@ class CompanionAPI(
+         y: float = float(start_y)
+         await self.hid_event(int(x), int(y), TouchAction.Press)
+         sleep_time = float(TOUCHPAD_DELAY_MS / 1000)
++        await asyncio.sleep(sleep_time)
+         current_time = time.time_ns()
+         while current_time < end_time:
+             x = x + float(end_x - x) * TOUCHPAD_DELAY_MS * 1000000 / (
+@@ -352,10 +353,8 @@ class CompanionAPI(
+             y = y + float(end_y - y) * TOUCHPAD_DELAY_MS * 1000000 / (
+                 end_time - current_time
+             )
+-            x = max(x, 0)
+-            y = max(y, 0)
+-            x = min(x, TOUCHPAD_WIDTH)
+-            y = min(y, TOUCHPAD_HEIGHT)
++            x = max(min(start_x, end_x), min(x, max(start_x, end_x)))
++            y = max(min(start_y, end_y), min(y, max(start_y, end_y)))
+             await self.hid_event(int(x), int(y), TouchAction.Hold)
+             await asyncio.sleep(sleep_time)
+             current_time = time.time_ns()
+diff --git a/tests/protocols/companion/test_companion_swipe.py b/tests/protocols/companion/test_companion_swipe.py
+new file mode 100644
+index 0000000..91c7d3e
+--- /dev/null
++++ b/tests/protocols/companion/test_companion_swipe.py
+@@ -0,0 +1,51 @@
++"""Tests for Companion touch gesture timing."""
++
++from unittest.mock import patch
++
++import pytest
++
++from pyatv.const import TouchAction
++from pyatv.protocols.companion.api import TOUCHPAD_DELAY_MS, CompanionAPI
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize(
++    "coords",
++    [
++        (100, 500, 900, 500),
++        (900, 500, 100, 500),
++        (500, 100, 500, 900),
++        (500, 900, 500, 100),
++    ],
++)
++@pytest.mark.parametrize("duration", [1, 16, 100])
++async def test_swipe_event_timing_and_bounds(coords, duration):
++    now = 0
++    events = []
++
++    async def sleep(delay):
++        nonlocal now
++        now += int(delay * 1_000_000_000)
++
++    async def event(x, y, action):
++        events.append((now, x, y, action))
++
++    with (
++        patch("pyatv.protocols.companion.api.time.time_ns", side_effect=lambda: now),
++        patch("pyatv.protocols.companion.api.asyncio.sleep", side_effect=sleep),
++    ):
++        api = CompanionAPI(None)
++        with patch.object(api, "hid_event", side_effect=event):
++            await api.swipe(*coords, duration)
++
++    assert events[0] == (0, *coords[:2], TouchAction.Press)
++    assert events[-1][1:] == (*coords[2:], TouchAction.Release)
++    assert events[-1][0] >= duration * 1_000_000
++    if duration > TOUCHPAD_DELAY_MS:
++        assert any(action is TouchAction.Hold for _, _, _, action in events)
++    for index, (timestamp, x, y, action) in enumerate(events[1:], 1):
++        assert timestamp > events[index - 1][0]
++        assert min(coords[0], coords[2]) <= x <= max(coords[0], coords[2])
++        assert min(coords[1], coords[3]) <= y <= max(coords[1], coords[3])
++        if action is TouchAction.Hold:
++            assert timestamp - events[index - 1][0] >= TOUCHPAD_DELAY_MS * 1_000_000

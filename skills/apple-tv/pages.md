@@ -1,0 +1,40 @@
+# Design pages for the TV
+
+How to build pages that read well from the sofa, given how the bridge renders and mirrors them.
+
+## Canvas and type
+
+- Design for the configured output. Mirroring defaults to 1920×1080 and also supports 1280×720. Read `data.size` after `tv_show`. Use a responsive layout and fit each step on one screen.
+- Use body text of at least 28 px and headings of 56 px or more. People read from several metres away.
+- Use high contrast and few words per screen. Dark backgrounds suit a living room in the evening.
+- Keep a margin of about 60 px at the top and bottom and 80 px at the sides, on a 1080p layout.
+- If you need to inspect the layout, `tv_look {"image":true,"tv":"<room>"}` takes a screenshot and shows a toast.
+
+## Motion
+
+- The TV receives the page as a mirror at about 10 frames per second by default. Fast motion can look uneven at that rate.
+- Prefer static layouts. Change content in steps, on `tv_update` or on a data refresh. Change only what changed, for example the numbers on a dashboard.
+- Avoid continuous animation, video inside the page, canvas or WebGL loops, and heavy blur or shadow effects. Rendering and encoding share the HA host’s CPU.
+- A short fade between steps is fine.
+- To play a video, use `tv_play {"media": "<URL>"}` or an app, not a page. The Apple TV fetches `media` URLs itself, so the URL must be reachable from the TV.
+
+## Input
+
+- The bridge does not forward Siri Remote input to the browser page. Remote keys can still affect tvOS. Change page content through `tv_update` or page code.
+- Do not show buttons or "press OK" hints. If the user can ask you to move on, say so on the page, for example "Say 'next' for step 3".
+
+## Audio and reading aloud
+
+- Page audio (`<audio>`, Web Audio) plays on the TV. The bridge browser allows autoplay, so a page can start audio without a click.
+- Pass `audio: "mute"` to `tv_show` for a silent page.
+- To read text aloud, generate the speech audio yourself with any text-to-speech you have. Ship the clips in `files` or a bundle, or serve them from your live server. Play a clip from the page, for example when `tv_update` names it.
+- Keep one clip per step or paragraph, so `tv_update` can jump to any of them.
+
+## Recorded mode
+
+For stored content in `play_url` mode or after `auto` falls back, `tv_show` returns `data.transport: "video"`. The bridge records the page to an MP4 and plays it over AirPlay. The first result may say `verified: false` while it renders, and each `tv_update` records a new clip. Keep pages static in this mode. Live URLs always use mirroring.
+
+## Starting points
+
+- The resource `tv://page-guide` has the short rules.
+- The MCP prompt `present` takes a `topic` and returns a TV-ready HTML scaffold that already uses `tv.on` and `tv.state`.

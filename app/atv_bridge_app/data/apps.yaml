@@ -1,0 +1,18 @@
+default:
+  search_button: Search
+  play_buttons: [Play, Watch Now, Resume]
+YouTube:
+  search_link: "youtube://www.youtube.com/results?search_query={query}"
+Netflix:
+  search_button: Search
+HBO Max:
+  search_button: Search
+Disney+:
+  search_button: Search
+Spotify:
+  search_link: "spotify:search:{query}"
+Apple TV: &apple_tv
+  title_link: "https://tv.apple.com/show/{id}?action=play"
+  titles:
+    severance: severance/umc.cmc.1srk2goyh2q2zdxcx605w8vtx
+TV: *apple_tv

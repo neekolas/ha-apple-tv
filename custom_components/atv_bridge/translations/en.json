@@ -1,0 +1,218 @@
+{
+  "title": "Apple TV Agent Bridge",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to the bridge app",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "token": "Internal bearer token"
+        }
+      },
+      "hassio_confirm": {
+        "title": "Pair the discovered bridge",
+        "description": "Have the Apple TV screen in view, then submit to request an AirPlay PIN."
+      },
+      "reauth_confirm": {
+        "title": "Restore Apple TV pairing",
+        "description": "Have the Apple TV screen in view, then submit to request a new AirPlay PIN."
+      },
+      "pin": {
+        "title": "Enter the Apple TV PIN",
+        "description": "Enter the PIN shown on the TV for {protocol}.",
+        "data": {
+          "pin": "PIN"
+        }
+      },
+      "retry_pin": {
+        "title": "Request a new PIN",
+        "description": "Submit to start a fresh pairing session. Use the new PIN shown on the TV."
+      },
+      "check_pairing": {
+        "title": "Check remaining pairings",
+        "description": "Submit to check which optional protocols need pairing."
+      },
+      "optional": {
+        "title": "Optional {protocol} pairing",
+        "description": "The bridge reports that {protocol} needs pairing. Clear the checkbox to skip this protocol.",
+        "data": {
+          "pair": "Pair this protocol"
+        }
+      },
+      "select_tv": {
+        "title": "Choose an Apple TV",
+        "description": "Select the Apple TV to pair with this bridge.",
+        "data": {
+          "apple_tv_id": "Apple TV"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Check that the bridge app is running and that its host, port, and token are correct.",
+      "pairing_failed": "The bridge could not confirm this PIN.",
+      "no_tvs": "Wake the Apple TV, check that it shares the bridge’s network, then submit to scan again."
+    },
+    "abort": {
+      "already_configured": "This bridge is already configured.",
+      "invalid_discovery": "Supervisor supplied incomplete bridge connection details."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Pair the Apple TV again",
+        "description": "Choose which pairing to replace. For screen pairing, first open Remote App and Devices on the Apple TV.",
+        "data": {
+          "protocol": "Pairing",
+          "tv": "Apple TV"
+        }
+      },
+      "pin": {
+        "title": "Enter the Apple TV PIN",
+        "description": "Enter the PIN shown on the TV for {protocol}.",
+        "data": {
+          "pin": "PIN"
+        }
+      },
+      "retry_pin": {
+        "title": "Request a new PIN",
+        "description": "Submit to start a fresh pairing session. Use the new PIN shown on the TV."
+      },
+      "check_pairing": {
+        "title": "Check remaining pairings",
+        "description": "Submit to check which optional protocols need pairing."
+      },
+      "optional": {
+        "title": "Optional {protocol} pairing",
+        "description": "The bridge reports that {protocol} needs pairing. Clear the checkbox to skip this protocol.",
+        "data": {
+          "pair": "Pair this protocol"
+        }
+      },
+      "select_tv": {
+        "title": "Choose an Apple TV",
+        "description": "Select the Apple TV to pair with this bridge.",
+        "data": {
+          "apple_tv_id": "Apple TV"
+        }
+      },
+      "notifications": {
+        "title": "Pairing notifications",
+        "description": "Choose the phone that should receive pairing codes to reply to.",
+        "data": {
+          "notify_target": "Notify service"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Check that the bridge app is running and that its host, port, and token are correct.",
+      "pairing_failed": "The bridge could not confirm this PIN.",
+      "no_tvs": "Wake the Apple TV, check that it shares the bridge’s network, then submit to scan again."
+    }
+  },
+  "entity": {
+    "media_player": {
+      "player": {
+        "name": "Player"
+      }
+    },
+    "remote": {
+      "remote": {
+        "name": "Remote"
+      }
+    },
+    "button": {
+      "self_test": {
+        "name": "Run self-test"
+      }
+    },
+    "sensor": {
+      "health": {
+        "name": "Health"
+      }
+    },
+    "binary_sensor": {
+      "connected": {
+        "name": "Connected"
+      },
+      "keyboard_focused": {
+        "name": "Keyboard focused"
+      }
+    }
+  },
+  "exceptions": {
+    "request_failed": {
+      "message": "{detail}"
+    },
+    "unsupported_media": {
+      "message": "Use media type app or url."
+    }
+  },
+  "issues": {
+    "allow_access_changed": {
+      "title": "Apple TV AirPlay access changed ({tv})",
+      "description": "On the Apple TV, open Settings → AirPlay and HomeKit → Allow Access. Restore the setting that allows the Home Assistant host to connect, then run the bridge self-test."
+    },
+    "pairing_removed": {
+      "title": "Apple TV pairing was removed ({tv})",
+      "description": "Open Settings → Devices & services and reauthenticate Apple TV Agent Bridge. Enter the new PIN shown on the TV."
+    },
+    "unreachable": {
+      "title": "Apple TV bridge cannot connect ({tv})",
+      "description": "Check that the bridge app is running and on the same network as the Apple TV. Wake the TV, check apple_tv_host if set, then run the bridge self-test."
+    },
+    "screen_pairing_invalid": {
+      "title": "Apple TV screen pairing needs repair ({tv})",
+      "description": "On the Apple TV, open Settings → Remotes and Devices → Remote App and Devices. In Home Assistant, open the bridge integration, select Configure → Re-pair screen, and enter the new six-digit PIN."
+    }
+  },
+  "config_subentries": {
+    "apple_tv": {
+      "entry_type": "Apple TV",
+      "initiate_flow": {
+        "user": "Add Apple TV"
+      },
+      "step": {
+        "pin": {
+          "title": "Enter the Apple TV PIN",
+          "description": "Enter the PIN shown on the TV for {protocol}.",
+          "data": {
+            "pin": "PIN"
+          }
+        },
+        "retry_pin": {
+          "title": "Request a new PIN",
+          "description": "Submit to start a fresh pairing session. Use the new PIN shown on the TV."
+        },
+        "check_pairing": {
+          "title": "Check remaining pairings",
+          "description": "Submit to check which optional protocols need pairing."
+        },
+        "select_tv": {
+          "title": "Choose an Apple TV",
+          "description": "Select the Apple TV to pair with this bridge.",
+          "data": {
+            "apple_tv_id": "Apple TV"
+          }
+        },
+        "prepare_pin": {
+          "title": "Prepare {tv} for {protocol} pairing",
+          "description": "For screen pairing, open Settings › Remotes and Devices › Remote App and Devices on this TV. Submit to request its PIN.",
+          "data": {
+            "skip_screen": "Skip screen pairing"
+          }
+        }
+      },
+      "error": {
+        "cannot_connect": "Check that the bridge app is running and that its host, port, and token are correct.",
+        "pairing_failed": "The bridge could not confirm this PIN.",
+        "no_tvs": "Wake the Apple TV, check that it shares the bridge’s network, then submit to scan again."
+      },
+      "abort": {
+        "already_configured": "This Apple TV is already paired.",
+        "pairing_completed": "Pairing completed for this Apple TV."
+      }
+    }
+  }
+}

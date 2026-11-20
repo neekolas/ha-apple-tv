@@ -1,0 +1,45 @@
+diff --git a/pyatv/protocols/companion/api.py b/pyatv/protocols/companion/api.py
+index c3f0449..83889d6 100644
+--- a/pyatv/protocols/companion/api.py
++++ b/pyatv/protocols/companion/api.py
+@@ -205,7 +205,7 @@ class CompanionAPI(
+                 # Not really device id here, but better then anything...
+                 "_pubID": info.device_id,
+                 "_sf": 256,  # Status flags?
+-                "_sv": "170.18",  # Software Version (I guess?)
++                "_sv": "715.2",
+                 "model": info.model,
+                 "name": info.name,
+             },
+diff --git a/tests/protocols/companion/test_companion_functional.py b/tests/protocols/companion/test_companion_functional.py
+index db71640..fcc0ca5 100644
+--- a/tests/protocols/companion/test_companion_functional.py
++++ b/tests/protocols/companion/test_companion_functional.py
+@@ -432,3 +432,27 @@ async def test_touch_click(companion_client, companion_state):
+ async def test_touch_hold(companion_client, companion_state):
+     await companion_client.touch.click(InputAction.Hold)
+     assert companion_state.latest_button == "select"
++
++
++async def test_saved_controller_identity_on_reconnect(companion_conf, companion_state):
++    from pyatv.storage.memory_storage import MemoryStorage
++
++    storage = MemoryStorage()
++    settings = await storage.get_settings(companion_conf)
++    settings.info.rp_id = "0123456789ab"
++    settings.info.device_id = "02:01:23:45:67:89"
++    settings.info.name = "Living room bridge"
++    for _ in range(2):
++        atv = await pyatv.connect(
++            companion_conf, asyncio.get_running_loop(), storage=storage
++        )
++        try:
++            wire = companion_state.system_info
++            assert (wire["_i"], wire["_pubID"], wire["name"], wire["_sv"]) == (
++                settings.info.rp_id,
++                settings.info.device_id,
++                settings.info.name,
++                "715.2",
++            )
++        finally:
++            await asyncio.gather(*atv.close())

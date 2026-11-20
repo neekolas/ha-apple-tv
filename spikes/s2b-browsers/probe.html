@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>S2b media and graphics probe</title>
+<audio src="/tone.wav" autoplay loop></audio>
+<div id="animation" style="animation: move 1s infinite"></div>
+<style>@keyframes move { to { opacity:0 } }</style>
+<script>
+const audio = document.querySelector('audio');
+function probe(test) {
+  try { return Boolean(test()); } catch (error) { return false; }
+}
+setTimeout(async () => {
+  const result = {
+    innerWidth, innerHeight, dpr: devicePixelRatio,
+    grid: probe(() => CSS.supports('display','grid')),
+    canvas: probe(() => {
+      const ctx = document.createElement('canvas').getContext('2d');
+      ctx.fillRect(0, 0, 1, 1);
+      return ctx.getImageData(0, 0, 1, 1).data[3] === 255;
+    }),
+    webgl: probe(() => document.createElement('canvas').getContext('webgl')),
+    svg: probe(() => document.createElementNS('http://www.w3.org/2000/svg', 'svg').createSVGRect),
+    cssAnimation: probe(() => document.getElementById('animation').getAnimations().length),
+    audioClock: probe(() => !audio.paused && audio.currentTime > 0),
+    wav: probe(() => audio.canPlayType('audio/wav')),
+    displayMedia: probe(() => navigator.mediaDevices.getDisplayMedia),
+    videoEncoder: typeof VideoEncoder === 'function'
+  };
+  try {
+    if (result.videoEncoder) {
+      result.h264 = (await VideoEncoder.isConfigSupported({
+        codec:'avc1.42E028', width:1920, height:1080, bitrate:4000000, framerate:10
+      })).supported;
+    }
+  } catch (error) {
+    result.h264 = false;
+  }
+  fetch('/observed?probe=' + encodeURIComponent(JSON.stringify(result))).catch(() => {});
+}, 1700);
+</script>

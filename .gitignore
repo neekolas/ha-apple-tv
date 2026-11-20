@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+spikes/**/out/
+spikes/**/target/
+*.log
+.DS_Store
+app/vendor/
+*.egg-info/

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atv-bridge-app"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+include = ["atv_bridge_app*", "atv_bridge_observer*"]
+
+[tool.setuptools.package-data]
+atv_bridge_observer = ["licenses/*.txt"]
+atv_bridge_app = ["data/*.yaml", "data/*.html", "data/*.js", "present/*.js"]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-aiohttp>=1.1", "pytest-asyncio>=1"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

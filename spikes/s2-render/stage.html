@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Render spike</title>
+<style>
+* { box-sizing: border-box }
+body { margin: 0; overflow: hidden; font: 3.2vh "Liberation Sans", sans-serif; color: #242b30; background: #faf4e5 }
+section { position: absolute; inset: 0; padding: 9vh 10vw }
+h1 { font: bold 9vh "Liberation Serif", serif; margin: 0 }
+li { margin: 2vh 0 }
+#second { opacity: 0; color: white; background: linear-gradient(125deg,#325e54,#264256); transition: opacity 1s linear }
+#second.shown { opacity: 1 }
+#animation { display: none; background: repeating-linear-gradient(15deg,#1d4350 0 8vw,#345950 8vw 16vw); color: white }
+.tile { position: absolute; width: 11vw; height: 11vw; border-radius: 18%; background: linear-gradient(135deg,#ffa059,#ab4779); animation: move 2.8s linear infinite alternate }
+@keyframes move { to { transform: translateX(16vw) rotate(125deg) } }
+</style>
+<section><h1>Lemon chickpea soup</h1><p>Serves four · 35 minutes</p>
+<ol><li>Soften a diced onion in olive oil.</li><li>Add two cups of cooked chickpeas and vegetable stock.</li><li>Simmer for twenty minutes.</li><li>Finish with lemon, dill and black pepper.</li></ol></section>
+<section id="second"><h1>Roasted carrots</h1><p>Serves four · 45 minutes</p>
+<ol><li>Slice the carrots lengthwise.</li><li>Toss with cumin, salt and olive oil.</li><li>Roast until the edges brown.</li><li>Serve with yogurt and parsley.</li></ol></section>
+<section id="animation"></section>
+<script>
+const scene = new URLSearchParams(location.search).get('page');
+if (scene === 'slides') setInterval(() => second.classList.toggle('shown'), 5000);
+if (scene === 'animation') {
+  animation.style.display = 'block';
+  for (let i = 0; i < 12; i++) {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.style.cssText = 'left:' + i%4*22 + 'vw;top:' + Math.floor(i/4)*33 + 'vh;animation-delay:-' + i*.31 + 's';
+    animation.appendChild(tile);
+  }
+}
+const ctx = new AudioContext();
+const tone = ctx.createOscillator(), gain = ctx.createGain();
+tone.frequency.value = 440;
+gain.gain.value = 0.25;
+tone.connect(gain).connect(ctx.destination);
+tone.start();
+ctx.resume();
+</script>

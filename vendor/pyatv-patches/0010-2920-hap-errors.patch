@@ -1,0 +1,210 @@
+diff --git a/pyatv/protocols/airplay/auth/hap.py b/pyatv/protocols/airplay/auth/hap.py
+index 124332e..025e3b3 100644
+--- a/pyatv/protocols/airplay/auth/hap.py
++++ b/pyatv/protocols/airplay/auth/hap.py
+@@ -12,6 +12,7 @@ from pyatv.auth.hap_pairing import (
+ )
+ from pyatv.auth.hap_srp import SRPAuthHandler
+ from pyatv.exceptions import AuthenticationError, InvalidResponseError
++from pyatv.protocols.airplay.auth.hap_transient import check_pairing_error
+ from pyatv.support import log_binary
+ from pyatv.support.http import HttpConnection, HttpResponse
+ 
+@@ -25,11 +26,14 @@ _AIRPLAY_HEADERS = {
+ }
+ 
+ 
+-def _get_pairing_data(resp: HttpResponse):
++def _get_pairing_data(resp: HttpResponse, setup_step: str = ""):
+     if not isinstance(resp.body, bytes):
+         raise InvalidResponseError(f"got unexpected response: {resp.body}")
+ 
+-    return hap_tlv8.read_tlv(resp.body)
++    data = hap_tlv8.read_tlv(resp.body)
++    if setup_step:
++        check_pairing_error(data, setup_step)
++    return data
+ 
+ 
+ class AirPlayHapPairSetupProcedure(PairSetupProcedure):
+@@ -63,7 +67,7 @@ class AirPlayHapPairSetupProcedure(PairSetupProcedure):
+         resp = await self.http.post(
+             "/pair-setup", body=hap_tlv8.write_tlv(data), headers=self._headers
+         )
+-        pairing_data = _get_pairing_data(resp)
++        pairing_data = _get_pairing_data(resp, "M2")
+ 
+         self._atv_salt = pairing_data[hap_tlv8.TlvValue.Salt]
+         self._atv_pub_key = pairing_data[hap_tlv8.TlvValue.PublicKey]
+@@ -85,10 +89,12 @@ class AirPlayHapPairSetupProcedure(PairSetupProcedure):
+             hap_tlv8.TlvValue.PublicKey: pub_key,
+             hap_tlv8.TlvValue.Proof: proof,
+         }
+-        await self.http.post(
++        resp = await self.http.post(
+             "/pair-setup", body=hap_tlv8.write_tlv(data), headers=self._headers
+         )
+ 
++        _get_pairing_data(resp, "M4")
++
+         data = {
+             hap_tlv8.TlvValue.SeqNo: b"\x05",
+             hap_tlv8.TlvValue.EncryptedData: self.srp.step3(name=display_name),
+@@ -96,7 +102,7 @@ class AirPlayHapPairSetupProcedure(PairSetupProcedure):
+         resp = await self.http.post(
+             "/pair-setup", body=hap_tlv8.write_tlv(data), headers=self._headers
+         )
+-        pairing_data = _get_pairing_data(resp)
++        pairing_data = _get_pairing_data(resp, "M6")
+ 
+         encrypted_data = pairing_data[hap_tlv8.TlvValue.EncryptedData]
+         return self.srp.step4(encrypted_data)
+diff --git a/pyatv/protocols/airplay/auth/hap_transient.py b/pyatv/protocols/airplay/auth/hap_transient.py
+index 635d6d4..ab6a74a 100644
+--- a/pyatv/protocols/airplay/auth/hap_transient.py
++++ b/pyatv/protocols/airplay/auth/hap_transient.py
+@@ -14,7 +14,7 @@ from typing import Any, Dict, Tuple
+ from pyatv.auth import hap_tlv8
+ from pyatv.auth.hap_pairing import PairVerifyProcedure
+ from pyatv.auth.hap_srp import SRPAuthHandler, hkdf_expand
+-from pyatv.exceptions import InvalidResponseError
++from pyatv.exceptions import AuthenticationError, InvalidResponseError
+ from pyatv.support import log_binary
+ from pyatv.support.http import HttpConnection, HttpResponse
+ 
+@@ -30,6 +30,24 @@ _AIRPLAY_HEADERS = {
+ TRANSIENT_PIN = 3939
+ 
+ 
++def check_pairing_error(pairing_data: Dict[Any, bytes], step: str) -> None:
++    """Raise AuthenticationError if a pair-setup response carries an error TLV."""
++    error = pairing_data.get(hap_tlv8.TlvValue.Error)
++    if error is None:
++        return
++
++    code = int.from_bytes(error, byteorder="little")
++    backoff = pairing_data.get(hap_tlv8.TlvValue.BackOff)
++    delay = int.from_bytes(backoff, byteorder="little") if backoff else None
++    message = f"pair-setup {step} rejected by device (error {code}"
++    if delay is not None:
++        message += f", retry after {delay}s"
++    message += ")"
++    if code == hap_tlv8.ErrorCode.Authentication:
++        message += "; the device did not accept the transient pairing proof"
++    raise AuthenticationError(message)
++
++
+ class AirPlayHapTransientPairVerifyProcedure(PairVerifyProcedure):
+     """Verify if a device is allowed to perform AirPlay playback."""
+ 
+@@ -63,6 +81,7 @@ class AirPlayHapTransientPairVerifyProcedure(PairVerifyProcedure):
+             raise InvalidResponseError(f"got unexpected response: {resp.body}")
+ 
+         pairing_data = hap_tlv8.read_tlv(resp.body)
++        check_pairing_error(pairing_data, "M2")
+ 
+         atv_salt = pairing_data[hap_tlv8.TlvValue.Salt]
+         atv_pub_key = pairing_data[hap_tlv8.TlvValue.PublicKey]
+@@ -75,9 +94,16 @@ class AirPlayHapTransientPairVerifyProcedure(PairVerifyProcedure):
+             hap_tlv8.TlvValue.PublicKey: pub_key,
+             hap_tlv8.TlvValue.Proof: proof,
+         }
+-        await self.http.post(
++        resp = await self.http.post(
+             "/pair-setup", body=hap_tlv8.write_tlv(data), headers=_AIRPLAY_HEADERS
+         )
++        if not isinstance(resp.body, bytes):
++            raise InvalidResponseError(f"got unexpected response: {resp.body}")
++
++        # The device answers M3 with 200 OK even when the proof is wrong. Without
++        # this check, encryption would be enabled with keys the device never
++        # derived and the next request (RTSP SETUP) would never be answered.
++        check_pairing_error(hap_tlv8.read_tlv(resp.body), "M4")
+ 
+         return True
+ 
+diff --git a/tests/protocols/airplay/auth/test_hap_transient.py b/tests/protocols/airplay/auth/test_hap_transient.py
+new file mode 100644
+index 0000000..4ba9505
+--- /dev/null
++++ b/tests/protocols/airplay/auth/test_hap_transient.py
+@@ -0,0 +1,79 @@
++"""Unit tests for pyatv.protocols.airplay.auth.hap_transient."""
++
++from unittest.mock import AsyncMock, MagicMock
++
++import pytest
++
++from pyatv.auth import hap_tlv8
++from pyatv.auth.hap_srp import SRPAuthHandler
++from pyatv.exceptions import AuthenticationError
++from pyatv.protocols.airplay.auth.hap_transient import (
++    AirPlayHapTransientPairVerifyProcedure,
++    check_pairing_error,
++)
++from pyatv.support.http import HttpResponse
++
++
++def _response(data):
++    return HttpResponse("HTTP", "1.1", 200, "OK", {}, hap_tlv8.write_tlv(data))
++
++
++def test_check_pairing_error_no_error():
++    check_pairing_error({hap_tlv8.TlvValue.SeqNo: b"\x04"}, "M4")
++
++
++def test_check_pairing_error_authentication_with_backoff():
++    with pytest.raises(AuthenticationError, match="M4.*error 2.*retry after 256s"):
++        check_pairing_error(
++            {
++                hap_tlv8.TlvValue.Error: b"\x02",
++                hap_tlv8.TlvValue.BackOff: b"\x00\x01",
++            },
++            "M4",
++        )
++
++
++@pytest.mark.asyncio
++async def test_transient_verify_raises_on_m4_error():
++    """Device rejects the proof: must not enable crypto."""
++    srp = SRPAuthHandler()
++    m2 = {
++        hap_tlv8.TlvValue.SeqNo: b"\x02",
++        hap_tlv8.TlvValue.Salt: b"\x01" * 16,
++        hap_tlv8.TlvValue.PublicKey: b"\x02" * 384,
++    }
++    m4 = {
++        hap_tlv8.TlvValue.Error: b"\x02",
++        hap_tlv8.TlvValue.SeqNo: b"\x04",
++        hap_tlv8.TlvValue.BackOff: b"\x80",
++    }
++    http = MagicMock()
++    http.post = AsyncMock(
++        side_effect=[
++            HttpResponse("HTTP", "1.1", 200, "OK", {}, b""),
++            _response(m2),
++            _response(m4),
++        ]
++    )
++
++    verifier = AirPlayHapTransientPairVerifyProcedure(http, srp)
++    with pytest.raises(AuthenticationError, match="error 2"):
++        await verifier.verify_credentials()
++
++
++@pytest.mark.asyncio
++async def test_transient_verify_raises_on_m2_backoff():
++    srp = SRPAuthHandler()
++    m2 = {
++        hap_tlv8.TlvValue.Error: b"\x03",
++        hap_tlv8.TlvValue.SeqNo: b"\x02",
++        hap_tlv8.TlvValue.BackOff: b"\x3c",
++    }
++    http = MagicMock()
++    http.post = AsyncMock(
++        side_effect=[HttpResponse("HTTP", "1.1", 200, "OK", {}, b""), _response(m2)]
++    )
++
++    verifier = AirPlayHapTransientPairVerifyProcedure(http, srp)
++    with pytest.raises(AuthenticationError, match="M2.*retry after 60s"):
++        await verifier.verify_credentials()

@@ -1,0 +1,138 @@
+diff --git a/pyatv/__init__.py b/pyatv/__init__.py
+index 1a2adc6..e4f6f5f 100644
+--- a/pyatv/__init__.py
++++ b/pyatv/__init__.py
+@@ -154,7 +154,11 @@ async def connect(  # pylint: disable=too-many-locals
+ 
+         await atv.connect()
+     except Exception:
+-        await session_manager.close()
++        await asyncio.gather(*atv.close(), return_exceptions=True)
++        raise
++    except BaseException:
++        # Don't hold up cancellation, the close tasks finish in the background
++        atv.close()
+         raise
+     return atv
+ 
+diff --git a/pyatv/core/facade.py b/pyatv/core/facade.py
+index f3b77cb..1251267 100644
+--- a/pyatv/core/facade.py
++++ b/pyatv/core/facade.py
+@@ -761,7 +761,14 @@ class FacadeAppleTV(interface.AppleTV):
+                 continue
+ 
+             _LOGGER.debug("Connecting to protocol: %s", setup_data.protocol)
+-            if await setup_data.connect():
++            try:
++                connected = await setup_data.connect()
++            except BaseException:
++                # Also close the failing protocol as it may have opened connections
++                self.close().update(setup_data.close())
++                raise
++
++            if connected:
+                 _LOGGER.debug("Connected to protocol: %s", setup_data.protocol)
+                 self._protocol_handlers[setup_data.protocol] = setup_data
+ 
+diff --git a/tests/core/test_facade.py b/tests/core/test_facade.py
+index 2b01af5..1b9e915 100644
+--- a/tests/core/test_facade.py
++++ b/tests/core/test_facade.py
+@@ -6,7 +6,7 @@ import inspect
+ from ipaddress import IPv4Address
+ import logging
+ import math
+-from typing import Any, Dict, List, Mapping, Set
++from typing import Any, Dict, List, Mapping, Optional, Set
+ from unittest.mock import MagicMock
+ 
+ import pytest
+@@ -76,10 +76,13 @@ class SetupDataGenerator:
+         self.features: set = set(features)
+         self.pending_tasks: set = set()
+         self.connect_succeeded = True
++        self.connect_exception: Optional[BaseException] = None
+         self.device_info = {}
+ 
+     async def connect(self):
+         self.connect_called = True
++        if self.connect_exception:
++            raise self.connect_exception
+         return self.connect_succeeded
+ 
+     def close(self):
+@@ -451,6 +454,30 @@ async def test_close_only_once(facade_dummy, register_interface):
+     assert sdg.close_calls == 1
+ 
+ 
++@pytest.mark.parametrize(
++    "exception", [exceptions.ConnectionFailedError(), asyncio.CancelledError()]
++)
++async def test_connect_failure_closes_protocols(
++    facade_dummy, register_interface, exception
++):
++    _, connected_sdg = register_interface(
++        FeatureName.Play, DummyFeatures(FeatureName.Play), Protocol.DMAP
++    )
++    _, failing_sdg = register_interface(
++        FeatureName.Pause, DummyFeatures(FeatureName.Pause), Protocol.MRP
++    )
++    failing_task = MagicMock()
++    failing_sdg.pending_tasks.add(failing_task)
++    failing_sdg.connect_exception = exception
++
++    with pytest.raises(type(exception)):
++        await facade_dummy.connect()
++
++    assert connected_sdg.close_calls == 1
++    assert failing_sdg.close_calls == 1
++    assert failing_task in facade_dummy.close()
++
++
+ async def test_close_returns_pending_tasks_from_previous_close(
+     facade_dummy, register_interface
+ ):
+diff --git a/tests/test_connect.py b/tests/test_connect.py
+new file mode 100644
+index 0000000..69c23d8
+--- /dev/null
++++ b/tests/test_connect.py
+@@ -0,0 +1,37 @@
++"""Unit tests for pyatv.connect."""
++
++import asyncio
++from ipaddress import IPv4Address
++
++import pytest
++
++from pyatv import connect, exceptions
++from pyatv.conf import AppleTV, ManualService
++from pyatv.const import Protocol
++
++from tests.protocols.mock_protocol import mock_protocol
++
++pytestmark = pytest.mark.asyncio
++
++
++async def test_connect_failure_awaits_protocol_close(session_manager):
++    conf = AppleTV(IPv4Address("127.0.0.1"), "Test")
++    conf.add_service(ManualService("id", Protocol.AirPlay, 7000, {}))
++    close_done = asyncio.Event()
++
++    async def _close_task() -> None:
++        close_done.set()
++
++    with mock_protocol(Protocol.AirPlay) as airplay_mock:
++        airplay_mock.setup_mock.connect.side_effect = exceptions.ConnectionFailedError
++        airplay_mock.setup_mock.close.side_effect = lambda: {
++            asyncio.ensure_future(_close_task())
++        }
++
++        with pytest.raises(exceptions.ConnectionFailedError):
++            await connect(
++                conf, asyncio.get_running_loop(), session=session_manager.session
++            )
++
++    airplay_mock.setup_mock.close.assert_called_once()
++    assert close_done.is_set()

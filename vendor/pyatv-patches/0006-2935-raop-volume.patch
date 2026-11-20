@@ -1,0 +1,101 @@
+diff --git a/pyatv/protocols/companion/__init__.py b/pyatv/protocols/companion/__init__.py
+index f418f23..6aeed92 100644
+--- a/pyatv/protocols/companion/__init__.py
++++ b/pyatv/protocols/companion/__init__.py
+@@ -444,12 +444,13 @@ class CompanionAudio(Audio):
+             self._volume = resp["_c"]["_vol"] * 100.0
+             _LOGGER.debug("Volume changed to %f", self._volume)
+             self._volume_event.set()
++            self.core.state_dispatcher.dispatch(UpdatedState.Volume, self.volume)
+         else:
+-            # No volume control means we know nothing about the volume
++            # No volume control means we know nothing about the volume. Do not
++            # dispatch it, as other protocols (e.g. RAOP) would treat 0.0 as a real
++            # level and mute audio streams.
+             self._volume = 0.0
+ 
+-        self.core.state_dispatcher.dispatch(UpdatedState.Volume, self.volume)
+-
+     @property
+     def volume(self) -> float:
+         """Return current volume level.
+diff --git a/tests/protocols/companion/test_companion_interface.py b/tests/protocols/companion/test_companion_interface.py
+index 84b85dc..a465d33 100644
+--- a/tests/protocols/companion/test_companion_interface.py
++++ b/tests/protocols/companion/test_companion_interface.py
+@@ -1,17 +1,25 @@
+ import asyncio
+ from typing import Any, Mapping, cast
+-from unittest.mock import Mock
++from unittest.mock import AsyncMock, Mock
+ 
+ import pytest
+ 
+ from pyatv.const import KeyboardFocusState
+ from pyatv.core import Core, MessageDispatcher, ProtocolStateDispatcher, UpdatedState
+-from pyatv.protocols.companion import CompanionKeyboard
++from pyatv.protocols.companion import (
++    CompanionAudio,
++    CompanionKeyboard,
++    MediaControlFlags,
++)
+ 
+ pytestmark = pytest.mark.asyncio
+ 
+ 
+ class CompanionApiMock(MessageDispatcher[str, Mapping[str, Any]]):
++    def __init__(self) -> None:
++        super().__init__()
++        self.mediacontrol_command = AsyncMock()
++
+     async def inject(self, event_name: str, data: Mapping[str, Any]) -> None:
+         await asyncio.gather(*self.dispatch(event_name, data))
+ 
+@@ -36,6 +44,13 @@ def audio_fixture(api_mock, companion_state_dispatcher):
+     )
+ 
+ 
++@pytest.fixture(name="audio")
++def companion_audio_fixture(api_mock, companion_state_dispatcher):
++    yield CompanionAudio(
++        api_mock, cast(Core, CompanionCoreMock(companion_state_dispatcher))
++    )
++
++
+ @pytest.mark.parametrize(
+     "event,data,expected_volume",
+     [
+@@ -59,3 +74,33 @@ async def test_keyboard_handle_text_input_dispatches(
+     assert callback.called is True
+     message = callback.call_args.args[0]
+     assert message.value == expected_volume
++
++
++async def test_audio_volume_control_available_dispatches_volume(
++    api_mock, audio, companion_state_dispatcher
++):
++    api_mock.mediacontrol_command.return_value = {"_c": {"_vol": 0.4}}
++    callback = Mock()
++    companion_state_dispatcher.listen_to(UpdatedState.Volume, callback)
++
++    await api_mock.inject("_iMC", {"_mcF": MediaControlFlags.Volume})
++
++    assert audio.volume == 40.0
++    assert callback.called is True
++    assert callback.call_args.args[0].value == 40.0
++
++
++async def test_audio_volume_control_unavailable_does_not_dispatch_volume(
++    api_mock, audio, companion_state_dispatcher
++):
++    callback = Mock()
++    companion_state_dispatcher.listen_to(UpdatedState.Volume, callback)
++
++    # Volume is unknown when volume control is unavailable (e.g. Apple TV where the
++    # TV controls the volume), so 0.0 must not be published as a real volume level.
++    # Other protocols (like RAOP) trust dispatched volume and would mute playback.
++    await api_mock.inject("_iMC", {"_mcF": 0})
++
++    assert audio.volume == 0.0
++    api_mock.mediacontrol_command.assert_not_called()
++    assert callback.called is False

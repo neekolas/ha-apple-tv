@@ -1,0 +1,12 @@
+{
+  "domain": "atv_bridge",
+  "name": "Apple TV Agent Bridge",
+  "codeowners": ["@neekolas"],
+  "config_flow": true,
+  "dependencies": ["http"],
+  "documentation": "https://github.com/neekolas/ha-apple-tv/tree/main/custom_components/atv_bridge",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "0.1.0"
+}

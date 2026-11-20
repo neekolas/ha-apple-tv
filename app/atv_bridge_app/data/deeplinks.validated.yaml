@@ -1,0 +1,1502 @@
+tvos_version: '27.2'
+tvos_build: 24K122
+tested_on: '2026-11-19'
+counts:
+  to verify: 35
+  confirmed: 9
+  skipped: 3
+services:
+- service: ABC News Live
+  bundle_id: com.abcnews.ABCNews
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: On ABC News choose Live. The channel uses a fixed path.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  - Legacy ABC News hostname was refused. The TV stayed on Home.
+  candidate:
+    template: https://abcnews.com/live
+    example: https://abcnews.com/live
+    test_title: ABC News Live
+    region: US
+    route: direct
+    parameters: {}
+    id_recipe: On ABC News choose Live. The channel uses a fixed path.
+- service: ABC
+  bundle_id: com.abcdigital.abc.videoplayer
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Copy the last path segment from the ABC show page.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  - Apple routed the title to Hulu, which displayed playback error P-DEV318. The ABC app did not open.
+  candidate:
+    template: https://abc.com/shows/{id}
+    example: https://abc.com/shows/abbott-elementary
+    test_title: Abbott Elementary
+    region: US
+    route: direct
+    parameters:
+      id: abbott-elementary
+    id_recipe: Copy the last path segment from the ABC show page.
+- service: Bloomberg
+  bundle_id: com.bloomberg.Bloomberg
+  region: US
+  status: confirmed
+  sign_in_status: unknown
+  templates:
+  - template: https://www.bloomberg.com/live/us
+    example: https://www.bloomberg.com/live/us
+    test_title: Bloomberg Television
+    region: US
+    route: direct
+    parameters: {}
+    id_recipe: Open Bloomberg Live, select the US feed and copy the channel path.
+    level: A
+    tool: tv_play
+    validated_at: '2026-11-20T02:25:02+00:00'
+    observations_at_level: 2
+    reviewed_trials: 2
+    evidence:
+    - spikes/deeplinks/out/bloomberg-1.png
+    - spikes/deeplinks/out/bloomberg-2.png
+    mcp_evidence: spikes/deeplinks/out/bloomberg-2.json
+    notes:
+    - Bloomberg opened its Home tab with a tracking-permission prompt. Neither permission option was selected.
+    - Bloomberg opened its Home tab with the current live program. The earlier tracking prompt was absent on this launch.
+  id_recipe: Open Bloomberg Live, select the US feed and copy the channel path.
+  validated_at: '2026-11-20T02:25:02+00:00'
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: true
+    action: No choice recorded. Prompt absent on relaunch.
+    evidence: spikes/deeplinks/out/bloomberg-1.png
+  notes:
+  - Bloomberg opened its Home tab with a tracking-permission prompt. Neither permission option was selected.
+  - Bloomberg opened its Home tab with the current live program. The earlier tracking prompt was absent on this launch.
+- service: CBC News
+  bundle_id: ca.cbc.CBCNews
+  region: CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open The National from CBC News. Copy its section path. CBC Gem is a separate app.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  - Canadian Apple TV URL stopped at Content Unavailable in TV. CBC News was absent.
+  candidate:
+    template: https://www.cbc.ca/news/{id}
+    example: https://www.cbc.ca/news/thenational
+    test_title: The National
+    region: CA
+    route: direct
+    parameters:
+      id: thenational
+    id_recipe: Open The National from CBC News. Copy its section path. CBC Gem is a separate app.
+- service: CNN
+  bundle_id: com.cnn.iphone
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Select Watch Live TV on CNN. Copy the live hub path.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  candidate:
+    template: https://www.cnn.com/live
+    example: https://www.cnn.com/live
+    test_title: CNN Live
+    region: US
+    route: direct
+    parameters: {}
+    id_recipe: Select Watch Live TV on CNN. Copy the live hub path.
+- service: Calm
+  bundle_id: com.calm.calmapp
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open Calm’s Blue Gold article and copy the linked program URL. Keep both the case-sensitive ID and slug.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  candidate:
+    template: https://www.calm.com/program/{id}/{slug}
+    example: https://www.calm.com/program/BVLV98v/blue-gold
+    test_title: Blue Gold
+    region: US/CA
+    route: direct
+    parameters:
+      id: BVLV98v
+      slug: blue-gold
+    id_recipe: Open Calm’s Blue Gold article and copy the linked program URL. Keep both the case-sensitive ID and slug.
+- service: Comedy Central
+  bundle_id: com.mtvn.ccnetwork
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open The Daily Show on Comedy Central and copy the fan-hub slug.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+    handoff_note: Unidentified provider picker with Unknown Error. No profile chosen.
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  - Apple handoff ended at a Who’s Watching picker with an Unknown Error dialog. The provider was unidentified and the requested show
+    never appeared.
+  candidate:
+    template: https://www.cc.com/fan-hub/{id}
+    example: https://www.cc.com/fan-hub/the-daily-show
+    test_title: The Daily Show
+    region: US
+    route: direct
+    parameters:
+      id: the-daily-show
+    id_recipe: Open The Daily Show on Comedy Central and copy the fan-hub slug.
+- service: Crave
+  bundle_id: ca.bellmedia.cravetv
+  region: CA
+  status: skipped
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open the 2013 short on Crave Canada. Copy the entire last segment including the number.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - 'skipped: outside test coverage'
+  skipped: outside test coverage
+- service: Criterion
+  bundle_id: com.criterionchannel
+  region: US/CA
+  status: skipped
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open the film in the Criterion Channel collection and copy both slugs from the video URL.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - 'skipped: outside test coverage'
+  skipped: outside test coverage
+- service: Disney+
+  bundle_id: com.disney.disneyplus
+  region: US/CA
+  status: confirmed
+  sign_in_status: unknown
+  templates:
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    example: https://tv.apple.com/us/show/bluey/umc.cmc.3ez94w3cvm4oeo9rugqsu6dx1?action=play
+    test_title: Bluey
+    region: US
+    route: provider_handoff
+    parameters:
+      region: us
+      kind: show
+      slug: bluey
+      id: umc.cmc.3ez94w3cvm4oeo9rugqsu6dx1
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including its umc.cmc
+      ID, then append the query shown.
+    level: C
+    tool: tv_play
+    validated_at: '2026-11-20T02:00:11+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/disney-2.png
+    mcp_evidence: spikes/deeplinks/out/disney-2.json
+    notes:
+    - Apple handed Bluey to Disney+. Now Playing reported Bluey and the DRM-black image showed its captions.
+  - template: https://www.disneyplus.com/browse/entity-{id}
+    example: https://www.disneyplus.com/browse/entity-fa6973b9-e7cf-49fb-81a2-d4908e4bf694
+    test_title: Bluey
+    region: US/CA
+    route: direct
+    parameters:
+      id: fa6973b9-e7cf-49fb-81a2-d4908e4bf694
+    id_recipe: Copy the UUID after entity- on the Disney+ series page.
+    level: B
+    tool: tv_play
+    validated_at: '2026-11-20T01:59:16+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/disney-1.png
+    mcp_evidence: spikes/deeplinks/out/disney-1.json
+    notes:
+    - Disney+ displayed Bluey with Play, Trailer and its episode list.
+  id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including its umc.cmc
+    ID, then append the query shown.
+  validated_at: '2026-11-20T02:00:11+00:00'
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Disney+ displayed Bluey with Play, Trailer and its episode list.
+  - Apple handed Bluey to Disney+. Now Playing reported Bluey and the DRM-black image showed its captions.
+- service: FOX One
+  bundle_id: com.fox.foxone
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Copy the SER identifier and following slug from the FOX One series page.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  - Apple routed the series to a TV-provider sign-in. No account was selected and FOX One was not foregrounded.
+  candidate:
+    template: https://www.fox.com/detail/series/{id}/{slug}
+    example: https://www.fox.com/detail/series/SER000878XWTP/the-masked-singer
+    test_title: The Masked Singer
+    region: US
+    route: direct
+    parameters:
+      id: SER000878XWTP
+      slug: the-masked-singer
+    id_recipe: Copy the SER identifier and following slug from the FOX One series page.
+- service: FXNOW
+  bundle_id: com.fxnetworks.ios.FXNOW
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including its umc.cmc
+    ID, then append the query shown.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  - The Bear S5 E4 played with captions, but neither MCP nor the image identified the provider. This confirms title playback only.
+  candidate:
+    template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    example: https://tv.apple.com/us/show/the-bear/umc.cmc.javg04xbn3eonbgfvnaqmodk?action=play
+    test_title: The Bear
+    region: US
+    route: provider_handoff
+    parameters:
+      region: us
+      kind: show
+      slug: the-bear
+      id: umc.cmc.javg04xbn3eonbgfvnaqmodk
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including its umc.cmc
+      ID, then append the query shown.
+- service: Fox News
+  bundle_id: com.foxnews.foxnews
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open Watch Live on Fox News and copy the numeric video path for the channel.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  candidate:
+    template: https://www.foxnews.com/video/{id}
+    example: https://www.foxnews.com/video/5614615980001
+    test_title: Fox News Channel
+    region: US
+    route: direct
+    parameters:
+      id: '5614615980001'
+    id_recipe: Open Watch Live on Fox News and copy the numeric video path for the channel.
+- service: Global TV
+  bundle_id: com.canwest.GlobalVideo
+  region: CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open Shows on Global TV Canada and copy the show slug.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  - Apple handed Survivor to a TV-provider sign-in. Global TV did not open.
+  candidate:
+    template: https://www.globaltv.com/shows/{id}/
+    example: https://www.globaltv.com/shows/survivor/
+    test_title: Survivor
+    region: CA
+    route: direct
+    parameters:
+      id: survivor
+    id_recipe: Open Shows on Global TV Canada and copy the show slug.
+- service: HBO Max
+  bundle_id: com.wbd.stream
+  region: US
+  status: confirmed
+  sign_in_status: unknown
+  templates:
+  - template: https://play.hbomax.com/video/watch/{id}
+    example: https://play.hbomax.com/video/watch/e457df99-f817-4646-b64c-8ce7afaeb405
+    test_title: Celebration
+    region: US
+    route: direct
+    parameters:
+      id: e457df99-f817-4646-b64c-8ce7afaeb405
+    id_recipe: Open the HBO Max episode offer and copy the UUID after video/watch/.
+    level: C
+    tool: tv_play
+    validated_at: '2026-11-20T02:12:47+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/max-6.png
+    mcp_evidence: spikes/deeplinks/out/max-6.json
+    notes:
+    - HBO Max played Celebration after profile selection. The episode link worked on relaunch.
+  - template: https://play.hbomax.com/show/{id}
+    example: https://play.hbomax.com/show/a8484031-f244-4661-9fb7-0932bd1ba872
+    test_title: Succession
+    region: US
+    route: direct
+    parameters:
+      id: a8484031-f244-4661-9fb7-0932bd1ba872
+    id_recipe: Copy the UUID after show/ on the HBO Max series page.
+    level: A
+    tool: tv_play
+    validated_at: '2026-11-20T02:06:37+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/max-2.png
+    mcp_evidence: spikes/deeplinks/out/max-2.json
+    notes:
+    - HBO Max displayed its Who’s Watching picker with a profile focused. Succession was not yet visible.
+  id_recipe: Open the HBO Max episode offer and copy the UUID after video/watch/.
+  validated_at: '2026-11-20T02:12:47+00:00'
+  profile_picker:
+    observed: true
+    chosen: null
+    evidence: spikes/deeplinks/out/max-5.png
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the URL. The TV stayed on Home.
+  - HBO Max displayed its Who’s Watching picker with a profile focused. Succession was not yet visible.
+  - Apple handed Succession to a TV-provider sign-in. HBO Max was not observed on this route.
+  - HBO Max played Celebration after profile selection. The episode link worked on relaunch.
+- service: Hulu
+  bundle_id: com.hulu.plus
+  region: US
+  status: confirmed
+  sign_in_status: unknown
+  templates:
+  - template: hulu://series/{id}
+    example: hulu://series/ef31c7e1-cd0f-4e07-848d-1cbfedb50ddf
+    test_title: Only Murders in the Building
+    region: US
+    route: direct
+    parameters:
+      id: ef31c7e1-cd0f-4e07-848d-1cbfedb50ddf
+      slug: only-murders-in-the-building
+    id_recipe: Copy the final UUID and preceding slug from the Hulu series URL.
+    level: B
+    tool: tv_play
+    validated_at: '2026-11-20T02:14:06+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/hulu-2-refresh.png
+    mcp_evidence: spikes/deeplinks/out/hulu-2.json
+    notes:
+    - Confirmed Open in Hulu. The series page offered S1 E1 True Crime in the Only Murders catalog.
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    example: https://tv.apple.com/us/show/only-murders-in-the-building/umc.cmc.7kd9yvyu5ecz1snkt4a35o12g?action=play
+    test_title: Only Murders in the Building
+    region: US
+    route: provider_handoff
+    parameters:
+      region: us
+      kind: show
+      slug: only-murders-in-the-building
+      id: umc.cmc.7kd9yvyu5ecz1snkt4a35o12g
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including its umc.cmc
+      ID, then append the query shown.
+    level: B
+    tool: tv_play
+    validated_at: '2026-11-20T02:15:21+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/hulu-3.png
+    mcp_evidence: spikes/deeplinks/out/hulu-3.json
+    notes:
+    - The Apple TV handoff opened Hulu’s series page with S1 E1 True Crime ready to start.
+  - template: hulu://watch/{id}
+    example: hulu://watch/e2957562-1a0f-49ec-96d4-97aaf3cac2d5
+    test_title: True Crime
+    region: US
+    route: direct
+    parameters:
+      id: e2957562-1a0f-49ec-96d4-97aaf3cac2d5
+    id_recipe: Open Hulu’s episode link from the season listing and copy the UUID after watch/.
+    level: B
+    tool: tv_play
+    validated_at: '2026-11-20T02:16:18+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/hulu-4.png
+    mcp_evidence: spikes/deeplinks/out/hulu-4.json
+    notes:
+    - The Hulu episode URI stopped on the series page. Selecting Start Watching separately played S1 E1 True Crime.
+  id_recipe: Copy the final UUID and preceding slug from the Hulu series URL.
+  validated_at: '2026-11-20T02:14:06+00:00'
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the Hulu website series URL. The TV stayed on Home.
+  - Confirmed Open in Hulu. The series page offered S1 E1 True Crime in the Only Murders catalog.
+  - The Apple TV handoff opened Hulu’s series page with S1 E1 True Crime ready to start.
+  - The Hulu episode URI stopped on the series page. Selecting Start Watching separately played S1 E1 True Crime.
+- service: Instagram
+  bundle_id: com.burbn.instagram
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open the creator profile and copy its handle without the @ prefix.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the creator profile URL. The TV stayed on Home.
+  candidate:
+    template: https://www.instagram.com/{id}/
+    example: https://www.instagram.com/natgeo/
+    test_title: National Geographic
+    region: US
+    route: direct
+    parameters:
+      id: natgeo
+    id_recipe: Open the creator profile and copy its handle without the @ prefix.
+- service: MUBI
+  bundle_id: com.mubi.mubiapp
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Copy the film slug from the US MUBI catalog. Verify the year is 2024.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the MUBI catalog URL. The TV stayed on Home.
+  - The Apple handoff showed a black frame with stale paused metadata. Back revealed Hulu on its previous series page.
+  candidate:
+    template: https://mubi.com/en/us/films/{id}
+    example: https://mubi.com/en/us/films/the-substance
+    test_title: The Substance
+    region: US
+    route: direct
+    parameters:
+      id: the-substance
+    id_recipe: Copy the film slug from the US MUBI catalog. Verify the year is 2024.
+- service: Music
+  bundle_id: com.apple.TVMusic
+  region: US
+  status: confirmed
+  sign_in_status: unknown
+  templates:
+  - template: https://music.apple.com/us/album/{slug}/{id}
+    example: https://music.apple.com/us/album/rumours/594061854
+    test_title: Rumours
+    region: US
+    route: direct
+    parameters:
+      id: '594061854'
+      slug: rumours
+    id_recipe: Share the Fleetwood Mac album in Music and copy the slug and numeric album ID.
+    level: B
+    tool: tv_play
+    validated_at: '2026-11-20T02:20:05+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/music-1.png
+    mcp_evidence: spikes/deeplinks/out/music-1.json
+    notes:
+    - The album URL opened Rumours. Selecting Play separately played Second Hand News at full track length.
+  id_recipe: Share the Fleetwood Mac album in Music and copy the slug and numeric album ID.
+  validated_at: '2026-11-20T02:20:05+00:00'
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - The album URL opened Rumours. Selecting Play separately played Second Hand News at full track length.
+- service: NBC News
+  bundle_id: com.zumobi.msnbc
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Use the fixed Watch tab path in NBC News’s association file.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the NBC News NOW URL. The TV stayed on Home.
+  - Companion refused the association file’s Watch tab URL. The TV stayed on Home.
+  candidate:
+    template: https://www.nbcnews.com/tab/watch
+    example: https://www.nbcnews.com/tab/watch
+    test_title: NBC News NOW
+    region: US
+    route: direct
+    parameters: {}
+    id_recipe: Use the fixed Watch tab path in NBC News’s association file.
+- service: NBC Sports
+  bundle_id: com.nbcuni.com.nbcsports.liveextra
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Choose Premier League under NBC Sports Watch and copy the sports hub slug.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the Premier League hub URL. The TV stayed on Home.
+  candidate:
+    template: https://www.nbcsports.com/watch/{id}
+    example: https://www.nbcsports.com/watch/premier-league
+    test_title: Premier League
+    region: US
+    route: direct
+    parameters:
+      id: premier-league
+    id_recipe: Choose Premier League under NBC Sports Watch and copy the sports hub slug.
+- service: NBC
+  bundle_id: com.nbcuni.nbc.portal
+  region: US
+  status: confirmed
+  sign_in_status: unknown
+  templates:
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    example: https://tv.apple.com/us/show/saturday-night-live/umc.cmc.3p5hey1eeuk85gse9d27zaa5q?action=play
+    test_title: Saturday Night Live
+    region: US
+    route: provider_handoff
+    parameters:
+      region: us
+      kind: show
+      slug: saturday-night-live
+      id: umc.cmc.3p5hey1eeuk85gse9d27zaa5q
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including its umc.cmc
+      ID, then append the query shown.
+    level: C
+    tool: tv_play
+    validated_at: '2026-11-20T02:25:53+00:00'
+    observations_at_level: 1
+    reviewed_trials: 2
+    evidence:
+    - spikes/deeplinks/out/nbc-3.png
+    mcp_evidence: spikes/deeplinks/out/nbc-3.json
+    notes:
+    - The Apple handoff opened NBC’s tracking-permission prompt. Menu did not dismiss it. No privacy choice was made.
+    - Apple handed Saturday Night Live to NBC and playback started. The earlier tracking prompt was absent. Free and account access could
+      not be distinguished.
+  - template: https://www.nbc.com/{id}
+    example: https://www.nbc.com/saturday-night-live
+    test_title: Saturday Night Live
+    region: US
+    route: direct
+    parameters:
+      id: saturday-night-live
+    id_recipe: Choose the series under NBC Shows and copy the first path segment.
+    level: A
+    tool: tv_play
+    validated_at: '2026-11-20T02:22:54+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/nbc-1.png
+    mcp_evidence: spikes/deeplinks/out/nbc-1.json
+    notes:
+    - NBC opened its Shows A–Z directory. The Saturday Night Live title page was absent.
+  - template: nbctve://live/{id}
+    example: nbctve://live/nbc
+    test_title: NBC Live
+    region: US
+    route: direct
+    parameters:
+      id: nbc
+    id_recipe: Copy the network name from NBC’s live channel URL.
+    level: A
+    tool: tv_play
+    validated_at: '2026-11-20T02:27:07+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/nbc-4-step1.png
+    mcp_evidence: spikes/deeplinks/out/nbc-4.json
+    notes:
+    - Confirmed Open in NBC. Live TV requested TV-provider access. Don’t Allow was targeted but focus verification failed,
+      and the TV returned Home.
+  id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including its umc.cmc
+    ID, then append the query shown.
+  validated_at: '2026-11-20T02:25:53+00:00'
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: true
+    action: No choice recorded. Prompt absent on relaunch.
+    evidence: spikes/deeplinks/out/nbc-2.png
+  notes:
+  - NBC opened its Shows A–Z directory. The Saturday Night Live title page was absent.
+  - The Apple handoff opened NBC’s tracking-permission prompt. Menu did not dismiss it. No privacy choice was made.
+  - Apple handed Saturday Night Live to NBC and playback started. The earlier tracking prompt was absent. Free and account access could
+    not be distinguished.
+  - Confirmed Open in NBC. Live TV requested TV-provider access. Don’t Allow was targeted but focus verification failed,
+    and the TV returned Home.
+- service: NFL
+  bundle_id: com.nfl.gamecenter
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Choose NFL Network on NFL.com and copy the channel path.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the NFL Network page. The TV stayed on Home.
+  - Companion refused the NFL clip URL. The TV stayed on Home.
+  - Companion refused the nflmobile live scheme. The TV stayed on Home.
+  candidate:
+    template: https://www.nfl.com/network
+    example: https://www.nfl.com/network
+    test_title: NFL Network
+    region: US
+    route: direct
+    parameters: {}
+    id_recipe: Choose NFL Network on NFL.com and copy the channel path.
+- service: Netflix
+  bundle_id: com.netflix.Netflix
+  region: US/CA
+  status: confirmed
+  sign_in_status: unknown
+  templates:
+  - template: nflx://www.netflix.com/title/{id}
+    example: nflx://www.netflix.com/title/80057281
+    test_title: Stranger Things
+    region: US/CA
+    route: direct
+    parameters:
+      id: '80057281'
+    id_recipe: Search Netflix for the show and copy the digits after title/ from its share link.
+    level: A
+    tool: tv_play
+    validated_at: '2026-11-20T02:30:28+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/netflix-2-step2.png
+    mcp_evidence: spikes/deeplinks/out/netflix-2.json
+    notes:
+    - Confirmed Open in Netflix and chose a profile. Netflix opened Home with a different featured series.
+  id_recipe: Search Netflix for the show and copy the digits after title/ from its share link.
+  validated_at: '2026-11-20T02:30:28+00:00'
+  profile_picker:
+    observed: true
+    chosen: null
+    evidence: spikes/deeplinks/out/netflix-2-step1.png
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Bridge reported tv_unreachable during launch. Home remained visible. Retry this candidate.
+  - Confirmed Open in Netflix and chose a profile. Netflix opened Home with a different featured series.
+- service: Paramount+
+  bundle_id: com.cbsvideo.app
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open the show on Paramount+ and copy its shows/ slug.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused the Paramount+ show URL. The TV stayed on Home.
+  - S1 E1 played in Apple TV. The standalone Paramount+ app was not observed.
+  - Companion refused the Paramount+ episode URL. The TV stayed on Home.
+  candidate:
+    template: https://www.paramountplus.com/shows/{id}/
+    example: https://www.paramountplus.com/shows/star-trek-strange-new-worlds/
+    test_title: 'Star Trek: Strange New Worlds'
+    region: US
+    route: direct
+    parameters:
+      id: star-trek-strange-new-worlds
+    id_recipe: Open the show on Paramount+ and copy its shows/ slug.
+- service: Peacock
+  bundle_id: com.peacocktv.peacock
+  region: US
+  status: confirmed
+  sign_in_status: unknown
+  templates:
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    example: https://tv.apple.com/us/show/the-office/umc.cmc.455js879szmdywutf3qjewagm?action=play
+    test_title: The Office
+    region: US
+    route: provider_handoff
+    parameters:
+      region: us
+      kind: show
+      slug: the-office
+      id: umc.cmc.455js879szmdywutf3qjewagm
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including its umc.cmc
+      ID, then append the query shown.
+    level: B
+    tool: tv_play
+    validated_at: '2026-11-20T02:34:08+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/peacock-2-refresh.png
+    mcp_evidence: spikes/deeplinks/out/peacock-2.json
+    notes:
+    - Apple TV required Open In. Chose a profile in Peacock and found The Office S9 E3 on its episode page.
+  - template: https://www.peacocktv.com/watch/asset/tv/{slug}/{id}
+    example: https://www.peacocktv.com/watch/asset/tv/the-office/4902514835143843112
+    test_title: The Office
+    region: US
+    route: direct
+    parameters:
+      slug: the-office
+      id: '4902514835143843112'
+    id_recipe: Select the US 2005 series in JustWatch, open the Peacock offer, copy the slug and series ID before /seasons/.
+    level: A
+    tool: tv_play
+    validated_at: '2026-11-20T02:35:58+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/peacock-3.png
+    mcp_evidence: spikes/deeplinks/out/peacock-3.json
+    notes:
+    - Peacock opened its Home shelf instead of The Office.
+  - template: https://www.peacocktv.com/watch/asset/tv/{episode_path}
+    example: https://www.peacocktv.com/watch/asset/tv/the-office/4902514835143843112/seasons/1/episodes/pilot-episode-1/58fabbf4-9291-3575-bcdc-bd25eee192c8
+    test_title: Pilot
+    region: US
+    route: direct
+    parameters:
+      episode_path: the-office/4902514835143843112/seasons/1/episodes/pilot-episode-1/58fabbf4-9291-3575-bcdc-bd25eee192c8
+    id_recipe: Open JustWatch’s Peacock offer for the US pilot. Copy the whole path after /asset/tv/.
+    level: A
+    tool: tv_play
+    validated_at: '2026-11-20T02:37:26+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/peacock-4.png
+    mcp_evidence: spikes/deeplinks/out/peacock-4.json
+    notes:
+    - The episode asset opened the Peacock Home carousel.
+  id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including its umc.cmc
+    ID, then append the query shown.
+  validated_at: '2026-11-20T02:34:08+00:00'
+  profile_picker:
+    observed: true
+    chosen: null
+    evidence: spikes/deeplinks/out/peacock-2-step1.png
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - Companion refused Peacock’s marketing URL. The TV stayed on Home.
+  - Apple TV required Open In. Chose a profile in Peacock and found The Office S9 E3 on its episode page.
+  - Peacock opened its Home shelf instead of The Office.
+  - The episode asset opened the Peacock Home carousel.
+- service: Podcasts
+  bundle_id: com.apple.podcasts
+  region: US
+  status: confirmed
+  sign_in_status: unknown
+  templates:
+  - template: https://podcasts.apple.com/us/podcast/{slug}/id{id}
+    example: https://podcasts.apple.com/us/podcast/planet-money/id290783428
+    test_title: Planet Money
+    region: US
+    route: direct
+    parameters:
+      id: '290783428'
+      slug: planet-money
+    id_recipe: Share the NPR show in Podcasts and copy the slug and digits following id.
+    level: A
+    tool: tv_play
+    validated_at: '2026-11-20T02:38:28+00:00'
+    observations_at_level: 1
+    reviewed_trials: 1
+    evidence:
+    - spikes/deeplinks/out/podcasts-1.png
+    mcp_evidence: spikes/deeplinks/out/podcasts-1.json
+    notes:
+    - The Planet Money URL opened the Apple Podcasts welcome screen. The run ended before Continue was selected.
+  id_recipe: Share the NPR show in Podcasts and copy the slug and digits following id.
+  validated_at: '2026-11-20T02:38:28+00:00'
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - The Planet Money URL opened the Apple Podcasts welcome screen. The run ended before Continue was selected.
+- service: Prime Video
+  bundle_id: com.amazon.aiv.AIVApp
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Copy the season detail ID from Prime Video. Keep the leading zero.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://www.primevideo.com/detail/{id}
+    example: https://www.primevideo.com/detail/0S1FYJ3LY9KTL9C7WFFAGA9F6F
+    test_title: The Boys
+    region: US/CA
+    route: direct
+    parameters:
+      id: 0S1FYJ3LY9KTL9C7WFFAGA9F6F
+    id_recipe: Copy the season detail ID from Prime Video. Keep the leading zero.
+- service: Spectrum TV
+  bundle_id: com.timewarnercable.simulcast
+  region: US
+  status: skipped
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Choose Live TV in Spectrum Watch. This hub uses a fixed path.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - 'skipped: outside test coverage'
+  skipped: outside test coverage
+- service: Spotify
+  bundle_id: com.spotify.client
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Use Share → Copy album link on Fleetwood Mac’s Rumours and copy the base62 segment after album/.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: spotify:?uri=spotify:album:{id}&play=true
+    example: spotify:?uri=spotify:album:1bt6q2SruMsBtcerNVtpZB&play=true
+    test_title: Rumours
+    region: US/CA
+    route: direct
+    parameters:
+      id: 1bt6q2SruMsBtcerNVtpZB
+    id_recipe: Use Share → Copy album link on Fleetwood Mac’s Rumours and copy the base62 segment after album/.
+- service: Sundance Now
+  bundle_id: com.sundancenow.docclub
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open season 1 in the Sundance Now catalog and copy the slug and season identifier.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://www.sundancenow.com/series/watch/{slug}/{id}
+    example: https://www.sundancenow.com/series/watch/a-discovery-of-witches/4680272
+    test_title: A Discovery of Witches
+    region: US
+    route: direct
+    parameters:
+      id: '4680272'
+      slug: a-discovery-of-witches
+    id_recipe: Open season 1 in the Sundance Now catalog and copy the slug and season identifier.
+- service: TV (Apple TV app)
+  bundle_id: com.apple.TVWatchList
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Share the show from the US Apple TV storefront and copy the slug and full umc.cmc identifier.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://tv.apple.com/us/show/{slug}/{id}?action=play
+    example: https://tv.apple.com/us/show/ted-lasso/umc.cmc.vtoh0mn0xn7t3c643xqonfzy?action=play
+    test_title: Ted Lasso
+    region: US
+    route: direct
+    parameters:
+      id: umc.cmc.vtoh0mn0xn7t3c643xqonfzy
+      slug: ted-lasso
+    id_recipe: Share the show from the US Apple TV storefront and copy the slug and full umc.cmc identifier.
+- service: VLC
+  bundle_id: org.videolan.vlc-ios
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Prefix the complete receiver-accessible media URL with vlc://. Preserve its https://.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: vlc://{id}
+    example: vlc://https://media.w3.org/2010/05/bunny/trailer.mp4
+    test_title: Big Buck Bunny trailer
+    region: US/CA
+    route: direct
+    parameters:
+      id: https://media.w3.org/2010/05/bunny/trailer.mp4
+    id_recipe: Prefix the complete receiver-accessible media URL with vlc://. Preserve its https://.
+- service: Vevo
+  bundle_id: com.vevo.iphone
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Open Where to Watch on Vevo. This directory has no individual video ID.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://www.hq.vevo.com/watch
+    example: https://www.hq.vevo.com/watch
+    test_title: Vevo
+    region: US
+    route: direct
+    parameters: {}
+    id_recipe: Open Where to Watch on Vevo. This directory has no individual video ID.
+- service: Vimeo
+  bundle_id: com.vimeo
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Share Terje Sørgjerd’s film on Vimeo and copy the numeric video ID.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://vimeo.com/{id}
+    example: https://vimeo.com/22439234
+    test_title: The Mountain
+    region: US/CA
+    route: direct
+    parameters:
+      id: '22439234'
+    id_recipe: Share Terje Sørgjerd’s film on Vimeo and copy the numeric video ID.
+- service: YouTube Kids
+  bundle_id: com.google.ios.youtubekids
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Copy the v parameter for Pinkfong’s original Baby Shark Dance. Kids availability depends on the age filter.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://www.youtubekids.com/watch?v={id}
+    example: https://www.youtubekids.com/watch?v=XqZsoesa55w
+    test_title: Baby Shark Dance
+    region: US/CA
+    route: direct
+    parameters:
+      id: XqZsoesa55w
+    id_recipe: Copy the v parameter for Pinkfong’s original Baby Shark Dance. Kids availability depends on the age filter.
+- service: YouTube
+  bundle_id: com.google.ios.youtube
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Copy the 11-character v parameter or youtu.be path from jawed’s video.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://www.youtube.com/watch?v={id}
+    example: https://www.youtube.com/watch?v=jNQXAC9IVRw
+    test_title: Me at the zoo
+    region: US/CA
+    route: direct
+    parameters:
+      id: jNQXAC9IVRw
+    id_recipe: Copy the 11-character v parameter or youtu.be path from jawed’s video.
+- service: Fitness
+  bundle_id: com.apple.Fitness
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Share the workout in Fitness+ and copy its slug and numeric workout ID.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://fitness.apple.com/us/workout/{slug}/{id}
+    example: https://fitness.apple.com/us/workout/yoga-with-jessica/1595101770
+    test_title: Yoga with Jessica
+    region: US
+    route: direct
+    parameters:
+      id: '1595101770'
+      slug: yoga-with-jessica
+    id_recipe: Share the workout in Fitness+ and copy its slug and numeric workout ID.
+- service: Photos
+  bundle_id: com.apple.TVPhotos
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Personal photo links require a share URL.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - No public content URL identified. The bundle ID provides an app-launch fallback.
+  candidate: null
+  app_launch_fallback:
+    tool: tv_open
+    args:
+      app: com.apple.TVPhotos
+- service: Arcade
+  bundle_id: com.apple.Arcade
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: The public catalog links to game App Store pages. No Arcade content URL identified.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - No public content URL identified. The bundle ID provides an app-launch fallback.
+  candidate: null
+  app_launch_fallback:
+    tool: tv_open
+    args:
+      app: com.apple.Arcade
+- service: Kanto
+  bundle_id: com.karaoke.karaokesmart
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Use the fixed /openApp path from Kanto’s association file to request its home screen.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://kanto.co/openApp
+    example: https://kanto.co/openApp
+    test_title: Kanto
+    region: US/CA
+    route: direct
+    parameters: {}
+    id_recipe: Use the fixed /openApp path from Kanto’s association file to request its home screen.
+- service: Smule
+  bundle_id: com.smule.sing
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Copy the recording’s slug and combined performer_recording ID from the shared performance.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes: []
+  candidate:
+    template: https://www.smule.com/recording/{slug}/{id}
+    example: https://www.smule.com/recording/rhapsody-bohemian-rhapsody-bohemian/2476974843_3717818605
+    test_title: Bohemian Rhapsody
+    region: US/CA
+    route: direct
+    parameters:
+      slug: rhapsody-bohemian-rhapsody-bohemian
+      id: '2476974843_3717818605'
+    id_recipe: Copy the recording’s slug and combined performer_recording ID from the shared performance.
+- service: Jeopardy
+  bundle_id: com.frostypop.jeopardy
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: No public TV game-session link identified.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - No public content URL identified. The bundle ID provides an app-launch fallback.
+  candidate: null
+  app_launch_fallback:
+    tool: tv_open
+    args:
+      app: com.frostypop.jeopardy
+- service: Family Feud
+  bundle_id: com.gameloft.ffp
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: No public TV game-session link identified.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - No public content URL identified. The bundle ID provides an app-launch fallback.
+  candidate: null
+  app_launch_fallback:
+    tool: tv_open
+    args:
+      app: com.gameloft.ffp
+- service: VIFF Connect
+  bundle_id: com.cinesend.viff
+  region: CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Find the festival film on VIFF and use its screening access link. No public TV title link was found for an active screening.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - No public content URL identified. The bundle ID provides an app-launch fallback.
+  candidate: null
+  app_launch_fallback:
+    tool: tv_open
+    args:
+      app: com.cinesend.viff
+- service: Stellar
+  bundle_id: com.stellartix
+  region: US
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Stellar’s Your Tickets page opens the purchased event. A valid ticket or watch ID is required.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - No public content URL identified. The bundle ID provides an app-launch fallback.
+  candidate: null
+  app_launch_fallback:
+    tool: tv_open
+    args:
+      app: com.stellartix
+- service: Computers
+  bundle_id: com.apple.TVHomeSharing
+  region: US/CA
+  status: to verify
+  sign_in_status: unknown
+  templates: []
+  id_recipe: Choose a title from a Home Sharing library. This route requires a library asset ID.
+  validated_at: null
+  profile_picker:
+    observed: null
+    chosen: null
+    evidence: null
+  tracking_prompt:
+    observed: null
+    action: null
+    evidence: null
+  notes:
+  - No public content URL identified. The bundle ID provides an app-launch fallback.
+  candidate: null
+  app_launch_fallback:
+    tool: tv_open
+    args:
+      app: com.apple.TVHomeSharing

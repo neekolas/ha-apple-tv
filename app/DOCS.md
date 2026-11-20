@@ -1,0 +1,125 @@
+# Apple TV Agent Bridge
+
+The bridge lets Home Assistant control Apple TVs by room, capture their screens and show web pages with audio. Agents use Home Assistant's authenticated endpoints.
+
+## Install on Home Assistant OS
+
+Use an Apple TV on tvOS 27 or later and a Home Assistant OS host on the same LAN. The app supports aarch64 and amd64. Testing included tvOS 27.2 (24K122) on AppleTV11,1. tvOS 27 or later is recommended and tested. tvOS 26.6 also works but is less tested (pairing, control and screen reading worked on an Apple TV 4K 1st generation). You do not need an Apple Developer account.
+
+On a workstation with this checkout, install `uv`, `rsync` and OpenSSH. In your HA administrator profile, create a long-lived access token under **Security**. Save it as one line in `~/.config/atv-bridge/ha_token` and set the file mode to `600`. Set `HA_URL` to the origin you use to reach HA, including its port. The workstation must also be able to reach SSH and port 8766 on that host.
+
+From the repository root, run these commands in order. `push-app` stages the fork, installs or rebuilds the app, starts it and checks its watchdog. `push-integration` replaces the integration files and restarts HA Core.
+
+```sh
+export HA_URL='http://<ha-host>:8123'  # Replace with your HA origin.
+uv run tools/deploy/deploy.py --url "$HA_URL" check
+uv run tools/deploy/deploy.py --url "$HA_URL" ssh-setup
+uv run tools/deploy/deploy.py --url "$HA_URL" push-app
+uv run tools/deploy/deploy.py --url "$HA_URL" push-integration
+```
+
+If the discovery prompt is missing after the Core restart, run `uv run tools/deploy/deploy.py --url "$HA_URL" restart-app` to announce the app again. [Deployment details](../docs/deploy.md)
+
+## Pair a receiver
+
+1. Leave **apple_tv_host** empty for automatic discovery, or enter a fixed IPv4 address if you use a DHCP reservation. Existing configured addresses continue to work.
+2. If you are replacing a built-in Apple TV entry, disable that receiver’s old entry in **Settings → Devices & services** when you switch to the bridge.
+3. Enable AirPlay on the TV. Under **Settings → AirPlay and Apple Home → Allow Access**, select **Anyone on the Same Network**.
+4. Start the app. With the companion custom integration installed, open **Settings → Devices & services** and configure the discovered Apple TV Agent Bridge.
+5. In discovery mode, select your Apple TV by name and address. Enter the four-digit AirPlay PIN shown on that TV. The bridge derives Companion, RAOP and tvpipe credentials from this pairing. If Companion needs its own pairing, complete the second PIN prompt in Home Assistant.
+6. For accessibility reads and screenshots, open **Settings → Remotes and Devices → Remote App and Devices** on the Apple TV, then enter the six-digit Remote Pairing PIN in Home Assistant. On tvOS 27.2 the observer uses a userspace tunnel and can capture screenshots without a developer disk image.
+
+The controller sends the name **Agent Bridge** during pairing and control. The app preserves its signing key and controller ID across updates. Keep the app data when updating. Use the integration's configuration flow to pair again after removing a controller on the TV. The **log_level** option accepts `debug`, `info`, `warning` and `error`.
+
+Both **apple_tv_host** and **apple_tv_id** default to empty. Pairing saves the selected TV’s stable identifier, advertised identifiers, name, model and last known IPv4 address in app data. You can also set **apple_tv_id** to an advertised identifier before pairing. Leave it empty to use the saved selection.
+
+The bridge tries the configured address first, then the last known address, then Bonjour. If the TV changes all advertised identifiers, the bridge can use a unique exact name match and logs a warning. After authentication, it remembers the new identifiers and address. `tv_status` reports the address and its source. An informational `address_changed` problem shows the previous and new addresses.
+
+## Multiple TVs
+
+Use **Add Apple TV** on the existing HA entry. Pick the room and enter its control PIN. Choose **Skip screen pairing** to finish with control only, or enter the screen PIN for accessibility and screenshots. Each room gets a device and entities. Use **Configure** to pair the screen later or repair either pairing. Removing a room’s HA subentry, or removing its last configured address or ID from the app options and restarting the app, erases the bridge’s saved state for that room. Adding it again requires pairing.
+
+The `apple_tvs` option accepts a list with optional `name`, `host` (IPv4), and `id` (advertised identifier). Supply at least one field per row. With an empty list, HA lets you choose discovered receivers. Existing `apple_tv_host` and `apple_tv_id` options still work. The app migrates a single-TV installation automatically and backs up its previous records before using them.
+
+Every tool accepts `tv`, for example `tv_look {"tv":"<room>"}`. Read `tv://tvs` for room names and stable IDs. If several TVs are paired, specify the room for changes or read their summaries with `tv_status {}`. Use `tv://screen/<id>` and `tv://apps/<id>` for room-specific resources.
+
+`max_active_mirrors` defaults to one. If another room holds the slot, `tv_show` reports `mirror_busy` and identifies that room. Pass `replace: true` to stop its presentation. The holder list is in `data.holders`. Each receiver uses a separate stage origin. Each additional renderer uses a private loopback port. Apple TVs fetch bridge-generated MP4s from LAN port 8766. Uploaded bundles share one cache.
+
+## Using the bridge
+
+Configure Streamable HTTP at `${HA_URL}/api/atv_bridge/mcp`. Send the HA admin token in the `Authorization: Bearer <token>` header. Scripts can send tool arguments as a JSON body. This read-only check also works before choosing a room.
+
+```sh
+curl -fsS -H "Authorization: Bearer $(cat ~/.config/atv-bridge/ha_token)" \
+  -H 'Content-Type: application/json' -d '{}' "$HA_URL/api/atv_bridge/tool/tv_status"
+```
+
+With several paired TVs, use `data.tvs[].status` for each receiver’s pairing and capability report. Add `"tv":"<room>"` to the examples below to target a receiver. Replace `<room>` with a name or ID from `tv://tvs`.
+
+| Intent | Example |
+| --- | --- |
+| Check health and pairings | `tv_status {}` |
+| Show a page or update it | `tv_show {"html":"<h1>Step 1</h1><script>tv.on('update', d => document.querySelector('h1').textContent = d.title)</script>"}`, then `tv_update {"data":{"title":"Step 2"}}` |
+| Play media | `tv_play {"youtube":"jNQXAC9IVRw"}`, `tv_play {"media":"https://example.org/clip.mp4"}`, or `tv_play {"app":"HBO Max","title":"Succession"}` |
+| Open an app | `tv_open {"app":"Settings","path":["Remotes and Devices"]}` |
+| Read labels or inspect an image | `tv_look {}` or `tv_look {"image":true}` |
+| Move focus | `tv_navigate {"to":"Search","select":true}` |
+| Send remote input | `tv_remote {"keys":["down","select"]}` or `tv_remote {"text":"Succession","submit":true}` |
+| Switch off | `tv_power {"on":false}` |
+
+Control and presentation tools check power and wake the TV when needed. `screen.app.source` identifies accessibility observations and now-playing fallbacks. Playback metadata stays in `screen.playing` when another app has focus. Read `screen` and `verified` before choosing the next action. Text observations read the foreground app’s native accessibility tree without moving the inspector or scrolling the TV. Some apps expose few labels. During a menu transition, focus can briefly be null. Read again before sending another key. Request an image only on the intended TV. Capturing it can show a **Screenshot Taken** toast. The bridge sets `data.toast_visible` to `true` for a successful capture. `max_width` accepts 1–4096 pixels and defaults to 1280. DRM-protected video can appear black.
+
+Use `tv://apps` for installed names and IDs, `tv://screen` for the latest text observation and `tv://page-guide` for page authoring. The `present` prompt accepts a topic and provides an HTML scaffold.
+
+### Presenting pages
+
+Pass one of `url`, `html`, `files` or `bundle` to `tv_show`. Inline files need an `index.html` entry and relative asset paths. Prefix binary contents with `base64:`. For larger pages, POST a ZIP with `index.html` at its root to `/api/atv_bridge/bundle` and pass the returned `bundle`. The ZIP and its unpacked contents each have a 50 MiB limit. A ZIP may contain up to 8,192 entries. Stored pages share a 500 MiB cache.
+
+For a live web app, keep its server running and pass its URL. Chromium on the Green loads the site, including its JavaScript, fetch requests and WebSockets. For a server on your own machine, share it with `tailscale serve`. Enable kernel networking in the HA Tailscale app. If HA cannot resolve MagicDNS names, record the existing upstream servers with `ha dns info` before running `ha dns options --servers dns://100.100.100.100`. That command replaces the Supervisor DNS server list. For LAN URLs, Tailscale is optional. The bridge checks tailnet DNS in `tv_status` even before a page is shown. The `tailnet_dns_missing` problem includes the HA DNS command. For each live URL, the bridge probes the server and checks the loaded Chromium document. A `page_unreachable` result includes the network error and a suggested fix. A site that refuses framing opens in the captured tab. The next show returns to the stage.
+
+HTML pages and bundles receive the helper automatically. To use it on a live site, include `<script src="http://127.0.0.1:8766/tv.js"></script>` in the page and allow this script in its content security policy.
+
+```js
+tv.on("update", data => {
+  document.querySelector("h1").textContent = data.title;
+  tv.state = {title: data.title};
+});
+tv.ready();
+```
+
+A plain `message` event also carries the update in `event.data`. Use the 1920×1080 canvas and body text of at least 28 px. Audio plays by default. Set `audio` to `mute` for silence. `keep_awake` defaults to true and requests a browser screen wake lock. Dismiss the page with `tv_show {}`. The `tv_hide` alias is accepted but omitted from `tools/list`. For a specific room use `tv_show {"tv":"<room>"}`.
+
+### Presentation mode
+
+Set `presentation_mode` in the app options.
+
+| Mode | Behavior |
+| --- | --- |
+| `mirror` (default) | Streams the live Chromium tab with page audio. |
+| `play_url` | Records the stage as an H.264/AAC MP4 and plays it over AirPlay. Requires an image built with the repository’s pyatv fork. |
+| `auto` | Tries mirroring twice. After two failed starts it uses MP4 until you hide the page. |
+
+Mirroring defaults to a 1920×1080 canvas at 10 fps and 4000 kbps. Set `mirror_size` to `1280x720` or `1920x1080`, and `mirror_fps` to 1–60. The 720p setting uses 2500 kbps.
+
+Live URLs always use mirroring. For recorded presentations, `tv_show` reports `data.transport` equal to `"video"` and may return `verified: false` while the clip is rendering. Static pages use a still frame for the duration of their audio, or 60 seconds without a finite audio track. Animated pages and page audio take time to record before playback begins. The clip loops while shown. If the TV closes the AirPlay session early, the bridge reopens it near the last playback position. Sending page data records a new clip.
+
+For `tv_play {"media":"https://example.org/clip.mp4"}`, replace the example URL with an HTTP or HTTPS media URL the Apple TV can fetch. Normal EOF finishes playback. The bridge can make up to two further playback attempts, using the observed or estimated position.
+
+## Interpreting results
+
+- `uncertain` means delivery or playback could not be confirmed. Read the screen before another press.
+- There is no purchase guard. If an agent needs approval for a paid action, it must get it before sending input.
+- `not_paired` and `pairing_removed` call for control pairing. Use `tv_pair` or the HA pairing flow. For `access_blocked`, check the TV’s Allow Access settings.
+- `tv_unreachable` means the wake or connection attempt failed. Wake the TV, check the network and check **apple_tv_host** if set.
+- `screen_unavailable` means an accessibility read or screenshot failed. Check Remote Pairing.
+- `busy` means another call held the TV for 10 seconds. Retry after it finishes.
+
+Port 8765 accepts authenticated requests from loopback. Port 8766 serves the watchdog and page or media assets on the LAN. Treat hosted page and media content as visible to devices on that network.
+
+## Pair from a phone or the Apple TV Bridge panel
+
+Open the app's **Open Web UI** in Home Assistant. Choose the room and **Pair control** or **Pair screen**. Enter the displayed code with its leading zeros. The panel updates while pairing and lets you cancel a pending exchange.
+
+To receive a phone prompt when a saved pairing becomes invalid, open the integration's **Configure → Pairing notifications** and select a Companion app phone. Reply to the notification with the digits shown on that TV. The phone receives the result of the exchange. An agent can start with `tv_pair {"tv":"<room>","kind":"screen","notify":true}`. For a control exchange, use `"kind":"control"`. Relay `data.ask_user`. If the state is `waiting_for_pairing_screen`, open **Remote App and Devices** on the TV and poll with the returned `pairing_id`. At `code_on_screen`, call again with the same TV, kind and pairing ID plus `code` as a string. Preserve leading zeros. Control takes four digits and screen takes six. Use `cancel: true` with the same TV, kind and pairing ID to cancel. For a control exchange with working screen pairing, `read_code_from_screen: true` can read an unambiguous AirPlay code from accessibility labels. [Companion app actionable notifications](https://companion.home-assistant.io/docs/notifications/actionable-notifications/)
+
+Set `default_profile` to the preferred tvOS profile and `app_profile` to an in-app profile name. With neither set, the bridge uses the focused tvOS profile and prefers that name in apps. It selects a Kids profile only when it is the sole profile. The bridge chooses accessible privacy-preserving first-run actions and reports those choices in tool evidence.

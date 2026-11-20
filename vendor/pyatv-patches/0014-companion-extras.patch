@@ -1,0 +1,473 @@
+diff --git a/pyatv/core/protocol.py b/pyatv/core/protocol.py
+index 5371b60..c6d2a3d 100644
+--- a/pyatv/core/protocol.py
++++ b/pyatv/core/protocol.py
+@@ -90,9 +90,19 @@ class MessageDispatcher(Generic[DispatchType, DispatchMessage]):
+         dispatch_type: DispatchType,
+         func: DispatchFunc,
+         message_filter: DispatchFilterFunc = _no_filter,
+-    ) -> None:
+-        """Listen to a specific type of message type."""
+-        self.__listeners.setdefault(dispatch_type, []).append((message_filter, func))
++    ) -> Callable[[], None]:
++        """Listen to matching messages and return a callback to remove the listener."""
++        listeners = self.__listeners.setdefault(dispatch_type, [])
++        entry = (message_filter, func)
++        listeners.append(entry)
++
++        def remove() -> None:
++            if entry in listeners:
++                listeners.remove(entry)
++            if not listeners and self.__listeners.get(dispatch_type) is listeners:
++                del self.__listeners[dispatch_type]
++
++        return remove
+ 
+     def dispatch(
+         self, dispatch_type: DispatchType, message: DispatchMessage
+diff --git a/pyatv/protocols/companion/api.py b/pyatv/protocols/companion/api.py
+index 83889d6..6722bea 100644
+--- a/pyatv/protocols/companion/api.py
++++ b/pyatv/protocols/companion/api.py
+@@ -5,7 +5,7 @@ from enum import Enum
+ import logging
+ from random import randint
+ import time
+-from typing import Any, Dict, List, Mapping, Optional, cast
++from typing import Any, Dict, Mapping, Optional, cast
+ 
+ from pyatv import exceptions
+ from pyatv.auth.hap_pairing import parse_credentials
+@@ -102,7 +102,7 @@ class CompanionAPI(
+         self.core = core
+         self._connection: Optional[CompanionConnection] = None
+         self._protocol: Optional[CompanionProtocol] = None
+-        self._subscribed_events: List[str] = []
++        self._subscribed_events: Dict[str, int] = {}
+         self.sid: int = 0
+         self._base_timestamp = time.time_ns()
+ 
+@@ -112,7 +112,10 @@ class CompanionAPI(
+             return
+ 
+         try:
++            if not self._connection or not self._connection.connected:
++                return
+             for event in list(self._subscribed_events):
++                self._subscribed_events[event] = 1
+                 await self.unsubscribe_event(event)
+ 
+             # Sometimes unsubscribe fails for an unknown reason, but we are no
+@@ -124,6 +127,7 @@ class CompanionAPI(
+         except Exception as ex:
+             _LOGGER.debug("Ignoring error during disconnect: %s", ex)
+         finally:
++            self._subscribed_events.clear()
+             self._protocol.stop()
+             self._protocol = None
+ 
+@@ -164,6 +168,8 @@ class CompanionAPI(
+         identifier: str,
+         content: Dict[str, object],
+         message_type: MessageType = MessageType.Request,
++        *,
++        low_priority: bool = False,
+     ) -> Mapping[str, Any]:
+         """Send a command to the device and return response."""
+         await self.connect()
+@@ -174,6 +180,7 @@ class CompanionAPI(
+             resp = await self._protocol.exchange_opack(
+                 FrameType.E_OPACK,
+                 {
++                    **({"_btHP": False} if low_priority else {}),
+                     "_i": identifier,
+                     "_t": message_type.value,
+                     "_c": content,
+@@ -269,13 +276,16 @@ class CompanionAPI(
+         """Subscribe to updates to an event."""
+         if event not in self._subscribed_events:
+             await self._send_event("_interest", {"_regEvents": [event]})
+-            self._subscribed_events.append(event)
++        self._subscribed_events[event] = self._subscribed_events.get(event, 0) + 1
+ 
+     async def unsubscribe_event(self, event: str) -> None:
+         """Subscribe to updates to an event."""
+-        if event in self._subscribed_events:
++        count = self._subscribed_events.get(event, 0)
++        if count > 1:
++            self._subscribed_events[event] = count - 1
++        elif count == 1:
+             await self._send_event("_interest", {"_deregEvents": [event]})
+-            self._subscribed_events.remove(event)
++            del self._subscribed_events[event]
+ 
+     async def launch_app(self, bundle_identifier_or_url: str) -> None:
+         """Launch an app on the remote device."""
+diff --git a/pyatv/protocols/companion/connection.py b/pyatv/protocols/companion/connection.py
+index 3d67ad7..d0c5451 100644
+--- a/pyatv/protocols/companion/connection.py
++++ b/pyatv/protocols/companion/connection.py
+@@ -46,6 +46,9 @@ class FrameType(Enum):
+ class CompanionConnectionListener(ABC):
+     """Listener interface for a Companion connection."""
+ 
++    def connection_ended(self) -> None:
++        """The transport closed. Release any pending exchanges."""
++
+     def frame_received(self, frame_type: FrameType, data: bytes) -> None:
+         """Frame was received from remote device."""
+ 
+@@ -219,6 +222,8 @@ class CompanionConnection(asyncio.Protocol):
+         self._paused = False
+         _LOGGER.debug("Connection lost to remote device: %s", exc)
+         self.transport = None
++        if self._listener is not None:
++            self._listener.connection_ended()
+         if self._device_listener is not None:
+             if exc:
+                 self._device_listener.listener.connection_lost(exc)
+diff --git a/pyatv/protocols/companion/extras.py b/pyatv/protocols/companion/extras.py
+new file mode 100644
+index 0000000..16cbd99
+--- /dev/null
++++ b/pyatv/protocols/companion/extras.py
+@@ -0,0 +1,119 @@
++"""Experimental Companion commands on the connection returned by pyatv.connect."""
++
++from contextlib import asynccontextmanager
++from typing import Any, Mapping, Optional
++
++from pyatv import exceptions
++from pyatv.const import Protocol
++from pyatv.core.protocol import DispatchFunc
++from pyatv.core.relayer import Relayer
++from pyatv.interface import AppleTV
++from pyatv.protocols.companion import (
++    CompanionFeatures,
++    CompanionRemoteControl,
++    MediaControlFlags,
++)
++from pyatv.protocols.companion.api import CompanionAPI, HidCommand, MediaControlCommand
++
++
++class CompanionExtras:
++    """Use the authenticated Companion session of an existing device."""
++
++    def __init__(self, atv: AppleTV):
++        """Bind extras to the lifetime of this device."""
++        self._atv = atv
++
++    @property
++    def _api(self) -> CompanionAPI:
++        relay = self._atv.remote_control
++        remote = relay.get(Protocol.Companion) if isinstance(relay, Relayer) else None
++        if not isinstance(remote, CompanionRemoteControl):
++            raise exceptions.NotSupportedError(
++                "Authenticated Companion session required"
++            )
++        api = remote.api
++        if not api._connection or not api._connection.connected:
++            raise exceptions.ConnectionLostError("Companion connection closed")
++        return api
++
++    async def fetch_current_now_playing_info(self) -> Mapping[str, Any]:
++        """Return the raw now-playing reply."""
++        return await self._api._send_command("FetchCurrentNowPlayingInfoEvent", {})
++
++    async def fetch_supported_actions(self) -> Mapping[str, Any]:
++        """Return the raw supported-actions reply."""
++        return await self._api._send_command("FetchSupportedActionsEvent", {})
++
++    async def fetch_up_next_info(
++        self, pagination_token: Optional[str] = None
++    ) -> Mapping[str, Any]:
++        """Return a page of Up Next items."""
++        content = {"PaginationTokenKey": pagination_token} if pagination_token else {}
++        return await self._api._send_command("FetchUpNextInfoEvent", content)
++
++    async def fetch_current_top_shelf_items(self) -> Mapping[str, Any]:
++        """Return the raw Top Shelf reply."""
++        return await self._api._send_command(
++            "FetchCurrentTopShelfItemsEvent", {}, low_priority=True
++        )
++
++    async def toggle_captions(self) -> None:
++        """Toggle captions once."""
++        await self._api._send_command("ToggleCaptions", {})
++
++    async def _begin_scan(
++        self, flag: MediaControlFlags, command: MediaControlCommand
++    ) -> None:
++        api = self._api
++        features = self._atv.features.get(Protocol.Companion)
++        if (
++            not isinstance(features, CompanionFeatures)
++            or not features._control_flags & flag
++        ):
++            raise exceptions.NotSupportedError(
++                f"Companion did not advertise {flag.name}"
++            )
++        await api.mediacontrol_command(command)
++
++    async def fast_forward_begin(self) -> None:
++        """Start fast-forward when advertised by the active player."""
++        await self._begin_scan(
++            MediaControlFlags.FastForward, MediaControlCommand.FastForwardBegin
++        )
++
++    async def fast_forward_end(self) -> None:
++        """Release fast-forward, even after the active player's capabilities change."""
++        await self._api.mediacontrol_command(MediaControlCommand.FastForwardEnd)
++
++    async def rewind_begin(self) -> None:
++        """Start rewind when advertised by the active player."""
++        await self._begin_scan(
++            MediaControlFlags.Rewind, MediaControlCommand.RewindBegin
++        )
++
++    async def rewind_end(self) -> None:
++        """Release rewind."""
++        await self._api.mediacontrol_command(MediaControlCommand.RewindEnd)
++
++    async def siri_press(self) -> None:
++        """Send Siri HID down and up, without opening a microphone stream."""
++        api = self._api
++        await api.hid_command(True, HidCommand.Siri)
++        await api.hid_command(False, HidCommand.Siri)
++
++    @asynccontextmanager
++    async def subscribe(self, event: str, callback: DispatchFunc[Mapping[str, Any]]):
++        """Receive raw event content while inside this asynchronous context."""
++        if not isinstance(event, str) or not event or not callable(callback):
++            raise ValueError("Expected an event name and callback")
++        api = self._api
++        remove = api.listen_to(event, callback)
++        try:
++            await api.subscribe_event(event)
++            try:
++                yield
++            finally:
++                if api._connection and api._connection.connected:
++                    await api.unsubscribe_event(event)
++        finally:
++            remove()
+diff --git a/pyatv/protocols/companion/protocol.py b/pyatv/protocols/companion/protocol.py
+index 4c90bf1..79ac318 100644
+--- a/pyatv/protocols/companion/protocol.py
++++ b/pyatv/protocols/companion/protocol.py
+@@ -108,9 +108,15 @@ class CompanionProtocol(
+ 
+     def stop(self):
+         """Disconnect from device."""
+-        self._queues = {}
++        self.connection_ended()
+         self.connection.close()
+ 
++    def connection_ended(self) -> None:
++        """Wake outstanding requests when the connection closes."""
++        for queue in self._queues.values():
++            queue.set(exceptions.ConnectionLostError("Companion connection closed"))
++        self._queues.clear()
++
+     async def _setup_encryption(self):
+         if self.service.credentials:
+             credentials = parse_credentials(self.service.credentials)
+@@ -163,7 +169,13 @@ class CompanionProtocol(
+ 
+         self.send_opack(frame_type, data)
+         self._queues[identifier] = SharedData()
+-        unpacked_object = await self._queues[identifier].wait(timeout)
++        try:
++            unpacked_object = await self._queues[identifier].wait(timeout)
++        finally:
++            self._queues.pop(identifier, None)
++
++        if isinstance(unpacked_object, exceptions.ConnectionLostError):
++            raise unpacked_object
+ 
+         if not isinstance(unpacked_object, dict):
+             raise exceptions.ProtocolError(
+@@ -182,7 +194,9 @@ class CompanionProtocol(
+             )
+ 
+         if "_eu" in unpacked_object:
+-            raise exceptions.ProtocolError(f"Command failed with underlying error: {unpacked_object['_eu']}")
++            raise exceptions.ProtocolError(
++                f"Command failed with underlying error: {unpacked_object['_eu']}"
++            )
+ 
+         return unpacked_object
+ 
+diff --git a/tests/fake_device/companion.py b/tests/fake_device/companion.py
+index b6b3dfc..f054da6 100644
+--- a/tests/fake_device/companion.py
++++ b/tests/fake_device/companion.py
+@@ -37,6 +37,7 @@ COMPANION_AUTH_FRAMES = [
+ HID_BUTTON_MAP = {
+     HidCommand.Up: "up",
+     HidCommand.Down: "down",
++    HidCommand.Siri: "siri",
+     HidCommand.Left: "left",
+     HidCommand.Right: "right",
+     HidCommand.Select: "select",
+@@ -53,6 +54,10 @@ HID_BUTTON_MAP = {
+ }
+ 
+ MEDIA_CONTROL_MAP = {
++    MediaControlCommand.FastForwardBegin: "fast_forward_begin",
++    MediaControlCommand.FastForwardEnd: "fast_forward_end",
++    MediaControlCommand.RewindBegin: "rewind_begin",
++    MediaControlCommand.RewindEnd: "rewind_end",
+     MediaControlCommand.Play: "play",
+     MediaControlCommand.Pause: "pause",
+     MediaControlCommand.NextTrack: "next",
+diff --git a/tests/protocols/companion/test_companion_extras.py b/tests/protocols/companion/test_companion_extras.py
+new file mode 100644
+index 0000000..8edbce7
+--- /dev/null
++++ b/tests/protocols/companion/test_companion_extras.py
+@@ -0,0 +1,131 @@
++"""Public extras over the encrypted fake-device connection."""
++
++import asyncio
++
++import pytest
++
++from pyatv import exceptions
++from pyatv.const import Protocol
++from pyatv.protocols.companion import MediaControlFlags
++from pyatv.protocols.companion.connection import FrameType
++from pyatv.protocols.companion.extras import CompanionExtras
++
++from tests.utils import until
++
++pytestmark = pytest.mark.asyncio
++
++
++@pytest.mark.parametrize(
++    "method, args, name, content, low_priority",
++    [
++        (
++            "fetch_current_now_playing_info",
++            (),
++            "FetchCurrentNowPlayingInfoEvent",
++            {},
++            False,
++        ),
++        ("fetch_supported_actions", (), "FetchSupportedActionsEvent", {}, False),
++        (
++            "fetch_up_next_info",
++            ("page2",),
++            "FetchUpNextInfoEvent",
++            {"PaginationTokenKey": "page2"},
++            False,
++        ),
++        (
++            "fetch_current_top_shelf_items",
++            (),
++            "FetchCurrentTopShelfItemsEvent",
++            {},
++            True,
++        ),
++        ("toggle_captions", (), "ToggleCaptions", {}, False),
++    ],
++)
++async def test_wire_requests(
++    companion_client,
++    companion_state,
++    monkeypatch,
++    method,
++    args,
++    name,
++    content,
++    low_priority,
++):
++    peer = companion_state.clients[0]
++    seen = []
++
++    def respond(message):
++        seen.append(message)
++        peer.send_response(message, {"result": 1})
++
++    monkeypatch.setattr(peer, "handle_" + name.lower(), respond, raising=False)
++    extras = CompanionExtras(companion_client)
++    reply = await getattr(extras, method)(*args)
++    assert len(seen) == 1
++    assert (seen[0]["_i"], seen[0]["_t"], seen[0]["_c"]) == (name, 2, content)
++    assert seen[0].get("_btHP") is (False if low_priority else None)
++    if reply is not None:
++        assert reply["_c"] == {"result": 1}
++
++
++async def test_underlying_error_only(companion_client, companion_state, monkeypatch):
++    peer = companion_state.clients[0]
++
++    def reject(message):
++        peer.send_to_client(
++            FrameType.E_OPACK, {"_x": message["_x"], "_t": 3, "_eu": {"_ec": 7}}
++        )
++
++    monkeypatch.setattr(peer, "handle_togglecaptions", reject, raising=False)
++    with pytest.raises(exceptions.ProtocolError, match="underlying error"):
++        await CompanionExtras(companion_client).toggle_captions()
++
++
++async def test_media_flags_and_siri(companion_client, companion_state):
++    extras = CompanionExtras(companion_client)
++    with pytest.raises(exceptions.NotSupportedError):
++        await extras.rewind_begin()
++    flags = MediaControlFlags.FastForward | MediaControlFlags.Rewind
++    companion_state.clients[0].send_event("_iMC", 123, {"_mcF": int(flags)})
++    await until(
++        lambda: companion_client.features.get(Protocol.Companion)._control_flags
++        == flags
++    )
++    for name in (
++        "fast_forward_begin",
++        "fast_forward_end",
++        "rewind_begin",
++        "rewind_end",
++    ):
++        await getattr(extras, name)()
++        assert companion_state.latest_button == name
++    await extras.siri_press()
++    assert companion_state.latest_button == "siri"
++
++
++async def test_subscription_lifetime(companion_client, companion_state):
++    extras = CompanionExtras(companion_client)
++    one, two = [], []
++    peer = companion_state.clients[0]
++    async with extras.subscribe("CustomEvent", one.append):
++        async with extras.subscribe("CustomEvent", two.append):
++            await until(lambda: "CustomEvent" in companion_state.interests)
++            peer.send_event("CustomEvent", 12, {"n": 1})
++            await until(lambda: one == two == [{"n": 1}])
++        peer.send_event("CustomEvent", 13, {"n": 2})
++        await until(lambda: len(one) == 2)
++        assert two == [{"n": 1}]
++        assert "CustomEvent" in companion_state.interests
++    await until(lambda: "CustomEvent" not in companion_state.interests)
++    async with extras.subscribe("_iMC", one.append):
++        pass
++    assert "_iMC" in companion_state.interests
++
++
++async def test_closed_session_guard(companion_client):
++    extras = CompanionExtras(companion_client)
++    await asyncio.gather(*companion_client.close())
++    with pytest.raises(exceptions.BlockedStateError):
++        await extras.toggle_captions()
+diff --git a/tests/protocols/companion/test_companion_keepalive.py b/tests/protocols/companion/test_companion_keepalive.py
+index d565d79..30583bd 100644
+--- a/tests/protocols/companion/test_companion_keepalive.py
++++ b/tests/protocols/companion/test_companion_keepalive.py
+@@ -53,5 +53,7 @@ async def test_two_missed_sends_report_connection_lost(companion_client, blocked
+         tick()
+         await until(lambda: listener.connection_lost.called)
+         if not blocked:
+-            assert send.call_args.args == (FrameType.NoOp, b"")
++            assert [c.args for c in send.call_args_list[:2]] == [
++                (FrameType.NoOp, b"")
++            ] * 2
+     listener.connection_closed.assert_not_called()

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>ATV Lab</title>
+<style>
+body { background: #112433; color: white; font-family: sans-serif; margin: 6vw }
+time { font: 64pt monospace }
+button { font: 18pt sans-serif; padding: .4em }
+</style>
+<time></time>
+<p style="font-size:18pt">18 pt · Apple TV mirroring sample 0123456789</p>
+<p style="font-size:24pt">24 pt · Apple TV mirroring sample 0123456789</p>
+<p style="font-size:32pt">32 pt · Apple TV mirroring sample 0123456789</p>
+<button type="button">Start 440 Hz tone</button>
+<script>
+function tick() {
+  document.querySelector('time').textContent = new Date().toISOString().slice(11,23)
+  requestAnimationFrame(tick)
+}
+tick()
+let ctx, oscillator
+document.querySelector('button').onclick = async function () {
+  if (oscillator) {
+    oscillator.stop()
+    oscillator = null
+    this.textContent = 'Start 440 Hz tone'
+    return
+  }
+  ctx ||= new AudioContext()
+  await ctx.resume()
+  const gain = ctx.createGain()
+  gain.gain.value = .05
+  oscillator = ctx.createOscillator()
+  oscillator.frequency.value = 440
+  oscillator.connect(gain).connect(ctx.destination)
+  oscillator.start()
+  this.textContent = 'Stop 440 Hz tone'
+}
+</script>
+</html>

@@ -1,0 +1,1735 @@
+tvos: '27.2'
+build: 24K122
+services:
+- key: abcnews
+  service: ABC News Live
+  bundle_id: com.abcnews.ABCNews
+  region: US
+  title: ABC News Live
+  id_recipe: On ABC News choose Live. The channel uses a fixed path.
+  candidates:
+  - template: https://abcnews.com/live
+    url: https://abcnews.com/live
+    goal: B
+    source: https://abcnews.com/Live
+    parameters: {}
+    region: US
+    route: direct
+  - template: https://abcnews.go.com/Live
+    url: https://abcnews.go.com/Live
+    goal: B
+    parameters: {}
+    region: US
+    route: direct
+    source: https://www.goodmorningamerica.com/news/story/abc-news-live-65127516
+    id_recipe: Use ABC News’s legacy Live page on its go.com hostname.
+  associations:
+    abcnews.com:
+      source: https://abcnews.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - WZ62FEL3UG.com.abcnews.ABCNews
+        - ZZJYZDCRQ7.com.abcdigital.abcnews.iphone
+        - N4QLZ9K83F.com.espn.enterprise.abcnews
+        components:
+        - /: /live
+          '?':
+            stream: '*'
+        manifest_component_count: 11
+      other_app_ids: []
+      fetch_errors: []
+    abcnews.go.com:
+      source: null
+      matching_rules: []
+      fetch_errors:
+      - https://abcnews.go.com/.well-known/apple-app-site-association HTTP 301 without readable applinks
+- key: abc
+  service: ABC
+  bundle_id: com.abcdigital.abc.videoplayer
+  region: US
+  title: Abbott Elementary
+  id_recipe: Copy the last path segment from the ABC show page.
+  candidates:
+  - template: https://abc.com/shows/{id}
+    url: https://abc.com/shows/abbott-elementary
+    goal: B
+    source: https://abc.com/shows/abbott-elementary
+    parameters:
+      id: abbott-elementary
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/abbott-elementary/umc.cmc.4yajt40knug1iwx1l9hrjxkxy?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/abbott-elementary/umc.cmc.4yajt40knug1iwx1l9hrjxkxy
+    parameters:
+      region: us
+      kind: show
+      slug: abbott-elementary
+      id: umc.cmc.4yajt40knug1iwx1l9hrjxkxy
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  associations:
+    abc.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://abc.com/.well-known/apple-app-site-association HTTP 404
+      - https://abc.com/apple-app-site-association HTTP 404
+      - https://app-site-association.cdn-apple.com/a/v1/abc.com HTTP 404
+    tv.apple.com:
+      source: null
+      matching_rules: &id001 []
+      other_app_ids: &id002 []
+      fetch_errors: &id003
+      - https://tv.apple.com/.well-known/apple-app-site-association (unreadable)
+      - https://tv.apple.com/apple-app-site-association HTTP 301
+      - https://app-site-association.cdn-apple.com/a/v1/tv.apple.com HTTP 404
+  catalog_note: ABC reports that its mobile and streaming-device apps have been retired.
+  catalog_source: https://help.abc.com/article/abc-what-happened-to-the-abc-mobile-and-streaming-device-apps
+- key: bloomberg
+  service: Bloomberg
+  bundle_id: com.bloomberg.Bloomberg
+  region: US
+  title: Bloomberg Television
+  id_recipe: Open Bloomberg Live, select the US feed and copy the channel path.
+  candidates:
+  - template: https://www.bloomberg.com/{id}
+    url: https://www.bloomberg.com/live/us
+    goal: B
+    source: https://www.bloomberg.com/live/us
+    parameters:
+      id: live/us
+    region: US
+    route: direct
+  associations:
+    www.bloomberg.com:
+      source: https://www.bloomberg.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: YABC3MT28M.com.bloomberg.Bloomberg
+        paths:
+        - /live/*
+        manifest_path_count: 76
+      other_app_ids:
+      - YABC3MT28M.com.bloomberg.Bloomberg.dev
+      - FY72S24539.com.bloomberg.Bloomberg.internal
+      fetch_errors: []
+- key: cbc
+  service: CBC News
+  bundle_id: ca.cbc.CBCNews
+  region: CA
+  title: The National
+  id_recipe: Open The National from CBC News. Copy its section path. CBC Gem is a separate app.
+  candidates:
+  - template: https://www.cbc.ca/news/{id}
+    url: https://www.cbc.ca/news/thenational
+    goal: B
+    source: https://www.cbc.ca/news/thenational
+    parameters:
+      id: thenational
+    region: CA
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/ca/show/the-national/umc.cmc.3p14fkx3jnc8b0vi1dipt1ylt?action=play
+    goal: C
+    source: https://tv.apple.com/ca/show/the-national/umc.cmc.3p14fkx3jnc8b0vi1dipt1ylt
+    parameters:
+      region: ca
+      kind: show
+      slug: the-national
+      id: umc.cmc.3p14fkx3jnc8b0vi1dipt1ylt
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: CA
+  associations:
+    www.cbc.ca:
+      source: https://www.cbc.ca/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: 3BTT3846RD.ca.cbc.CBCNews
+        paths:
+        - /news/*
+        appIDs:
+        - 3BTT3846RD.ca.cbc.CBCNews
+        components:
+        - /: /news/*
+        manifest_path_count: 2
+        manifest_component_count: 2
+      other_app_ids:
+      - 3BTT3846RD.ca.cbc.CBCRadio
+      fetch_errors: []
+    tv.apple.com:
+      source: null
+      matching_rules: *id001
+      other_app_ids: *id002
+      fetch_errors: *id003
+- key: cnn
+  service: CNN
+  bundle_id: com.cnn.iphone
+  region: US
+  title: CNN Live
+  id_recipe: Select Watch Live TV on CNN. Copy the live hub path.
+  candidates:
+  - template: https://www.cnn.com/live
+    url: https://www.cnn.com/live
+    goal: B
+    source: https://www.cnn.com/live
+    parameters: {}
+    region: US
+    route: direct
+  associations:
+    www.cnn.com:
+      source: https://www.cnn.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - C4G9LS277J.com.cnn.iphone
+        paths:
+        - '*'
+        manifest_path_count: 28
+      other_app_ids:
+      - C4G9LS277J.com.cnn.marvel
+      - Z8F4P4S9JC.com.cnn.enterprise
+      fetch_errors: []
+- key: calm
+  service: Calm
+  bundle_id: com.calm.calmapp
+  region: US/CA
+  title: Blue Gold
+  id_recipe: Open Calm’s Blue Gold article and copy the linked program URL. Keep both the case-sensitive ID and slug.
+  candidates:
+  - template: https://www.calm.com/program/{id}/{slug}
+    url: https://www.calm.com/program/BVLV98v/blue-gold
+    goal: B
+    source: https://www.calm.com/blog/stephen-fry-sleep-story-blue-gold
+    parameters:
+      id: BVLV98v
+      slug: blue-gold
+    id_recipe: Open Calm’s Blue Gold article and copy the linked program URL. Keep both the case-sensitive ID and slug.
+    region: US/CA
+    route: direct
+  associations:
+    www.calm.com:
+      source: https://www.calm.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: C8X658UX3M.com.calm.calmapp
+        paths:
+        - /program/*
+        manifest_path_count: 34
+      other_app_ids:
+      - iterable
+      - C8X658UX3M.com.calm.sleepapp
+      fetch_errors: []
+- key: comedy
+  service: Comedy Central
+  bundle_id: com.mtvn.ccnetwork
+  region: US
+  title: The Daily Show
+  id_recipe: Open The Daily Show on Comedy Central and copy the fan-hub slug.
+  candidates:
+  - template: https://www.cc.com/fan-hub/{id}
+    url: https://www.cc.com/fan-hub/the-daily-show
+    goal: B
+    source: https://www.cc.com/fan-hub/the-daily-show
+    parameters:
+      id: the-daily-show
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/the-daily-show/umc.cmc.1wp3e52ah4t1khqohadjagrei?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/the-daily-show/umc.cmc.1wp3e52ah4t1khqohadjagrei
+    parameters:
+      region: us
+      kind: show
+      slug: the-daily-show
+      id: umc.cmc.1wp3e52ah4t1khqohadjagrei
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.cc.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://www.cc.com/.well-known/apple-app-site-association HTTP 404
+      - https://www.cc.com/apple-app-site-association HTTP 404
+      - https://app-site-association.cdn-apple.com/a/v1/www.cc.com HTTP 404
+- key: crave
+  service: Crave
+  bundle_id: ca.bellmedia.cravetv
+  region: CA
+  title: Letterkenny Problems
+  id_recipe: Open the 2013 short on Crave Canada. Copy the entire last segment including the number.
+  candidates:
+  - template: https://www.crave.ca/en/special/{id}
+    url: https://www.crave.ca/en/special/letterkenny-problems-35502
+    goal: B
+    source: https://www.crave.ca/en/special/letterkenny-problems-35502
+    parameters:
+      id: letterkenny-problems-35502
+    region: CA
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/ca/movie/letterkenny-problems/umc.cmc.1bn56uosz50tfde6bseq3n9k8?action=play
+    goal: C
+    source: https://tv.apple.com/ca/movie/letterkenny-problems/umc.cmc.1bn56uosz50tfde6bseq3n9k8
+    parameters:
+      region: ca
+      kind: movie
+      slug: letterkenny-problems
+      id: umc.cmc.1bn56uosz50tfde6bseq3n9k8
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: CA
+  - template: https://www.crave.ca/en/play/{show}/{id}
+    url: https://www.crave.ca/en/play/letterkenny/aint-no-reason-to-get-excited-s1e1-782272
+    goal: C
+    source: https://www.justwatch.com/ca/tv-show/letterkenny/season-1
+    parameters:
+      show: letterkenny
+      id: aint-no-reason-to-get-excited-s1e1-782272
+    id_recipe: Open the Canadian Crave offer and copy both segments after /en/play/.
+    title: Ain’t No Reason to Get Excited
+    region: CA
+    route: direct
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.crave.ca:
+      source: https://www.crave.ca/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - U82U639K29.ca.bellmedia.cravetv
+        - U82U639K29.ca.bellmedia.bond.feature
+        - ca.bellmedia.bond.staging
+        components:
+        - /: /$(language)
+        - /: /$(language)/special/*
+        - /: /$(language)/play/*
+        manifest_component_count: 13
+      other_app_ids: []
+      fetch_errors: []
+  skipped: outside test coverage
+- key: criterion
+  service: Criterion
+  bundle_id: com.criterionchannel
+  region: US/CA
+  title: Seven Samurai
+  id_recipe: Open the film in the Criterion Channel collection and copy both slugs from the video URL.
+  candidates:
+  - template: https://www.criterionchannel.com/{collection}/videos/{id}
+    url: https://www.criterionchannel.com/seven-samurai/videos/seven-samurai
+    goal: C
+    source: https://www.criterionchannel.com/seven-samurai/videos/seven-samurai
+    parameters:
+      id: seven-samurai
+      collection: seven-samurai
+    region: US/CA
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/movie/seven-samurai/umc.cmc.3j1e4hzd95tf9vtnjot79gwbp?action=play
+    goal: C
+    source: https://tv.apple.com/us/movie/seven-samurai/umc.cmc.3j1e4hzd95tf9vtnjot79gwbp
+    parameters:
+      region: us
+      kind: movie
+      slug: seven-samurai
+      id: umc.cmc.3j1e4hzd95tf9vtnjot79gwbp
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  - template: https://ca.criterionchannel.com/films/{id}/{slug}
+    url: https://ca.criterionchannel.com/films/462qqAgx/seven-samurai
+    goal: B
+    source: https://www.criterionchannel.com/seven-samurai/videos/seven-samurai
+    parameters:
+      id: 462qqAgx
+      slug: seven-samurai
+    id_recipe: Open the film in Canada and follow its redirect. Copy both segments after films/.
+    region: CA
+    route: direct
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.criterionchannel.com:
+      source: https://www.criterionchannel.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - 37VC7CX6Z5.com.criterionchannel
+        - 37VC7CX6Z5.io.dev.criterion
+        components: []
+        manifest_component_count: 8
+      other_app_ids: []
+      fetch_errors: []
+    ca.criterionchannel.com:
+      source: https://ca.criterionchannel.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - 37VC7CX6Z5.com.criterionchannel
+        - 37VC7CX6Z5.io.dev.criterion
+        components:
+        - /: /films/*
+        manifest_component_count: 8
+      other_app_ids: []
+      fetch_errors: []
+  skipped: outside test coverage
+- key: disney
+  service: Disney+
+  bundle_id: com.disney.disneyplus
+  region: US/CA
+  title: Bluey
+  id_recipe: Copy the UUID after entity- on the Disney+ series page.
+  candidates:
+  - template: https://www.disneyplus.com/browse/entity-{id}
+    url: https://www.disneyplus.com/browse/entity-fa6973b9-e7cf-49fb-81a2-d4908e4bf694
+    goal: B
+    source: https://www.disneyplus.com/browse/entity-fa6973b9-e7cf-49fb-81a2-d4908e4bf694
+    parameters:
+      id: fa6973b9-e7cf-49fb-81a2-d4908e4bf694
+    region: US/CA
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/bluey/umc.cmc.3ez94w3cvm4oeo9rugqsu6dx1?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/bluey/umc.cmc.3ez94w3cvm4oeo9rugqsu6dx1
+    parameters:
+      region: us
+      kind: show
+      slug: bluey
+      id: umc.cmc.3ez94w3cvm4oeo9rugqsu6dx1
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    research_variant: https://tv.apple.com/us/show/bluey/umc.cmc.3ez94w3cvm4oeo9rugqsu6dx1?action=play&profile=kids
+    research_note: pyatv documents &profile=kids. This trial uses the default profile selection.
+    region: US
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.disneyplus.com:
+      source: https://www.disneyplus.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: WZ62FEL3UG.com.disney.disneyplus
+        components:
+        - /: /browse/*
+        manifest_component_count: 53
+      other_app_ids: []
+      fetch_errors: []
+- key: foxone
+  service: FOX One
+  bundle_id: com.fox.foxone
+  region: US
+  title: The Masked Singer
+  id_recipe: Copy the SER identifier and following slug from the FOX One series page.
+  candidates:
+  - template: https://www.fox.com/detail/series/{id}/{slug}
+    url: https://www.fox.com/detail/series/SER000878XWTP/the-masked-singer
+    goal: B
+    source: https://www.fox.com/detail/series/SER000878XWTP/the-masked-singer
+    parameters:
+      id: SER000878XWTP
+      slug: the-masked-singer
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/the-masked-singer/umc.cmc.2bsarswmnr0ll0kdwrsij3nrh?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/the-masked-singer/umc.cmc.2bsarswmnr0ll0kdwrsij3nrh
+    parameters:
+      region: us
+      kind: show
+      slug: the-masked-singer
+      id: umc.cmc.2bsarswmnr0ll0kdwrsij3nrh
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.fox.com:
+      source: https://www.fox.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - HY988WTS54.com.fox.foxone
+        - HY988WTS54.com.fox.foxone.int
+        components:
+        - /: /*
+        manifest_component_count: 7
+      other_app_ids: []
+      fetch_errors: []
+- key: fx
+  service: FXNOW
+  bundle_id: com.fxnetworks.ios.FXNOW
+  region: US
+  title: The Bear
+  id_recipe: Copy the show slug on FX Networks. Its provider button can point to Hulu.
+  candidates:
+  - template: https://www.fxnetworks.com/shows/{id}
+    url: https://www.fxnetworks.com/shows/the-bear
+    goal: B
+    source: https://www.fxnetworks.com/shows/the-bear
+    parameters:
+      id: the-bear
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/the-bear/umc.cmc.javg04xbn3eonbgfvnaqmodk?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/the-bear/umc.cmc.javg04xbn3eonbgfvnaqmodk
+    parameters:
+      region: us
+      kind: show
+      slug: the-bear
+      id: umc.cmc.javg04xbn3eonbgfvnaqmodk
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.fxnetworks.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://www.fxnetworks.com/.well-known/apple-app-site-association HTTP 403
+      - https://www.fxnetworks.com/apple-app-site-association HTTP 403
+      - https://app-site-association.cdn-apple.com/a/v1/www.fxnetworks.com HTTP 404
+- key: foxnews
+  service: Fox News
+  bundle_id: com.foxnews.foxnews
+  region: US
+  title: Fox News Channel
+  id_recipe: Open Watch Live on Fox News and copy the numeric video path for the channel.
+  candidates:
+  - template: https://www.foxnews.com/video/{id}
+    url: https://www.foxnews.com/video/5614615980001
+    goal: C
+    source: https://www.foxnews.com/video/5614615980001
+    parameters:
+      id: '5614615980001'
+    region: US
+    route: direct
+  associations:
+    www.foxnews.com:
+      source: https://www.foxnews.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - M8F23V7DRN.com.foxnews.foxnews
+        - YQQCDVG64V.com.foxnews.foxnews
+        components:
+        - '?':
+            ice_mplo: '1'
+          exclude: true
+        - /: '*'
+        manifest_component_count: 6
+      other_app_ids: []
+      fetch_errors: []
+- key: global
+  service: Global TV
+  bundle_id: com.canwest.GlobalVideo
+  region: CA
+  title: Survivor
+  id_recipe: Open Shows on Global TV Canada and copy the show slug.
+  candidates:
+  - template: https://www.globaltv.com/shows/{id}/
+    url: https://www.globaltv.com/shows/survivor/
+    goal: B
+    source: https://www.globaltv.com/shows/survivor/
+    parameters:
+      id: survivor
+    region: CA
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/ca/show/survivor/umc.cmc.6ozd0mt09a86bpa19l885jv4z?action=play
+    goal: C
+    source: https://tv.apple.com/ca/show/survivor/umc.cmc.6ozd0mt09a86bpa19l885jv4z
+    parameters:
+      region: ca
+      kind: show
+      slug: survivor
+      id: umc.cmc.6ozd0mt09a86bpa19l885jv4z
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: CA
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.globaltv.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://www.globaltv.com/.well-known/apple-app-site-association HTTP 404
+      - https://www.globaltv.com/apple-app-site-association HTTP 404
+      - https://app-site-association.cdn-apple.com/a/v1/www.globaltv.com HTTP 404
+- key: max
+  service: HBO Max
+  bundle_id: com.wbd.stream
+  region: US
+  title: Succession
+  id_recipe: Copy the UUID after show/ on the HBO Max series page.
+  candidates:
+  - template: https://www.hbomax.com/show/{id}
+    url: https://www.hbomax.com/show/a8484031-f244-4661-9fb7-0932bd1ba872
+    goal: B
+    source: https://www.hbomax.com/show/a8484031-f244-4661-9fb7-0932bd1ba872
+    parameters:
+      id: a8484031-f244-4661-9fb7-0932bd1ba872
+    region: US
+    route: direct
+  - template: https://play.hbomax.com/show/{id}
+    url: https://play.hbomax.com/show/a8484031-f244-4661-9fb7-0932bd1ba872
+    goal: B
+    source: https://www.hbomax.com/show/a8484031-f244-4661-9fb7-0932bd1ba872
+    parameters:
+      id: a8484031-f244-4661-9fb7-0932bd1ba872
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/succession/umc.cmc.3trf3c8kzd8m4w72c9q8dwjqe?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/succession/umc.cmc.3trf3c8kzd8m4w72c9q8dwjqe
+    parameters:
+      region: us
+      kind: show
+      slug: succession
+      id: umc.cmc.3trf3c8kzd8m4w72c9q8dwjqe
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  - template: https://play.hbomax.com/video/watch/{id}
+    url: https://play.hbomax.com/video/watch/e457df99-f817-4646-b64c-8ce7afaeb405
+    goal: C
+    source: https://www.justwatch.com/us/tv-show/succession/season-1
+    parameters:
+      id: e457df99-f817-4646-b64c-8ce7afaeb405
+    id_recipe: Open the HBO Max episode offer and copy the UUID after video/watch/.
+    title: Celebration
+    region: US
+    route: direct
+  associations:
+    play.hbomax.com:
+      source: https://play.hbomax.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: 72XN96Y3B5.com.wbd.stream
+        paths:
+        - '*'
+        manifest_path_count: 13
+      other_app_ids:
+      - 235W55BFV9.com.discovery.mobile.enterprise.discoveryplus
+      - 72XN96Y3B5.com.wbd.hbomax
+      - 235W55BFV9.com.discovery.mobile.enterprise.hbomax
+      - 235W55BFV9.com.discovery.mobile.enterprise.hbomax.bd
+      - 235W55BFV9.com.discovery.mobile.enterprise.hbomax.od
+      - 235W55BFV9.com.discovery.mobile.enterprise.discoveryplus.od
+      - 235W55BFV9.com.discovery.mobile.enterprise.discoveryplus.bd
+      fetch_errors: []
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.hbomax.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://www.hbomax.com/.well-known/apple-app-site-association HTTP 403
+      - https://www.hbomax.com/apple-app-site-association HTTP 403
+      - https://app-site-association.cdn-apple.com/a/v1/www.hbomax.com HTTP 404
+- key: hulu
+  service: Hulu
+  bundle_id: com.hulu.plus
+  region: US
+  title: Only Murders in the Building
+  id_recipe: Copy the final UUID and preceding slug from the Hulu series URL.
+  candidates:
+  - template: https://www.hulu.com/series/{slug}-{id}
+    url: https://www.hulu.com/series/only-murders-in-the-building-ef31c7e1-cd0f-4e07-848d-1cbfedb50ddf
+    goal: B
+    source: https://www.hulu.com/series/only-murders-in-the-building-ef31c7e1-cd0f-4e07-848d-1cbfedb50ddf
+    parameters:
+      id: ef31c7e1-cd0f-4e07-848d-1cbfedb50ddf
+      slug: only-murders-in-the-building
+    region: US
+    route: direct
+  - template: hulu://series/{id}
+    url: hulu://series/ef31c7e1-cd0f-4e07-848d-1cbfedb50ddf
+    goal: B
+    source: https://community.home-assistant.io/t/appletv-integration-deep-link-urls-which-are-working/592862
+    parameters:
+      id: ef31c7e1-cd0f-4e07-848d-1cbfedb50ddf
+      slug: only-murders-in-the-building
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/only-murders-in-the-building/umc.cmc.7kd9yvyu5ecz1snkt4a35o12g?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/only-murders-in-the-building/umc.cmc.7kd9yvyu5ecz1snkt4a35o12g
+    parameters:
+      region: us
+      kind: show
+      slug: only-murders-in-the-building
+      id: umc.cmc.7kd9yvyu5ecz1snkt4a35o12g
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  - template: hulu://watch/{id}
+    url: hulu://watch/e2957562-1a0f-49ec-96d4-97aaf3cac2d5
+    goal: C
+    source: https://www.justwatch.com/us/tv-show/only-murders-in-the-building/season-1
+    parameters:
+      id: e2957562-1a0f-49ec-96d4-97aaf3cac2d5
+    id_recipe: Open Hulu’s episode link from the season listing and copy the UUID after watch/.
+    title: True Crime
+    region: US
+    route: direct
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.hulu.com:
+      source: https://app-site-association.cdn-apple.com/a/v1/www.hulu.com
+      matching_rules:
+      - appID: ZUW57S6CYF.com.hulu.plus
+        paths:
+        - /series/*
+        manifest_path_count: 13
+      other_app_ids:
+      - NRWTA23RPA.com.hulu.iosbowie
+      fetch_errors:
+      - https://www.hulu.com/.well-known/apple-app-site-association HTTP 302
+      - https://www.hulu.com/apple-app-site-association HTTP 302
+- key: instagram
+  service: Instagram
+  bundle_id: com.burbn.instagram
+  region: US
+  title: National Geographic
+  id_recipe: Open the creator profile and copy its handle without the @ prefix.
+  candidates:
+  - template: https://www.instagram.com/{id}/
+    url: https://www.instagram.com/natgeo/
+    goal: B
+    source: https://www.instagram.com/natgeo/
+    parameters:
+      id: natgeo
+    region: US
+    route: direct
+  associations:
+    www.instagram.com:
+      source: https://www.instagram.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - 3NW3KR6Q88.com.facebook.InstagramInHouse
+        - MH9GU9K5PX.com.burbn.instagram
+        components:
+        - '#': weblink
+          exclude: true
+        - '?':
+            short_redirect: ?*
+          exclude: true
+        - /: /*
+        manifest_component_count: 82
+      - appID: MH9GU9K5PX.com.burbn.instagram
+        paths:
+        - /*
+        manifest_path_count: 125
+      other_app_ids:
+      - MH9GU9K5PX.com.burbn.basel
+      - MH9GU9K5PX.com.burbn.basel.localDevelopment
+      - 3NW3KR6Q88.com.burbn.basel.master
+      - 3NW3KR6Q88.com.burbn.basel.rc
+      - 3NW3KR6Q88.com.facebook.InstagramInHouse
+      - MH9GU9K5PX.com.burbn.prime.localDevelopment
+      - 3NW3KR6Q88.com.burbn.prime.master
+      - 3NW3KR6Q88.com.burbn.prime.rc
+      - MH9GU9K5PX.com.burbn.prime
+      - MH9GU9K5PX.com.burbn.madrid.localDevelopment
+      - 3NW3KR6Q88.com.burbn.madrid.master
+      - 3NW3KR6Q88.com.burbn.madrid.rc
+      - MH9GU9K5PX.com.burbn.madrid
+      fetch_errors: []
+- key: mubi
+  service: MUBI
+  bundle_id: com.mubi.mubiapp
+  region: US
+  title: The Substance
+  id_recipe: Copy the film slug from the US MUBI catalog. Verify the year is 2024.
+  candidates:
+  - template: https://mubi.com/en/us/films/{id}
+    url: https://mubi.com/en/us/films/the-substance
+    goal: B
+    source: https://mubi.com/en/us/films/the-substance
+    parameters:
+      id: the-substance
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/movie/the-substance/umc.cmc.3fc032hv09dz1k89a1fa47396?action=play
+    goal: C
+    source: https://tv.apple.com/us/movie/the-substance/umc.cmc.3fc032hv09dz1k89a1fa47396
+    parameters:
+      region: us
+      kind: movie
+      slug: the-substance
+      id: umc.cmc.3fc032hv09dz1k89a1fa47396
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  associations:
+    mubi.com:
+      source: https://mubi.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: RR23ZC47CQ.com.mubi.mubiapp
+        paths:
+        - /*/films/*
+        manifest_path_count: 31
+      other_app_ids:
+      - RR23ZC47CQ.com.mubi.go
+      fetch_errors: []
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+- key: music
+  service: Music
+  bundle_id: com.apple.TVMusic
+  region: US
+  title: Rumours
+  id_recipe: Share the Fleetwood Mac album in Music and copy the slug and numeric album ID.
+  candidates:
+  - template: https://music.apple.com/us/album/{slug}/{id}
+    url: https://music.apple.com/us/album/rumours/594061854
+    goal: B
+    source: https://music.apple.com/us/album/rumours/594061854
+    parameters:
+      id: '594061854'
+      slug: rumours
+    region: US
+    route: direct
+  associations:
+    music.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://music.apple.com/.well-known/apple-app-site-association (unreadable)
+      - https://music.apple.com/apple-app-site-association HTTP 404
+      - https://app-site-association.cdn-apple.com/a/v1/music.apple.com HTTP 404
+- key: nbcnews
+  service: NBC News
+  bundle_id: com.zumobi.msnbc
+  region: US
+  title: NBC News NOW
+  id_recipe: Open NBC News NOW and copy the live channel path.
+  candidates:
+  - template: https://www.nbcnews.com/now
+    url: https://www.nbcnews.com/now
+    goal: B
+    source: https://www.nbcnews.com/now
+    parameters: {}
+    region: US
+    route: direct
+  - template: https://www.nbcnews.com/tab/watch
+    url: https://www.nbcnews.com/tab/watch
+    goal: A
+    source: https://www.nbcnews.com/.well-known/apple-app-site-association
+    parameters: {}
+    id_recipe: Use the fixed Watch tab path in NBC News’s association file.
+    region: US
+    route: direct
+  associations:
+    www.nbcnews.com:
+      source: https://www.nbcnews.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - 6B3RPZJG5Q.com.nbcnews.news.debug
+        - 6B3RPZJG5Q.com.zumobi.msnbc
+        - 6B3RPZJG5Q.com.nbcnews.tron.release
+        components:
+        - '#': no_universal_links
+          exclude: true
+        - /: /tab/watch
+        manifest_component_count: 7
+      other_app_ids: []
+      fetch_errors: []
+- key: nbcsports
+  service: NBC Sports
+  bundle_id: com.nbcuni.com.nbcsports.liveextra
+  region: US
+  title: Premier League
+  id_recipe: Choose Premier League under NBC Sports Watch and copy the sports hub slug.
+  candidates:
+  - template: https://www.nbcsports.com/watch/{id}
+    url: https://www.nbcsports.com/watch/premier-league
+    goal: B
+    source: https://www.nbcsports.com/watch/premier-league
+    parameters:
+      id: premier-league
+    region: US
+    route: direct
+  associations:
+    www.nbcsports.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://www.nbcsports.com/.well-known/apple-app-site-association HTTP 404
+      - https://www.nbcsports.com/apple-app-site-association HTTP 404
+      - https://app-site-association.cdn-apple.com/a/v1/www.nbcsports.com HTTP 404
+- key: nbc
+  service: NBC
+  bundle_id: com.nbcuni.nbc.portal
+  region: US
+  title: Saturday Night Live
+  id_recipe: Choose the series under NBC Shows and copy the first path segment.
+  candidates:
+  - template: https://www.nbc.com/{id}
+    url: https://www.nbc.com/saturday-night-live
+    goal: B
+    source: https://www.nbc.com/saturday-night-live
+    parameters:
+      id: saturday-night-live
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/saturday-night-live/umc.cmc.3p5hey1eeuk85gse9d27zaa5q?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/saturday-night-live/umc.cmc.3p5hey1eeuk85gse9d27zaa5q
+    parameters:
+      region: us
+      kind: show
+      slug: saturday-night-live
+      id: umc.cmc.3p5hey1eeuk85gse9d27zaa5q
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  - template: nbctve://live/{id}
+    url: nbctve://live/nbc
+    parameters:
+      id: nbc
+    title: NBC Live
+    goal: C
+    region: US
+    route: direct
+    id_recipe: Copy the network name from NBC’s live channel URL.
+    source: https://community.getchannels.com/t/stream-link-urls/36317
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.nbc.com:
+      source: https://www.nbc.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: 56KRT5667G.com.nbcuni.nbc.portal
+        paths:
+        - /saturday-night-live
+        manifest_path_count: 1066
+      other_app_ids:
+      - Q6H3AT84M2.com.nbcuni.nbc.portal.enterprise
+      fetch_errors: []
+- key: nfl
+  service: NFL
+  bundle_id: com.nfl.gamecenter
+  region: US
+  title: NFL Network
+  id_recipe: Choose NFL Network on NFL.com and copy the channel path.
+  candidates:
+  - template: https://www.nfl.com/network
+    url: https://www.nfl.com/network
+    goal: B
+    source: https://www.nfl.com/network
+    parameters: {}
+    region: US
+    route: direct
+  - template: https://www.nfl.com/videos/{id}
+    url: https://www.nfl.com/videos/nfl-100-greatest-no-3-david-tyree-s-helmet-catch
+    goal: B
+    source: https://www.nfl.com/videos/nfl-100-greatest-no-3-david-tyree-s-helmet-catch
+    parameters:
+      id: nfl-100-greatest-no-3-david-tyree-s-helmet-catch
+    id_recipe: Copy the clip slug from the NFL video page.
+    title: Helmet Catch
+    region: US
+    route: direct
+  - template: nflmobile://watch/nfl
+    url: nflmobile://watch/nfl
+    parameters: {}
+    title: NFL Network
+    goal: C
+    region: US
+    route: direct
+    id_recipe: Use the fixed NFL live channel route.
+    source: https://community.getchannels.com/t/stream-link-urls/36317
+  associations:
+    www.nfl.com:
+      source: https://www.nfl.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: 25DRM4R9AN.com.nfl.gamecenter
+        paths:
+        - /videos/*
+        manifest_path_count: 4
+      - appID: QC9YPD824N.com.nfl.gamecenter
+        paths:
+        - /videos/*
+        manifest_path_count: 4
+      other_app_ids:
+      - 25DRM4R9AN.com.nfl.mobile3
+      - QFZP3P2437.com.nfl.mobile3
+      fetch_errors: []
+- key: netflix
+  service: Netflix
+  bundle_id: com.netflix.Netflix
+  region: US/CA
+  title: Stranger Things
+  id_recipe: Search Netflix for the show and copy the digits after title/ from its share link.
+  candidates:
+  - template: https://www.netflix.com/title/{id}
+    url: https://www.netflix.com/title/80057281
+    goal: B
+    source: https://www.netflix.com/title/80057281
+    parameters:
+      id: '80057281'
+    region: US/CA
+    route: direct
+  - template: nflx://www.netflix.com/title/{id}
+    url: nflx://www.netflix.com/title/80057281
+    goal: B
+    source: https://github.com/DeeplinkX/DeeplinkX/blob/master/doc/apps/netflix.md
+    parameters:
+      id: '80057281'
+    region: US/CA
+    route: direct
+  associations:
+    www.netflix.com:
+      source: https://www.netflix.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: YXNLG53YV4.com.netflix.Netflix
+        paths:
+        - /title/*
+        components:
+        - '#': no_ul
+          exclude: true
+        - '?':
+            no_ul: '1'
+          exclude: true
+        - /: /?*
+        manifest_path_count: 18
+        manifest_component_count: 66
+      - appID: GN37K848D7.com.netflix.Netflix
+        paths:
+        - /title/*
+        components:
+        - '#': no_ul
+          exclude: true
+        - '?':
+            no_ul: '1'
+          exclude: true
+        - /: /?*
+        manifest_path_count: 18
+        manifest_component_count: 64
+      other_app_ids:
+      - EZ4M4LKSQP.com.netflix.netflixInhouse
+      - GN37K848D7.com.netflix.NGP.NetflixPuzzled
+      fetch_errors: []
+- key: paramount
+  service: Paramount+
+  bundle_id: com.cbsvideo.app
+  region: US
+  title: 'Star Trek: Strange New Worlds'
+  id_recipe: Open the show on Paramount+ and copy its shows/ slug.
+  candidates:
+  - template: https://www.paramountplus.com/shows/{id}/
+    url: https://www.paramountplus.com/shows/star-trek-strange-new-worlds/
+    goal: B
+    source: https://www.paramountplus.com/shows/star-trek-strange-new-worlds/
+    parameters:
+      id: star-trek-strange-new-worlds
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/star-trek-strange-new-worlds/umc.cmc.1o10sclnk0t945h2mtuolocip?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/star-trek-strange-new-worlds/umc.cmc.1o10sclnk0t945h2mtuolocip
+    parameters:
+      region: us
+      kind: show
+      slug: star-trek-strange-new-worlds
+      id: umc.cmc.1o10sclnk0t945h2mtuolocip
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  - template: https://www.paramountplus.com/shows/{show}/video/{id}/{slug}/
+    url: https://www.paramountplus.com/shows/star-trek-strange-new-worlds/video/vD_dS02AvEtutf2mdwdiOU0WZIpkhMPA/star-trek-strange-new-worlds-strange-new-worlds/
+    goal: C
+    source: https://www.justwatch.com/us/tv-show/star-trek-strange-new-worlds/season-1
+    parameters:
+      show: star-trek-strange-new-worlds
+      id: vD_dS02AvEtutf2mdwdiOU0WZIpkhMPA
+      slug: star-trek-strange-new-worlds-strange-new-worlds
+    id_recipe: Open the episode’s Paramount+ offer and keep the show, case-sensitive video ID and episode slug.
+    title: Strange New Worlds
+    region: US
+    route: direct
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.paramountplus.com:
+      source: https://www.paramountplus.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: H443NM7F8H.com.cbsvideo.app
+        paths:
+        - /shows/*/video/*/*/
+        manifest_path_count: 51
+      other_app_ids:
+      - FMV3D35V94.com.cbs.canada.app
+      - FMV3D35V94.com.cbsdebug.canada.app
+      fetch_errors: []
+- key: peacock
+  service: Peacock
+  bundle_id: com.peacocktv.peacock
+  region: US
+  title: The Office
+  id_recipe: Copy the series slug from the Peacock series page. Select the US series starring Steve Carell.
+  candidates:
+  - template: https://www.peacocktv.com/stream-tv/{id}
+    url: https://www.peacocktv.com/stream-tv/the-office
+    goal: B
+    source: https://www.peacocktv.com/stream-tv/the-office
+    parameters:
+      id: the-office
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/the-office/umc.cmc.455js879szmdywutf3qjewagm?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/the-office/umc.cmc.455js879szmdywutf3qjewagm
+    parameters:
+      region: us
+      kind: show
+      slug: the-office
+      id: umc.cmc.455js879szmdywutf3qjewagm
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  - template: https://www.peacocktv.com/watch/asset/tv/{slug}/{id}
+    url: https://www.peacocktv.com/watch/asset/tv/the-office/4902514835143843112
+    goal: B
+    source: https://www.justwatch.com/us/tv-show/the-office-2005
+    parameters:
+      slug: the-office
+      id: '4902514835143843112'
+    id_recipe: Select the US 2005 series in JustWatch, open the Peacock offer, copy the slug and series ID before /seasons/.
+    region: US
+    route: direct
+  - template: https://www.peacocktv.com/watch/asset/tv/{episode_path}
+    url: https://www.peacocktv.com/watch/asset/tv/the-office/4902514835143843112/seasons/1/episodes/pilot-episode-1/58fabbf4-9291-3575-bcdc-bd25eee192c8
+    goal: C
+    source: https://www.justwatch.com/us/tv-show/the-office-2005
+    parameters:
+      episode_path: the-office/4902514835143843112/seasons/1/episodes/pilot-episode-1/58fabbf4-9291-3575-bcdc-bd25eee192c8
+    id_recipe: Open JustWatch’s Peacock offer for the US pilot. Copy the whole path after /asset/tv/.
+    title: Pilot
+    region: US
+    route: direct
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.peacocktv.com:
+      source: https://app-site-association.cdn-apple.com/a/v1/www.peacocktv.com
+      matching_rules:
+      - appID: W76B757YRY.com.peacocktv.peacock
+        paths:
+        - /watch/*
+        manifest_path_count: 2
+      other_app_ids:
+      - W76B757YRY.com.peacocktv.peacock.dev
+      - W76B757YRY.com.peacocktv.peacock.proton
+      - 85JBBGCG7V.com.bskyb.nbcu.intl.internal.us
+      fetch_errors:
+      - https://www.peacocktv.com/.well-known/apple-app-site-association HTTP 302
+      - https://www.peacocktv.com/apple-app-site-association HTTP 302
+- key: podcasts
+  service: Podcasts
+  bundle_id: com.apple.podcasts
+  region: US
+  title: Planet Money
+  id_recipe: Share the NPR show in Podcasts and copy the slug and digits following id.
+  candidates:
+  - template: https://podcasts.apple.com/us/podcast/{slug}/id{id}
+    url: https://podcasts.apple.com/us/podcast/planet-money/id290783428
+    goal: B
+    source: https://podcasts.apple.com/us/podcast/planet-money/id290783428
+    parameters:
+      id: '290783428'
+      slug: planet-money
+    region: US
+    route: direct
+  associations:
+    podcasts.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://podcasts.apple.com/.well-known/apple-app-site-association (unreadable)
+      - https://podcasts.apple.com/apple-app-site-association HTTP 404
+      - https://app-site-association.cdn-apple.com/a/v1/podcasts.apple.com HTTP 404
+- key: prime
+  service: Prime Video
+  bundle_id: com.amazon.aiv.AIVApp
+  region: US/CA
+  title: The Boys
+  id_recipe: Copy the season detail ID from Prime Video. Keep the leading zero.
+  candidates:
+  - template: https://www.primevideo.com/detail/{id}
+    url: https://www.primevideo.com/detail/0S1FYJ3LY9KTL9C7WFFAGA9F6F
+    goal: B
+    source: https://www.primevideo.com/detail/0S1FYJ3LY9KTL9C7WFFAGA9F6F
+    parameters:
+      id: 0S1FYJ3LY9KTL9C7WFFAGA9F6F
+    region: US/CA
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/the-boys/umc.cmc.6nbgn5yc9x5wvjbxye5x6uel?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/the-boys/umc.cmc.6nbgn5yc9x5wvjbxye5x6uel
+    parameters:
+      region: us
+      kind: show
+      slug: the-boys
+      id: umc.cmc.6nbgn5yc9x5wvjbxye5x6uel
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.primevideo.com:
+      source: https://www.primevideo.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: J7P34ALZ5R.com.amazon.aiv.AIVApp
+        paths:
+        - /detail/*
+        manifest_path_count: 76
+      other_app_ids:
+      - LVTJL52RRZ.com.amazon.aiv.AIVApp.gamma
+      - LVTJL52RRZ.com.amazon.aiv.AIVApp.beta
+      - 9734J427D3.com.amazon.aiv.AIVApp.development
+      - 9734J427D3.com.amazon.aiv.AIVApp.development.alpha
+      - 9734J427D3.com.amazon.aiv.AIVApp.development.beta
+      fetch_errors: []
+- key: spectrum
+  service: Spectrum TV
+  bundle_id: com.timewarnercable.simulcast
+  region: US
+  title: Live TV
+  id_recipe: Choose Live TV in Spectrum Watch. This hub uses a fixed path.
+  candidates:
+  - template: https://watch.spectrum.net/livetv
+    url: https://watch.spectrum.net/livetv
+    goal: B
+    source: https://watch.spectrum.net/livetv
+    parameters: {}
+    region: US
+    route: direct
+  - template: spectrumtv://watch.spectrum.net/livetv/{id}?linkorigin=sirilivetunein&idtype=network
+    url: spectrumtv://watch.spectrum.net/livetv/85?linkorigin=sirilivetunein&idtype=network
+    parameters:
+      id: '85'
+    title: Disney Channel
+    goal: C
+    region: US
+    route: direct
+    id_recipe: Use the Spectrum network ID shared for the channel. Disney Channel is 85 in the published example.
+    source: https://community.getchannels.com/t/experimental-stream-links-from-the-guide-via-custom-channels/36062/160
+  associations:
+    watch.spectrum.net:
+      source: https://watch.spectrum.net/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: 9J4VTX24NM.com.timewarnercable.simulcast
+        paths:
+        - '*'
+        manifest_path_count: 4
+      other_app_ids:
+      - XQS7PSG89D.com.charter.legacyTwctv
+      - XQS7PSG89D.com.charter.legacyTwctv.release
+      fetch_errors: []
+  skipped: outside test coverage
+- key: spotify
+  service: Spotify
+  bundle_id: com.spotify.client
+  region: US/CA
+  title: Rumours
+  id_recipe: Use Share → Copy album link on Fleetwood Mac’s Rumours and copy the base62 segment after album/.
+  candidates:
+  - template: https://open.spotify.com/album/{id}
+    url: https://open.spotify.com/album/1bt6q2SruMsBtcerNVtpZB
+    goal: B
+    source: https://open.spotify.com/album/1bt6q2SruMsBtcerNVtpZB
+    parameters:
+      id: 1bt6q2SruMsBtcerNVtpZB
+    region: US/CA
+    route: direct
+  - template: spotify:?uri=spotify:album:{id}&play=true
+    url: spotify:?uri=spotify:album:1bt6q2SruMsBtcerNVtpZB&play=true
+    goal: C
+    source: https://community.home-assistant.io/t/appletv-integration-deep-link-urls-which-are-working/592862
+    parameters:
+      id: 1bt6q2SruMsBtcerNVtpZB
+    region: US/CA
+    route: direct
+  associations:
+    open.spotify.com:
+      source: https://open.spotify.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: 8W66MEA7DD.com.spotify.client
+        paths:
+        - /album/*
+        manifest_path_count: 256
+      - appID: 2FNC3A47ZF.com.spotify.client
+        paths:
+        - /album/*
+        manifest_path_count: 256
+      other_app_ids:
+      - 78U2H6KMAF.com.spotify.client.internal
+      - 2FNC3A47ZF.com.spotify.client.watchkitapp.watchkitextension
+      - 78U2H6KMAF.com.spotify.client.internal.watchkitapp.watchkitextension
+      fetch_errors: []
+  playback_aliases:
+  - Second Hand News
+  - Dreams
+- key: sundance
+  service: Sundance Now
+  bundle_id: com.sundancenow.docclub
+  region: US
+  title: A Discovery of Witches
+  id_recipe: Open season 1 in the Sundance Now catalog and copy the slug and season identifier.
+  candidates:
+  - template: https://www.sundancenow.com/series/watch/{slug}/{id}
+    url: https://www.sundancenow.com/series/watch/a-discovery-of-witches/4680272
+    goal: B
+    source: https://www.sundancenow.com/series/watch/a-discovery-of-witches/4680272
+    parameters:
+      id: '4680272'
+      slug: a-discovery-of-witches
+    region: US
+    route: direct
+  - template: https://tv.apple.com/{region}/{kind}/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/a-discovery-of-witches/umc.cmc.7hxw90tiiuafobsgezhkci6nk?action=play
+    goal: C
+    source: https://tv.apple.com/us/show/a-discovery-of-witches/umc.cmc.7hxw90tiiuafobsgezhkci6nk
+    parameters:
+      region: us
+      kind: show
+      slug: a-discovery-of-witches
+      id: umc.cmc.7hxw90tiiuafobsgezhkci6nk
+    route: provider_handoff
+    id_recipe: Search the listed country's tv.apple.com catalog for the same title. Copy the entire show or movie URL, including
+      its umc.cmc ID, then append the query shown.
+    region: US
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+    www.sundancenow.com:
+      source: https://www.sundancenow.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: 72GP743PB7.com.sundancenow.docclub
+        paths: []
+        manifest_path_count: 9
+      other_app_ids: []
+      fetch_errors: []
+- key: tv
+  service: TV (Apple TV app)
+  bundle_id: com.apple.TVWatchList
+  region: US
+  title: Ted Lasso
+  id_recipe: Share the show from the US Apple TV storefront and copy the slug and full umc.cmc identifier.
+  candidates:
+  - template: https://tv.apple.com/us/show/{slug}/{id}
+    url: https://tv.apple.com/us/show/ted-lasso/umc.cmc.vtoh0mn0xn7t3c643xqonfzy
+    goal: B
+    source: https://tv.apple.com/us/show/ted-lasso/umc.cmc.vtoh0mn0xn7t3c643xqonfzy
+    parameters:
+      id: umc.cmc.vtoh0mn0xn7t3c643xqonfzy
+      slug: ted-lasso
+    region: US
+    route: direct
+  - template: https://tv.apple.com/us/show/{slug}/{id}?action=play
+    url: https://tv.apple.com/us/show/ted-lasso/umc.cmc.vtoh0mn0xn7t3c643xqonfzy?action=play
+    goal: C
+    source: https://pyatv.dev/development/apps/
+    parameters:
+      id: umc.cmc.vtoh0mn0xn7t3c643xqonfzy
+      slug: ted-lasso
+    region: US
+    route: direct
+  associations:
+    tv.apple.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors: *id003
+- key: vlc
+  service: VLC
+  bundle_id: org.videolan.vlc-ios
+  region: US/CA
+  title: Big Buck Bunny trailer
+  id_recipe: Prefix the complete receiver-accessible media URL with vlc://. Preserve its https://.
+  candidates:
+  - template: vlc://{id}
+    url: vlc://https://media.w3.org/2010/05/bunny/trailer.mp4
+    goal: C
+    source: https://github.com/videolan/vlc-ios/blob/master/Buildsystem/Testing/Unit/URLHandlerTests.swift
+    parameters:
+      id: https://media.w3.org/2010/05/bunny/trailer.mp4
+    region: US/CA
+    route: direct
+- key: vevo
+  service: Vevo
+  bundle_id: com.vevo.iphone
+  region: US
+  title: Vevo
+  id_recipe: Open Where to Watch on Vevo. This directory has no individual video ID.
+  candidates:
+  - template: https://www.hq.vevo.com/watch
+    url: https://www.hq.vevo.com/watch
+    goal: A
+    source: https://www.hq.vevo.com/watch
+    parameters: {}
+    region: US
+    route: direct
+  associations:
+    www.hq.vevo.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://www.hq.vevo.com/.well-known/apple-app-site-association HTTP 400
+      - https://www.hq.vevo.com/apple-app-site-association HTTP 404
+      - https://app-site-association.cdn-apple.com/a/v1/www.hq.vevo.com HTTP 404
+  catalog_note: Vevo lists Apple TV as a distribution platform. Its public Watch directory provides channel discovery.
+  catalog_source: https://support.vevo.com/hc/en-us/articles/28025601841435-Does-Vevo-live-anywhere-else-aside-from-YouTube
+- key: vimeo
+  service: Vimeo
+  bundle_id: com.vimeo
+  region: US/CA
+  title: The Mountain
+  id_recipe: Share Terje Sørgjerd’s film on Vimeo and copy the numeric video ID.
+  candidates:
+  - template: https://vimeo.com/{id}
+    url: https://vimeo.com/22439234
+    goal: B
+    source: https://vimeo.com/22439234
+    parameters:
+      id: '22439234'
+    region: US/CA
+    route: direct
+  associations:
+    vimeo.com:
+      source: https://vimeo.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: 36H3ADA95Y.com.vimeo
+        paths:
+        - '*'
+        manifest_path_count: 147
+      other_app_ids:
+      - 35R365FS4Q.com.vimeo.universallinkz
+      - LVTRU4JL4D.com.vimeo.enterprise
+      fetch_errors: []
+- key: ytkids
+  service: YouTube Kids
+  bundle_id: com.google.ios.youtubekids
+  region: US/CA
+  title: Baby Shark Dance
+  id_recipe: Copy the v parameter for Pinkfong’s original Baby Shark Dance. Kids availability depends on the age filter.
+  candidates:
+  - template: https://www.youtubekids.com/watch?v={id}
+    url: https://www.youtubekids.com/watch?v=XqZsoesa55w
+    goal: C
+    source: https://www.youtubekids.com/watch?v=XqZsoesa55w
+    parameters:
+      id: XqZsoesa55w
+    region: US/CA
+    route: direct
+  associations:
+    www.youtubekids.com:
+      source: null
+      matching_rules: []
+      other_app_ids: []
+      fetch_errors:
+      - https://www.youtubekids.com/.well-known/apple-app-site-association (unreadable)
+      - https://www.youtubekids.com/apple-app-site-association (unreadable)
+      - https://app-site-association.cdn-apple.com/a/v1/www.youtubekids.com HTTP 404
+  catalog_note: Google moved the TV Kids experience into the main YouTube app. An installed standalone icon can be a legacy
+    app.
+  catalog_source: https://support.google.com/youtubekids/thread/260312849?hl=en
+- key: youtube
+  service: YouTube
+  bundle_id: com.google.ios.youtube
+  region: US/CA
+  title: Me at the zoo
+  id_recipe: Copy the 11-character v parameter or youtu.be path from jawed’s video.
+  candidates:
+  - template: youtube://www.youtube.com/watch?v={id}
+    url: youtube://www.youtube.com/watch?v=jNQXAC9IVRw
+    goal: C
+    source: https://www.youtube.com/watch?v=jNQXAC9IVRw
+    parameters:
+      id: jNQXAC9IVRw
+    region: US/CA
+    route: direct
+  - template: https://www.youtube.com/watch?v={id}
+    url: https://www.youtube.com/watch?v=jNQXAC9IVRw
+    goal: C
+    source: https://www.youtube.com/watch?v=jNQXAC9IVRw
+    parameters:
+      id: jNQXAC9IVRw
+    region: US/CA
+    route: direct
+  - template: youtube://watch/{id}
+    url: youtube://watch/dQw4w9WgXcQ
+    goal: C
+    source: https://www.home-assistant.io/integrations/apple_tv/
+    title: Never Gonna Give You Up
+    parameters:
+      id: dQw4w9WgXcQ
+    region: US/CA
+    route: direct
+    id_recipe: Copy the v parameter from Rick Astley’s official music video.
+  associations:
+    www.youtube.com:
+      source: https://www.youtube.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - EQHXZ8M8AV.com.google.ios.youtube
+        - 4ANB9W7R3P.com.google.ios.youtube.release
+        - 4ANB9W7R3P.com.google.visionosyoutube.enterprise
+        - EQHXZ8M8AV.com.google.visionosyoutube
+        components:
+        - '?':
+            noapp: ?*
+          exclude: true
+        - /: '*'
+        manifest_component_count: 108
+      - appID: EQHXZ8M8AV.com.google.ios.youtube
+        paths:
+        - '*'
+        manifest_path_count: 107
+      other_app_ids:
+      - EQHXZ8M8AV.com.google.ios.youtubeproducer
+      - EQHXZ8M8AV.com.google.ios.youtubeproducer.dev
+      - 4ANB9W7R3P.com.google.ios.youtubeproducer.enterprise
+      - EQHXZ8M8AV.com.google.ios.youtube.dev
+      - 4ANB9W7R3P.com.google.ios.youtube.enterprise
+      - 4ANB9W7R3P.com.google.ios.youtube.alpha
+      - 4ANB9W7R3P.com.google.ios.youtube.beta
+      - 4ANB9W7R3P.com.google.ios.youtube.gamma
+      - EQHXZ8M8AV.com.google.visionosyoutube.dev
+      - 4ANB9W7R3P.com.google.ios.youtube.release
+      - 4ANB9W7R3P.com.google.visionosyoutube.enterprise
+      - EQHXZ8M8AV.com.google.visionosyoutube
+      fetch_errors: []
+- key: fitness
+  service: Fitness
+  bundle_id: com.apple.Fitness
+  region: US
+  title: Yoga with Jessica
+  id_recipe: Share the workout in Fitness+ and copy its slug and numeric workout ID.
+  candidates:
+  - template: https://fitness.apple.com/us/workout/{slug}/{id}
+    url: https://fitness.apple.com/us/workout/yoga-with-jessica/1595101770
+    goal: B
+    source: https://fitness.apple.com/us/workout/yoga-with-jessica/1595101770
+    parameters:
+      id: '1595101770'
+      slug: yoga-with-jessica
+    region: US
+    route: direct
+  associations:
+    fitness.apple.com:
+      source: https://fitness.apple.com/.well-known/apple-app-site-association
+      matching_rules: []
+      other_app_ids:
+      - com.apple.tv
+      fetch_errors: []
+- key: photos
+  service: Photos
+  bundle_id: com.apple.TVPhotos
+  region: US/CA
+  title: null
+  id_recipe: Personal photo links require a share URL.
+  candidates: []
+- key: arcade
+  service: Arcade
+  bundle_id: com.apple.Arcade
+  region: US/CA
+  title: null
+  id_recipe: The public catalog links to game App Store pages. No Arcade content URL identified.
+  candidates: []
+- key: kanto
+  service: Kanto
+  bundle_id: com.karaoke.karaokesmart
+  region: US/CA
+  title: Kanto
+  id_recipe: Use the fixed /openApp path from Kanto’s association file to request its home screen.
+  candidates:
+  - url: https://kanto.co/openApp
+    template: https://kanto.co/openApp
+    parameters: {}
+    goal: A
+    region: US/CA
+    route: direct
+    source: https://kanto.co/
+  associations:
+    kanto.co:
+      source: https://kanto.co/.well-known/apple-app-site-association
+      matching_rules:
+      - appID: JX2PY36SWN.com.karaoke.karaokesmart
+        paths:
+        - /openApp*
+        manifest_path_count: 7
+      other_app_ids: []
+      fetch_errors: []
+- key: smule
+  service: Smule
+  bundle_id: com.smule.sing
+  region: US/CA
+  title: Bohemian Rhapsody
+  id_recipe: Copy the recording’s slug and combined performer_recording ID from the shared performance.
+  candidates:
+  - url: https://www.smule.com/recording/rhapsody-bohemian-rhapsody-bohemian/2476974843_3717818605
+    template: https://www.smule.com/recording/{slug}/{id}
+    parameters:
+      slug: rhapsody-bohemian-rhapsody-bohemian
+      id: '2476974843_3717818605'
+    goal: B
+    region: US/CA
+    route: direct
+    source: https://www.backstage.com/tal/kate-mccauley/
+  associations:
+    www.smule.com:
+      source: https://app-site-association.cdn-apple.com/a/v1/www.smule.com
+      matching_rules:
+      - appID: 9H24ATQZRS.com.smule.sing
+        paths: []
+        manifest_path_count: 4
+      other_app_ids:
+      - 9H24ATQZRS.com.smule.autorap
+      fetch_errors:
+      - https://www.smule.com/.well-known/apple-app-site-association returned a challenge page
+- key: jeopardy
+  service: Jeopardy
+  bundle_id: com.frostypop.jeopardy
+  region: US/CA
+  title: null
+  id_recipe: No public TV game-session link identified.
+  candidates: []
+- key: familyfeud
+  service: Family Feud
+  bundle_id: com.gameloft.ffp
+  region: US/CA
+  title: null
+  id_recipe: No public TV game-session link identified.
+  candidates: []
+- key: viff
+  service: VIFF Connect
+  bundle_id: com.cinesend.viff
+  region: CA
+  title: null
+  id_recipe: Find the festival film on VIFF and use its screening access link. No public TV title link was found for an active
+    screening.
+  candidates: []
+  catalog_source: https://apps.apple.com/ca/app/viff-connect/id1526849457
+  associations:
+    viff.org:
+      source: null
+      matching_rules: []
+      fetch_errors:
+      - https://viff.org/.well-known/apple-app-site-association HTTP 404 without a readable applinks manifest
+- key: stellar
+  service: Stellar
+  bundle_id: com.stellartix
+  region: US
+  title: null
+  id_recipe: Stellar’s Your Tickets page opens the purchased event. A valid ticket or watch ID is required.
+  candidates: []
+  catalog_source: https://documentation.stellartickets.com/article/how-to-help-your-customers-troubleshoot-tech-issues
+  associations:
+    www.stellartickets.com:
+      source: https://www.stellartickets.com/.well-known/apple-app-site-association
+      matching_rules:
+      - appIDs:
+        - MQ2Y292XD2.com.stellartix
+        components:
+        - /: /wallet/*
+        - /: /streams/*
+        - /: /access/*
+        - /: /ticket-transfer/*
+      fetch_errors: []
+- key: computers
+  service: Computers
+  bundle_id: com.apple.TVHomeSharing
+  region: US/CA
+  title: null
+  id_recipe: Choose a title from a Home Sharing library. This route requires a library asset ID.
+  candidates: []
+association_scope: Rules shown include candidate paths, matching wildcards and conditional exclusions for those paths. The
+  source provides the full manifest. A manifest alone does not establish tvOS routing.

@@ -1,0 +1,13 @@
+diff --git a/pyatv/const.py b/pyatv/const.py
+index 5d29518..bb7eca8 100644
+--- a/pyatv/const.py
++++ b/pyatv/const.py
+@@ -8,7 +8,7 @@ MAJOR_VERSION = "0"
+ MINOR_VERSION = "18"
+ PATCH_VERSION = "0"
+ __short_version__ = f"{MAJOR_VERSION}.{MINOR_VERSION}"
+-__version__ = f"{__short_version__}.{PATCH_VERSION}"
++__version__ = f"{__short_version__}.{PATCH_VERSION}+atvbridge.1"
+ 
+ 
+ class Protocol(Enum):

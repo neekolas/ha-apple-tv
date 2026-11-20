@@ -1,0 +1,236 @@
+diff --git a/pyatv/protocols/companion/api.py b/pyatv/protocols/companion/api.py
+index 88ce74c..c3f0449 100644
+--- a/pyatv/protocols/companion/api.py
++++ b/pyatv/protocols/companion/api.py
+@@ -112,7 +112,7 @@ class CompanionAPI(
+             return
+ 
+         try:
+-            for event in self._subscribed_events:
++            for event in list(self._subscribed_events):
+                 await self.unsubscribe_event(event)
+ 
+             # Sometimes unsubscribe fails for an unknown reason, but we are no
+@@ -143,6 +143,7 @@ class CompanionAPI(
+             str(self.core.config.address),
+             self.core.service.port,
+             self.core.device_listener,
++            self.core.settings.protocols.companion.keepalive_interval,
+         )
+         self._protocol = CompanionProtocol(
+             self._connection, SRPAuthHandler(), self.core.service
+diff --git a/pyatv/protocols/companion/connection.py b/pyatv/protocols/companion/connection.py
+index a6d123b..3d67ad7 100644
+--- a/pyatv/protocols/companion/connection.py
++++ b/pyatv/protocols/companion/connection.py
+@@ -8,7 +8,7 @@ import logging
+ from typing import Optional
+ 
+ from pyatv import exceptions
+-from pyatv.support import chacha20, log_binary
++from pyatv.support import chacha20, log_binary, net
+ from pyatv.support.state_producer import StateProducer
+ 
+ _LOGGER = logging.getLogger(__name__)
+@@ -59,6 +59,7 @@ class CompanionConnection(asyncio.Protocol):
+         host: str,
+         port: int,
+         device_listener: Optional[StateProducer] = None,
++        keepalive_interval: float = 0,
+     ) -> None:
+         """Initialize a new CompanionConnection instance."""
+         self.loop = loop
+@@ -66,6 +67,11 @@ class CompanionConnection(asyncio.Protocol):
+         self.port = port
+         self._listener: Optional[CompanionConnectionListener] = None
+         self._device_listener = device_listener
++        self._keepalive_interval = keepalive_interval
++        self._heartbeat: Optional[asyncio.TimerHandle] = None
++        self._failed_sends = 0
++        self._heartbeat_error: Optional[Exception] = None
++        self._paused = False
+         self.transport = None
+         self._buffer: bytes = b""
+         self._chacha: Optional[chacha20.Chacha20Cipher] = None
+@@ -83,6 +89,7 @@ class CompanionConnection(asyncio.Protocol):
+     def close(self) -> None:
+         """Close connection to device."""
+         _LOGGER.debug("Closing connection")
++        self._cancel_heartbeat()
+         if self.transport:
+             self.transport.close()
+             self.transport = None
+@@ -122,6 +129,52 @@ class CompanionConnection(asyncio.Protocol):
+         """Handle that connection was eatablished."""
+         _LOGGER.debug("Connected to companion device %s:%d", self.host, self.port)
+         self.transport = transport
++        sock = transport.get_extra_info("socket")
++        if sock is not None:
++            try:
++                net.tcp_keepalive(sock)
++            except (OSError, exceptions.NotSupportedError) as ex:
++                _LOGGER.debug("TCP keepalive options unavailable: %s", ex)
++        self._schedule_heartbeat()
++
++    def pause_writing(self):
++        """The socket write buffer reached its high-water mark."""
++        self._paused = True
++
++    def resume_writing(self):
++        """The socket write buffer can accept more data."""
++        self._paused = False
++
++    def _cancel_heartbeat(self):
++        if self._heartbeat is not None:
++            self._heartbeat.cancel()
++            self._heartbeat = None
++
++    def _schedule_heartbeat(self):
++        if self._keepalive_interval > 0:
++            self._heartbeat = self.loop.call_later(
++                self._keepalive_interval, self._send_heartbeat
++            )
++
++    def _send_heartbeat(self):
++        self._heartbeat = None
++        transport = self.transport
++        if transport is None or transport.is_closing():
++            return
++        try:
++            if self._paused:
++                raise exceptions.ConnectionLostError(
++                    "Companion write buffer remains full"
++                )
++            self.send(FrameType.NoOp, b"")
++            self._failed_sends = 0
++        except Exception as ex:
++            self._failed_sends += 1
++            if self._failed_sends >= 2:
++                self._heartbeat_error = ex
++                transport.abort()
++                return
++        self._schedule_heartbeat()
+ 
+     def data_received(self, data):
+         """Handle data received from companion."""
+@@ -159,6 +212,11 @@ class CompanionConnection(asyncio.Protocol):
+ 
+     def connection_lost(self, exc):
+         """Handle that connection was lost from companion."""
++        self._cancel_heartbeat()
++        exc = exc or self._heartbeat_error
++        self._heartbeat_error = None
++        self._failed_sends = 0
++        self._paused = False
+         _LOGGER.debug("Connection lost to remote device: %s", exc)
+         self.transport = None
+         if self._device_listener is not None:
+diff --git a/pyatv/settings.py b/pyatv/settings.py
+index a02d6e6..b41c18d 100644
+--- a/pyatv/settings.py
++++ b/pyatv/settings.py
+@@ -117,6 +117,9 @@ class AirPlaySettings(BaseModel, extra="ignore"):  # type: ignore[call-arg]
+ class CompanionSettings(BaseModel, extra="ignore"):  # type: ignore[call-arg]
+     """Settings related to Companion."""
+ 
++    keepalive_interval: float = Field(default=15.0, ge=0, allow_inf_nan=False)
++    """Seconds between NoOp frames. Zero disables application keepalive."""
++
+     identifier: Optional[str] = None
+     credentials: Optional[str] = None
+ 
+diff --git a/tests/fake_device/companion.py b/tests/fake_device/companion.py
+index 70c27f5..b6b3dfc 100644
+--- a/tests/fake_device/companion.py
++++ b/tests/fake_device/companion.py
+@@ -97,6 +97,7 @@ class FakeCompanionState:
+         self.powered_on: bool = True
+         self.sid: int = 0
+         self.service_type: Optional[str] = None
++        self.noops = 0
+         self.system_info: Optional[dict] = None
+         self.tv_rc_protocol_version: Optional[str] = None
+         self.latest_button: Optional[str] = None
+@@ -271,7 +272,7 @@ class FakeCompanionService(CompanionServerAuth, asyncio.Protocol):
+     def data_received(self, data):
+         self.buffer += data
+ 
+-        while self.buffer:
++        while len(self.buffer) >= 4:
+             payload_length = 4 + int.from_bytes(self.buffer[1:4], byteorder="big")
+             if len(self.buffer) < payload_length:
+                 _LOGGER.debug(
+@@ -284,6 +285,10 @@ class FakeCompanionService(CompanionServerAuth, asyncio.Protocol):
+             data = self.buffer[4:payload_length]
+             self.buffer = self.buffer[payload_length:]
+ 
++            if frame_type is FrameType.NoOp and data == b"":
++                self.state.noops += 1
++                continue
++
+             if self.chacha:
+                 data = self.chacha.decrypt(data, aad=header)
+ 
+diff --git a/tests/protocols/companion/test_companion_keepalive.py b/tests/protocols/companion/test_companion_keepalive.py
+new file mode 100644
+index 0000000..d565d79
+--- /dev/null
++++ b/tests/protocols/companion/test_companion_keepalive.py
+@@ -0,0 +1,57 @@
++"""Companion heartbeat behavior on an authenticated socket."""
++
++import asyncio
++import socket
++from unittest.mock import Mock, patch
++
++import pytest
++
++import pyatv
++from pyatv.const import Protocol
++from pyatv.protocols.companion.connection import FrameType
++from pyatv.storage.memory_storage import MemoryStorage
++
++from tests.utils import until
++
++pytestmark = pytest.mark.asyncio
++
++
++async def test_keepalive_and_cipher_stay_in_sync(companion_conf, companion_state):
++    storage = MemoryStorage()
++    settings = await storage.get_settings(companion_conf)
++    settings.protocols.companion.keepalive_interval = 0.01
++    atv = await pyatv.connect(
++        companion_conf, asyncio.get_running_loop(), storage=storage
++    )
++    try:
++        connection = atv.remote_control.get(Protocol.Companion).api._connection
++        sock = connection.transport.get_extra_info("socket")
++        assert sock.getsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE)
++        await until(lambda: companion_state.noops >= 2)
++        await atv.remote_control.menu()
++    finally:
++        await asyncio.gather(*atv.close())
++    assert connection._heartbeat is None
++
++
++@pytest.mark.parametrize("blocked", [False, True])
++async def test_two_missed_sends_report_connection_lost(companion_client, blocked):
++    connection = companion_client.remote_control.get(Protocol.Companion).api._connection
++    listener = Mock()
++    companion_client.listener = listener
++
++    def tick():
++        connection._cancel_heartbeat()
++        connection._send_heartbeat()
++
++    with patch.object(connection, "send", side_effect=OSError("send failed")) as send:
++        if blocked:
++            connection.pause_writing()
++        tick()
++        assert connection.connected
++        assert not connection.transport.is_closing()
++        tick()
++        await until(lambda: listener.connection_lost.called)
++        if not blocked:
++            assert send.call_args.args == (FrameType.NoOp, b"")
++    listener.connection_closed.assert_not_called()
