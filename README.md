@@ -33,6 +33,7 @@ Every tool accepts an optional `tv`. Use the name or stable bridge ID from `tv:/
 | Read the screen | `tv_look {"tv":"<TV name>"}` | Reads accessibility labels and focus. Some apps expose little text. Set `image` to `true` for a screenshot. tvOS can show a screenshot notice. |
 | Navigate by label | `tv_navigate {"tv":"<TV name>","to":"General","select":true}` | Targets a visible label. Requires screen pairing. |
 | Use the remote | `tv_remote {"tv":"<TV name>","keys":["down"]}` | Sends keys, a swipe or text. Text entry requires a focused keyboard field. |
+| Batch remote work | `tv_sequence {"tv":"<TV name>","steps":[{"to":"General"},{"expect":{"focus":"General"}}]}` | Runs on one receiver and stops at the first failed step. |
 | Set power | `tv_power {"tv":"<TV name>","on":false}` | Checks the resulting Apple TV power state. |
 | Repair pairing | `tv_pair {"tv":"<TV name>","kind":"screen"}` | Starts a PIN exchange for a registered TV. Follow `data.ask_user` and use the returned pairing ID. Use `kind:"control"` for AirPlay. |
 | Check health | `tv_status {"tv":"<TV name>"}` | Reports reachability, pairing state, capabilities and problems with suggested fixes. |

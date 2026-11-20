@@ -26,7 +26,7 @@ claude mcp add --transport http apple-tv "$HA_URL/api/atv_bridge/mcp" \
   --header "Authorization: Bearer $HA_TOKEN"
 ```
 
-Read `tv://tvs` for registered names and IDs. All ten bridge tools accept optional `tv`. With one paired receiver you can omit it. With several, use a receiver-specific call such as `tv_look {"tv":"<room>"}`. The default look is text only. An unscoped `tv_status {}` returns room summaries when the target is ambiguous.
+Read `tv://tvs` for registered names and IDs. All bridge tools accept optional `tv`. With one paired receiver you can omit it. With several, use a receiver-specific call such as `tv_look {"tv":"<room>"}`. The default look is text only. An unscoped `tv_status {}` returns room summaries when the target is ambiguous.
 
 Scripts can POST tool arguments as JSON to `/api/atv_bridge/tool/<name>`. To upload a bundle, send a ZIP as the body. Put `index.html` at its root. Both the ZIP and its unpacked contents must fit within 50 MiB.
 

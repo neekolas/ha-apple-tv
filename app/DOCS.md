@@ -65,6 +65,7 @@ With several paired TVs, use `data.tvs[].status` for each receiver’s pairing a
 | Read labels or inspect an image | `tv_look {}` or `tv_look {"image":true}` |
 | Move focus | `tv_navigate {"to":"Search","select":true}` |
 | Send remote input | `tv_remote {"keys":["down","select"]}` or `tv_remote {"text":"Succession","submit":true}` |
+| Batch remote work | `tv_sequence {"steps":[{"to":"General"},{"expect":{"focus":"General"}}]}` |
 | Switch off | `tv_power {"on":false}` |
 
 Control and presentation tools check power and wake the TV when needed. `screen.app.source` identifies accessibility observations and now-playing fallbacks. Playback metadata stays in `screen.playing` when another app has focus. Read `screen` and `verified` before choosing the next action. Text observations read the foreground app’s native accessibility tree without moving the inspector or scrolling the TV. Some apps expose few labels. During a menu transition, focus can briefly be null. Read again before sending another key. Request an image only on the intended TV. Capturing it can show a **Screenshot Taken** toast. The bridge sets `data.toast_visible` to `true` for a successful capture. `max_width` accepts 1–4096 pixels and defaults to 1280. DRM-protected video can appear black.

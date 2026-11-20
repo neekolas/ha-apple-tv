@@ -13,23 +13,9 @@ Use the bridge on Home Assistant OS with an Apple TV 4K running tvOS 27 or later
 2. Call `tv_status {}` or read `tv://tvs`. Use the target room's stable ID if names collide. Every tool takes optional `tv`. If several TVs are paired, include it on every call for a particular room.
 3. Check `tv_status {"tv":"<room>"}` for reachability, pairings and capabilities. If someone may be watching, use a text-only `tv_look` before changing their screen.
 
-## Pick the tool
+Use MCP discovery for tool choices, arguments and examples. For repetitive remote work, plan a `tv_sequence` using labels from the target TV. Put a checkpoint immediately before an action that depends on focus, app or row value. See [Drive native apps](apps.md).
 
-| Request | First call | What to check |
-|---|---|---|
-| Show your own page | `tv_show` with one of `html`, `files`, `bundle` or `url` | `data.transport`, `verified`, `screen.presenting` |
-| Change the current page | `tv_update {"data":{"step":2}}` | `data.page_state` if the page reports it |
-| Watch something | `tv_play` with `youtube`, `media`, `link`, or both `app` and `title` | For a link, check `data.landed` and the foreground app |
-| Open an app or search | `tv_open` with `app`, optionally `search` or `path` | Check the app, focus and evidence |
-| Read the screen | `tv_look {}` | Read labels first. An explicit `image: true` requests a screenshot and shows a toast. |
-| Move to an item | `tv_navigate` with its full label in `to` | Add `select: true` only when the user wants to activate it |
-| Send other input | `tv_remote` with `keys`, `text` or `swipe` | Check acknowledged keys and whether their effect was verified |
-| Wake or sleep | `tv_power` with `on` | Read the reported power state |
-| Pair a registered receiver | `tv_pair` with the room and `kind` | Relay `data.ask_user` and use the same exchange for the reply |
-
-Actions usually prepare the receiver first. They can wake it, dismiss the screen saver and choose a visible profile. App launches can also answer recognized privacy prompts. Read `evidence` for those choices. `tv_open`, `tv_play` and `tv_power` take over the current presentation. To stop showing a page, call `tv_show` with just the room selector.
-
-Wait for each action before deciding on the next. On `uncertain` or `verified: false`, look at the screen before sending more input. Ask before purchases, rentals or upgrades. The bridge has no purchase guard.
+On uncertain delivery, inspect the current screen before resuming. Ask before purchases, rentals or upgrades.
 
 ## Guides
 

@@ -59,3 +59,21 @@ These examples assume a default TV. With several paired TVs, add the same `tv` n
 3. Keep only services that are installed. If there are several, ask the user which one to use.
 4. If the service guide has a confirmed template for that service, find the title's ID and call `tv_play {"link": "..."}`. Otherwise `tv_open {"app": "<service>", "search": "<show>"}`, then `tv_look {}` to check the results. See [deep links by service](deeplinks.md).
 5. The bridge can answer recognized profile pickers. Check `evidence` for the chosen profile. Stop at any sign-in or upgrade screen and ask the user (see [apps.md](apps.md)).
+
+## Visit a Settings menu and return Home
+
+Use one `tv_sequence` call to open the device list, confirm the page heading, back out and return Home. The path opens the list without selecting a device.
+
+```json
+{
+  "steps": [
+    {"app":"Settings","path":["Remotes and Devices","Remote App and Devices"]},
+    {"expect":{"app":"Settings","visible":"Remote App and Devices"}},
+    {"key":"menu"},
+    {"key":"home"},
+    {"expect":{"app":"Home"}}
+  ]
+}
+```
+
+Inspect the final checkpoint and `screen.app`. If the device list uses a different accessible heading, the sequence stops there and reports the labels it observed.

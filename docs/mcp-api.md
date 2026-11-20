@@ -53,7 +53,7 @@ For example, an unqualified status call with several paired TVs has this structu
 
 ## Tool reference
 
-Arguments below are JSON objects. Add `"tv":"<room>"` to any example. Strings must be nonempty unless the field's schema says otherwise. MCP `tools/list` supplies the input schemas for the ten advertised tools.
+Arguments below are JSON objects. Add `"tv":"<room>"` to any example. Strings must be nonempty unless the field's schema says otherwise. MCP `tools/list` supplies the input schemas for all advertised tools.
 
 ### tv_status
 
@@ -119,6 +119,34 @@ HID keys are `up`, `down`, `left`, `right`, `menu`, `select`, `home`, `volume_up
 
 The bridge checks the screen after each key. A sequence can continue after an acknowledged key with no visible change if focus remains readable. Lost acknowledgment or missing focus between keys stops the sequence. `data.confirmed_keys` counts acknowledged keys. The next attempted key may also have arrived. Look before sending more. The bridge has no purchase guard. Get the user's approval before selecting a paid action.
 
+### tv_sequence
+
+Run remote work on a single receiver in one MCP call. Supply `steps`, optional `for_each` and the usual `tv` selector. The bridge validates the request before waking the TV. It holds that receiver's tool lock through preparation, all iterations and the final screen read. The execution deadline is 90 seconds including preparation. A separate final read, when needed, has a five-second timeout. Cancellation can take additional time to close an active connection.
+
+| Step | Behavior |
+| --- | --- |
+| `{"key":"menu"}` | Send one `tv_remote` key and wait for acknowledgment. Skip the accessibility read between raw keys. |
+| `{"pause_ms":300}` | Wait 1–5000 ms for a transition. |
+| `{"to":"General","select":false}` | Navigate using accessible focus and an exact full label. Select is optional. An unverified selection stops the run. |
+| `{"text":"search terms"}` | Replace a focused keyboard field and verify readback. Use a separate key step to submit. |
+| `{"app":"Settings","path":["Remotes and Devices"]}` | Take over the presentation, verify the launch and optionally follow up to ten menu labels using the `tv_open` path checks. |
+| `{"expect":{"app":"Settings","focus":"General","value":"On","visible":"Network"}}` | Require every supplied field to match the same fresh accessibility observation. Supply at least one field. |
+
+Checkpoint comparisons ignore case and normalize whitespace. `focus` and `value` refer to the focused row. `visible` checks the focused label and up to 100 accessible items. `app` accepts the accessible foreground name or bundle ID. A mismatch returns `not_found` with the failing field, expected value and observed value in the step's `data`.
+
+For repetition, supply an ordered list of labels. The bridge runs the complete step list for each label. Use the whole string `"$item"` in `to` or any `expect` field. Other strings are literal. This example focuses two Settings rows and checks each without selecting it.
+
+```json
+{
+  "for_each": ["General", "Network"],
+  "steps": [{"to":"$item"}, {"expect":{"focus":"$item","app":"Settings"}}]
+}
+```
+
+The limit is 50 steps after repetition. `data.total_steps` counts the planned steps. `data.steps` contains each attempted step's zero-based `iteration` and `step`, operation, outcome, evidence and operation-specific data. `data.stopped_at` is null on completion, the first failed location on a step error, or `{"phase":"prepare"}` or `{"phase":"screen"}` on a setup or final-read error. Validation and routing errors use the normal tool envelope before execution.
+
+Read the final `screen` and individual outcomes. With raw keys, `ok: true` means the run completed and `verified: false` records that individual key effects were unchecked. A passing checkpoint independently verifies the requested state. On lost acknowledgment the attempted key may have arrived. Earlier steps stay applied. Inspect the screen before resuming at a known step.
+
 ### tv_power
 
 `{"on":true}` wakes the receiver on a fresh connection. `{"on":false}` requests sleep and checks for Off. It can retry sleep on a fresh session. Both forms take over a presentation. An already-off receiver skips wake for a sleep request.
@@ -145,7 +173,7 @@ A tool failure includes `error.code`, `error.message`, `error.retryable` and `er
 | `access_blocked` | The TV denied access | no |
 | `app_not_installed` | No unique installed app matches | no |
 | `launch_refused` | The launch was refused or the build lacks the capability | no |
-| `not_found` / `no_text_field` | Navigation failed or text entry lacks keyboard focus | no |
+| `not_found` / `no_text_field` | Navigation or sequence checkpoint failed, or text entry lacks keyboard focus | no |
 | `invalid_arguments` | Invalid arguments, content or pairing exchange | no |
 | `tv_required` / `tv_not_found` | Ambiguous selection or unknown receiver. Read `data.tvs`. | no |
 | `mirror_busy` | All mirror slots are held. Read `data.holders`. | no |
@@ -161,7 +189,7 @@ A tool failure includes `error.code`, `error.message`, `error.retryable` and `er
 
 Scripts can POST JSON arguments to `/api/atv_bridge/tool/<name>` with the same HA admin header. The HTTP result places a requested image in `data.image`. For bundled pages, POST a raw ZIP to `/api/atv_bridge/bundle`. Success returns `{"bundle":"<32 lowercase hex characters>"}`. See [upload limits and commands](../skills/apple-tv/content.md).
 
-HA's built-in MCP server and Assist expose six text tools through the integration: `atv_bridge__show`, `atv_bridge__play`, `atv_bridge__open`, `atv_bridge__power`, `atv_bridge__pair` and `atv_bridge__status`. Use the bridge endpoint above for full screen reads, navigation, remote input and page updates.
+HA's built-in MCP server and Assist expose six text tools through the integration: `atv_bridge__show`, `atv_bridge__play`, `atv_bridge__open`, `atv_bridge__power`, `atv_bridge__pair` and `atv_bridge__status`. Use the bridge endpoint above for full screen reads, navigation, remote input, sequences and page updates.
 
 
 The integration uses a separate internal API on loopback port 8765 with the app token from Supervisor discovery. It lists registered receivers with `GET /api/tvs`, discovers candidates with `GET /api/discover`, and registers a candidate with `POST /api/tvs` and `{"id":"<advertised identifier>"}`. Under `/api/tvs/<bridge ID>`, it uses GET for `status`, `health`, `apps` and `events` (WebSocket), and POST for `pair/start`, `pair/finish` and `tool/<name>`. Agent clients use the authenticated HA routes above.

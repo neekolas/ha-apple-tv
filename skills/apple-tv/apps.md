@@ -1,22 +1,12 @@
 # Drive native apps
 
-Pass the room name or ID as `tv` on each call when there is more than one paired receiver. Read `tv://apps/<id>` for the installed names and bundle IDs. `tv_open` uses fuzzy matching. An ambiguous name returns `app_not_installed` with candidates in `data.apps`.
+Read `tv://apps/<id>` if the app name is ambiguous. For a YouTube video, inspect the reported title because playback metadata can omit the video ID. For a service link, use `data.landed` to decide whether to continue from a title page or browse the app. A regional Apple TV catalog link may hand off to a provider. Copy its visible action label before continuing. See [deep links](deeplinks.md).
 
-## Reach a title
+## Batch a known route
 
-1. For YouTube, use `tv_play {"youtube":"<video URL or 11-character ID>"}`. The bridge checks now-playing metadata in YouTube. The video ID may be absent from that metadata, so check the reported title.
-2. For a known service link, use `tv_play {"link":"<URL>"}`. On success, `data.landed` distinguishes `playing`, `title_page` and `app_home`. Read `screen.app`, `screen.playing` and the available actions. A welcome screen or profile picker can count as app home. See [deep links](deeplinks.md).
-3. For a title and an app, use `tv_play {"app":"<app>","title":"<title>"}`. It uses a known title recipe or searches, selects a matching label and checks playback in the app. If needed it tries a visible Play, Watch Now or Resume action.
-4. To browse the results yourself, use `tv_open {"app":"<app>","search":"<query>"}`. YouTube and Spotify have search links. Other recipes select Search and replace the field text. Read the results before choosing a label.
+Start with a text look to identify full labels. Use `tv_sequence` when the route is known and each later action can be guarded on the TV. Use `to` for a named menu row and `expect` for the state the next step needs. Raw keys are faster for a known transition. Insert a short pause when the UI needs time to settle, then check the destination.
 
-On `launch_refused` or `uncertain`, look before trying another route. An earlier step can already have changed the screen. For a regional `tv.apple.com` link, the bridge sets `action=play`. The TV app can show an Open In button or hand off to a provider. Copy the actual label from a text look. The bridge can verify provider handoffs only for cataloged Apple title IDs.
-
-## Read and navigate
-
-- `tv_look {}` reads accessible items and focus without waking the TV. Focus can be null. The reported app can come from accessibility or now-playing metadata. Playback metadata can outlive the foreground app.
-- `tv_navigate {"to":"<full label>","select":true}` moves one key at a time. Matching ignores case and allows a prefix. Navigation has a 40-press limit and stops after three direction presses that leave focus unchanged. Check the result's path and `verified` flag.
-- For a known menu, use `tv_open {"app":"Settings","path":["Remotes and Devices"]}`. The bridge verifies the Settings root first. Inspect `data.steps` when present. A setting can verify through a changed `screen.focus.value` on the same row.
-- If text is empty, let the app settle. When you need pixels, use `tv_look {"image":true}`. This shows a screenshot toast. Default maximum width is 1280 px, configurable from 1 to 4096. A successful capture can have an empty item list. Protected video can appear black.
+To visit several rows on one menu, use `for_each` and `{"to":"$item"}`. A checkpoint can require both `focus` and `value` before a subsequent action. If a sequence stops, inspect the failed step and current screen. Earlier iterations may already be complete. See the [worked Settings visit](examples.md#visit-a-settings-menu-and-return-home).
 
 ## Profiles and dialogs
 

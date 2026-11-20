@@ -39,7 +39,7 @@ AirPlay PIN pairing supplies the controller credentials. The bridge tests reuse 
 
 ## Tool routing and results
 
-The fleet advertises ten tools. Each accepts an optional `tv` selector. Use a name or ID from `tv://tvs`. With one paired receiver, it is the default. With only one registered receiver, it can also be selected before pairing. When the choice is ambiguous, changes return `tv_required`. Unscoped `tv_status` and `tv_look` return per-TV summaries in `data.tvs`. The latter uses text reads. An unknown selector returns `tv_not_found`.
+Each advertised tool accepts an optional `tv` selector. Use a name or ID from `tv://tvs`. With one paired receiver, it is the default. With only one registered receiver, it can also be selected before pairing. When the choice is ambiguous, changes return `tv_required`. Unscoped `tv_status` and `tv_look` return per-TV summaries in `data.tvs`. The latter uses text reads. An unknown selector returns `tv_not_found`.
 
 | Tool | Operation |
 | --- | --- |
@@ -49,6 +49,7 @@ The fleet advertises ten tools. Each accepts an optional `tv` selector. Use a na
 | `tv_open` | Launch an installed app by name or ID. Optionally search or follow a labeled path. |
 | `tv_navigate` | Focus a label and optionally select it. |
 | `tv_remote` | Send keys, a swipe or text. Key sequences read screen state between presses. |
+| `tv_sequence` | Execute bounded, optionally repeated steps while holding the receiver lock. Raw keys check delivery and explicit checkpoints read accessibility. |
 | `tv_power` | Request on or off and check the receiver's power state. |
 | `tv_play` | Play YouTube, a media URL or an app title, or open a deep link and report where it landed. |
 | `tv_show` | Show a URL, HTML, inline files or a stored bundle. With only the selector, dismiss that TV's page. |
