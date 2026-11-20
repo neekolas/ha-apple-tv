@@ -1,7 +1,9 @@
 """Exercise stage, live iframe, frame refusal and return with real isolated Chromium/tvpipe."""
 
 import asyncio
+import logging
 import re
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -194,8 +196,35 @@ async def exercise_large_page(tools, frame):
         assert data["more"] == (not args)
         element(data["snapshot"], "button", "Control 1499" if args else "Control 0")
 
+    await frame.evaluate("""() => {
+        document.body.innerHTML = '<header><nav aria-label="Repository"><a href="/code">Code</a>'
+          + '<a href="/issues">Issues</a><button>Watch</button></nav></header>'
+          + '<main><h1>Project files</h1><table><tbody></tbody></table></main>';
+        const body = document.querySelector('tbody');
+        for (let i = 0; i < 145; i++) {
+            const tr = body.insertRow();
+            tr.innerHTML = '<td><a href="/file/' + i + '">module-' + i + '.py</a></td>'
+              + '<td>Update the module documentation</td><td><button>History ' + i + '</button></td>';
+        }
+        const article = document.querySelector('main').appendChild(document.createElement('article'));
+        for (let i = 0; i < 60; i++) {
+            article.insertAdjacentHTML('beforeend', '<section aria-label="Guide ' + i + '">'
+              + '<h2>Configuration ' + i + '</h2><p>See the reference for details.</p></section>');
+        }
+    }""")
+    for label, args in (("first page", {}), ("find Issues", {"find": "Issues"})):
+        await asyncio.sleep(1)
+        started = time.perf_counter()
+        result = await tools.call("tv_page_look", args)
+        print("repository", label, "ms", round(1000 * (time.perf_counter() - started)), flush=True)
+        assert result["ok"], result
+        data = result["data"]
+        assert data["more"] == (not args)
+        assert 'link "Issues"' in data["snapshot"]
+        element(data["snapshot"], "button", "Watch")
 
-async def check(root):
+
+async def check(root, benchmark=False):
     store = State(root)
     stage = Stage(root)
     site = web.Application()
@@ -259,10 +288,16 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
             ("HTTP 401 page", {"url": "http://127.0.0.1:8767/auth"}),
             ("back on stage", {"files": {"index.html": PAGE}}),
         ]:
+            if benchmark and label != "live frame":
+                continue
             options = dict(
                 url=None, html=None, files=None, bundle=None, title=label, audio="mute", keep_awake=True
             )
             await ops.present(**(options | source))
+            if benchmark:
+                frame = await mirror.presented_frame(stage.page["page_id"], stage.page["revision"], False)
+                await exercise_large_page(tools, frame)
+                return
             capture = await mirror.browser_page()
             assert capture.url == (
                 "http://127.0.0.1:8767/direct" if label == "direct" else source["url"] if label == "HTTP 401 page" else STAGE_URL
@@ -353,5 +388,7 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
 
 
 if __name__ == "__main__":
+    logging.basicConfig()
+    logging.getLogger("atv_bridge_app.present.interaction").setLevel(logging.INFO)
     with tempfile.TemporaryDirectory() as root:
-        asyncio.run(check(Path(root)))
+        asyncio.run(check(Path(root), "--benchmark" in sys.argv))
