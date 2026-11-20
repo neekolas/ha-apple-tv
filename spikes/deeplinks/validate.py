@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["mcp>=2.3,<3", "pyyaml>=6", "pillow>=10"]
+# dependencies = ["mcp>=2.3,<3", "httpx2>=2.16.2,<3", "pyyaml>=6.0.3,<7", "pillow>=13,<14"]
 # ///
 """Run from the repo with uv run spikes/deeplinks/validate.py [service[:number] ...].
 
@@ -39,7 +39,7 @@ async def bridge():
     token = Path("~/.config/atv-bridge/ha_token").expanduser().read_text().strip()
     async with httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=120) as client:
         async with streamable_http_client(ENDPOINT, http_client=client) as streams:
-            async with ClientSession(*streams[:2]) as session:
+            async with ClientSession(*streams) as session:
                 await session.initialize()
                 yield session
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13,<3.14"
-# dependencies = ["aiohttp>=3.11,<4", "yarl>=1.17,<2"]
+# dependencies = ["aiohttp>=3.14.5,<4", "yarl>=1.25.1,<2"]
 # ///
 """Deploy the Apple TV bridge to Home Assistant OS."""
 
