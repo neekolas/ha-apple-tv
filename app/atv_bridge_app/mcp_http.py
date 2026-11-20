@@ -6,18 +6,18 @@ from urllib.parse import unquote
 from aiohttp import web
 from mcp import types
 from mcp.server.lowlevel import Server
-from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from mcp.shared.exceptions import MCPError
 
+from .stage import MAX_UPLOAD
 from .tools.contract import SCHEMAS, ROUTED_SCHEMAS, INSTRUCTIONS, PAGE_GUIDE
 from .tools.public import PublicTools
 
 
 class MCP:
     def __init__(self, tools):
-        server = Server("Apple TV Agent Bridge", instructions=INSTRUCTIONS)
-
         fleet = hasattr(tools, "inventory")
+        schemas = ROUTED_SCHEMAS if fleet else SCHEMAS
 
         resource_help = {
             "screen": "Accessible focus, app and screen state for the default TV, or per-TV text summaries when selection is ambiguous.",
@@ -30,8 +30,7 @@ class MCP:
             "apps": "List this receiver's installed app names and bundle IDs for tv_open and tv_play.",
         }
 
-        @server.list_resources()
-        async def resources():
+        async def resources(_ctx, _params):
             names = [
                 ("screen", "application/json"),
                 ("apps", "application/json"),
@@ -41,20 +40,20 @@ class MCP:
                 names.append(("tvs", "application/json"))
                 for tv in tools.inventory():
                     names.extend((kind + "/" + tv["id"], "application/json") for kind in ("screen", "apps"))
-            return [
+            return types.ListResourcesResult(resources=[
                 types.Resource(
-                    uri=f"tv://{name}", name=name, mimeType=mime,
+                    uri=f"tv://{name}", name=name, mime_type=mime,
                     description=scoped_help[name.split("/")[0]] if "/" in name else resource_help[name],
                 )
                 for name, mime in names
-            ]
+            ])
 
-        @server.read_resource()
-        async def read_resource(uri):
+        async def read_resource(_ctx, params):
+            uri = params.uri
             address = str(uri).rstrip("/")
             if address == "tv://page-guide":
-                return [ReadResourceContents(PAGE_GUIDE, mime_type="text/plain")]
-            if fleet:
+                text, mime_type = PAGE_GUIDE, "text/plain"
+            elif fleet:
                 name, _, selector = address.removeprefix("tv://").partition("/")
                 tv = unquote(selector) or None
                 if name == "tvs":
@@ -71,35 +70,31 @@ class MCP:
                             if r["paired"]
                         }
                 else:
-                    raise ValueError("Unknown resource")
-                return [ReadResourceContents(json.dumps(data), mime_type="application/json")]
-            if address == "tv://apps":
-                return [
-                    ReadResourceContents(json.dumps(await tools.apps()), mime_type="application/json")
-                ]
-            if address == "tv://screen":
-                return [
-                    ReadResourceContents(
-                        json.dumps(tools.last_look or await tools.call("tv_look", {})),
-                        mime_type="application/json",
-                    )
-                ]
-            raise ValueError("Unknown resource")
+                    raise MCPError(code=types.INVALID_PARAMS, message="Unknown resource")
+                text, mime_type = json.dumps(data), "application/json"
+            elif address == "tv://apps":
+                text, mime_type = json.dumps(await tools.apps()), "application/json"
+            elif address == "tv://screen":
+                data = tools.last_look or await tools.call("tv_look", {})
+                text, mime_type = json.dumps(data), "application/json"
+            else:
+                raise MCPError(code=types.INVALID_PARAMS, message="Unknown resource")
+            return types.ReadResourceResult(contents=[
+                types.TextResourceContents(uri=uri, text=text, mime_type=mime_type)
+            ])
 
-        @server.list_prompts()
-        async def prompts():
-            return [
+        async def prompts(_ctx, _params):
+            return types.ListPromptsResult(prompts=[
                 types.Prompt(
                     name="present",
                     description="Get page design guidance and an HTML starter for a topic. Use tv_show to display the finished page.",
                     arguments=[types.PromptArgument(name="topic", required=True, description="Subject or purpose of the page to design.")],
                 )
-            ]
+            ])
 
-        @server.get_prompt()
-        async def prompt(name, arguments):
-            if name != "present" or not (arguments or {}).get("topic"):
-                raise ValueError("Supply a topic to the present prompt.")
+        async def prompt(_ctx, params):
+            if params.name != "present" or not (params.arguments or {}).get("topic"):
+                raise MCPError(code=types.INVALID_PARAMS, message="Supply a topic to the present prompt.")
             scaffold = """<!doctype html><meta name="viewport" content="width=device-width">
 <style>body{margin:5vw;background:#111;color:white;font:36px system-ui}h1{font-size:64px}</style>
 <h1></h1><main></main><script>window.render = text => {document.querySelector('main').textContent=text};</script>"""
@@ -109,35 +104,47 @@ class MCP:
                         role="user",
                         content=types.TextContent(
                             type="text",
-                            text=f"Create and present an HTML page about {arguments['topic']}.\n{PAGE_GUIDE}\nStart from this scaffold:\n{scaffold}",
+                            text=f"Create and present an HTML page about {params.arguments['topic']}.\n{PAGE_GUIDE}\nStart from this scaffold:\n{scaffold}",
                         ),
                     )
                 ]
             )
 
-        @server.list_tools()
-        async def list_tools():
-            return [
+        async def list_tools(_ctx, _params):
+            return types.ListToolsResult(tools=[
                 types.Tool(
                     name=name,
                     description=" ".join(getattr(PublicTools, name).__doc__.split()),
-                    inputSchema=schema,
+                    input_schema=schema,
                 )
-                for name, schema in (ROUTED_SCHEMAS if fleet else SCHEMAS).items()
-            ]
+                for name, schema in schemas.items()
+            ])
 
-        @server.call_tool(validate_input=False)
-        async def call(name, arguments):
-            result = await tools.call(name, arguments)
+        async def call(_ctx, params):
+            result = await tools.call(params.name, params.arguments or {})
             image = result.pop("image", None)
             content = [types.TextContent(type="text", text=json.dumps(result))]
             if image:
                 content.append(types.ImageContent(type="image", **image))
             return types.CallToolResult(
-                content=content, structuredContent=result, isError=not result["ok"]
+                content=content, structured_content=result, is_error=not result["ok"]
             )
 
-        self.manager = StreamableHTTPSessionManager(server, stateless=True, json_response=True)
+        server = Server(
+            "Apple TV Agent Bridge",
+            version="0.1.0",
+            instructions=INSTRUCTIONS,
+            get_tool_input_schema=schemas.get,
+            on_list_resources=resources,
+            on_read_resource=read_resource,
+            on_list_prompts=prompts,
+            on_get_prompt=prompt,
+            on_list_tools=list_tools,
+            on_call_tool=call,
+        )
+        self.manager = StreamableHTTPSessionManager(
+            server, stateless=True, json_response=True, max_request_body_size=MAX_UPLOAD
+        )
 
     @asynccontextmanager
     async def running(self):

@@ -9,7 +9,6 @@ from pathlib import Path
 from aiohttp import web
 from pyatv import conf
 from pyatv.const import Protocol
-from tests.fake_device import FakeAppleTV
 
 from atv_bridge_app.atv import Adapter
 from atv_bridge_app.server import Service
@@ -17,6 +16,10 @@ from atv_bridge_app.fleet import Fleet
 
 
 async def main(data, discover=False):
+    # Get the upstream fixtures while keeping the installed pyatv on sys.path first.
+    sys.path.append(str(Path(__file__).resolve().parents[3] / "vendor/pyatv"))
+    from tests.fake_device import FakeAppleTV
+
     host = "127.0.0.1"
     tv = FakeAppleTV(asyncio.get_running_loop(), test_mode=False)
     buttons, companion = tv.add_service(Protocol.Companion)

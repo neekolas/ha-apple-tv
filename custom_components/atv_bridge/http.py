@@ -11,6 +11,8 @@ REQUEST_HEADERS = (
     "Content-Type",
     "Mcp-Session-Id",
     "MCP-Protocol-Version",
+    "Mcp-Method",
+    "Mcp-Name",
     "Last-Event-ID",
 )
 RESPONSE_HEADERS = (

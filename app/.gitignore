@@ -1,3 +1,4 @@
 vendor/pyatv/
+vendor/requirements.lock
 *.egg-info/
 out/

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=84.2.1,<85"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -19,7 +19,19 @@ atv_bridge_observer = ["licenses/*.txt"]
 atv_bridge_app = ["data/*.yaml", "data/*.html", "data/*.js", "present/*.js"]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-aiohttp>=1.1", "pytest-asyncio>=1"]
+dev = [
+    "httpx2>=2.16.2,<3",
+    "pytest>=9.2,<10",
+    "pytest-aiohttp>=1.1.1,<2",
+    "pytest-asyncio>=1.5,<2",
+]
+image-build = ["pip>=26.3,<27", "setuptools>=84.2.1,<85"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+pyatv = {path = "../vendor/pyatv"}
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

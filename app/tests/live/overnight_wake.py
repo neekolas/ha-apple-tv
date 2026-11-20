@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["mcp==1.30.0", "httpx>=0.27,<1"]
+# dependencies = ["mcp>=2.3.0,<3", "httpx2>=2.16.2,<3"]
 # ///
 """Schedule one wake and sleep through HA's authenticated MCP endpoint."""
 
@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic
 
-import httpx
+import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
@@ -26,12 +26,12 @@ async def call(args, on):
         token = (
             os.getenv("HA_TOKEN") or args.token_file.expanduser().read_text().strip()
         )
-        async with httpx.AsyncClient(
+        async with httpx2.AsyncClient(
             headers={"Authorization": f"Bearer {token}"}, timeout=120
         ) as http:
             async with streamable_http_client(
                 args.url.rstrip("/") + "/api/atv_bridge/mcp", http_client=http
-            ) as (reader, writer, _):
+            ) as (reader, writer):
                 async with ClientSession(reader, writer) as session:
                     await session.initialize()
                     reply = await session.call_tool(

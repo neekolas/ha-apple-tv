@@ -5,7 +5,7 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
-import httpx
+import httpx2
 import pytest
 from mcp import ClientSession, types
 from mcp.client.streamable_http import streamable_http_client
@@ -21,8 +21,8 @@ async def test_real_mcp_sdk_and_rest(service, aiohttp_client):
     headers = {"Authorization": "Bearer " + service.state.token}
     assert (await client.get("/api/health")).status == 401
     async with (
-        httpx.AsyncClient(headers=headers) as http,
-        streamable_http_client(str(client.make_url("/mcp")), http_client=http) as (read, write, _),
+        httpx2.AsyncClient(headers=headers) as http,
+        streamable_http_client(str(client.make_url("/mcp")), http_client=http) as (read, write),
         ClientSession(read, write) as session,
     ):
         initialized = await session.initialize()
@@ -39,14 +39,15 @@ async def test_real_mcp_sdk_and_rest(service, aiohttp_client):
         )
         assert {t.name for t in (await session.list_tools()).tools} == set(SCHEMAS)
         screen = await session.call_tool("tv_look", {})
-        assert not screen.isError and all(isinstance(c, types.TextContent) for c in screen.content)
-        assert screen.structuredContent["screen"]["focus"]["label"] == "TV"
-        assert screen.structuredContent["data"]["items"][0]["label"] == "TV"
+        assert not screen.is_error and all(isinstance(c, types.TextContent) for c in screen.content)
+        assert json.loads(screen.content[0].text) == screen.structured_content
+        assert screen.structured_content["screen"]["focus"]["label"] == "TV"
+        assert screen.structured_content["data"]["items"][0]["label"] == "TV"
         capture = await session.call_tool("tv_look", {"image": True, "max_width": 320})
         image = next(x for x in capture.content if isinstance(x, types.ImageContent))
         assert base64.b64decode(image.data).startswith(b"\x89PNG")
-        assert capture.structuredContent["data"]["toast_visible"] is True
-        assert not capture.isError
+        assert capture.structured_content["data"]["toast_visible"] is True
+        assert not capture.is_error
         assert (
             json.loads((await session.read_resource("tv://screen")).contents[0].text)["data"]["items"][
                 0
@@ -59,9 +60,10 @@ async def test_real_mcp_sdk_and_rest(service, aiohttp_client):
         )
         assert "tv_page_run" in (await session.read_resource("tv://page-guide")).contents[0].text
         alias = await session.call_tool("tv_hide", {})
-        assert not alias.isError and alias.structuredContent["screen"]["presenting"] is None
+        assert not alias.is_error and alias.structured_content["screen"]["presenting"] is None
         bad = await session.call_tool("tv_open", {})
-        assert bad.isError and bad.structuredContent["error"]["code"] == "invalid_arguments"
+        assert bad.is_error and bad.structured_content["error"]["code"] == "invalid_arguments"
+        assert json.loads(bad.content[0].text) == bad.structured_content
     result = await client.post("/api/tool/tv_look", json={"image": True}, headers=headers)
     assert (await result.json())["data"]["image"]["data"] == image.data
     assert len((service.state.root / "audit.jsonl").read_text().splitlines()) == 5
@@ -228,8 +230,8 @@ async def test_failed_mcp_capture_after_success_returns_reason_and_no_image(serv
     client = await aiohttp_client(service.app())
     headers = {"Authorization": "Bearer " + service.state.token}
     async with (
-        httpx.AsyncClient(headers=headers) as http,
-        streamable_http_client(str(client.make_url("/mcp")), http_client=http) as (read, write, _),
+        httpx2.AsyncClient(headers=headers) as http,
+        streamable_http_client(str(client.make_url("/mcp")), http_client=http) as (read, write),
         ClientSession(read, write) as session,
     ):
         await session.initialize()
@@ -239,10 +241,10 @@ async def test_failed_mcp_capture_after_success_returns_reason_and_no_image(serv
             "screen_unavailable", "DVT capture failed (ConnectionTerminatedError).", "Retry capture."
         ))
         second = await session.call_tool("tv_look", {"image": True})
-        assert second.isError and all(isinstance(block, types.TextContent) for block in second.content)
-        error = second.structuredContent["error"]
+        assert second.is_error and all(isinstance(block, types.TextContent) for block in second.content)
+        error = second.structured_content["error"]
         assert error["code"] == "screen_unavailable" and "ConnectionTerminatedError" in error["message"]
-        assert "image" not in second.structuredContent["data"]
+        assert "image" not in second.structured_content["data"]
 
 @pytest.mark.parametrize("urls,deny_fails", [
     (["http://example.org/"], False),

@@ -21,7 +21,7 @@ def hass_config_dir(tmp_path):
 @pytest.mark.parametrize("discover", [False, True])
 async def test_pair_and_press_through_home_assistant(hass, hass_client, socket_enabled, tmp_path, discover):
     data = tmp_path / "bridge-data"
-    env = os.environ | {"PYTHONPATH": os.pathsep.join(str(ROOT / p) for p in ("app", "vendor/pyatv"))}
+    env = os.environ | {"PYTHONPATH": str(ROOT / "app")}
     env.pop("SUPERVISOR_TOKEN", None)
     proc = await asyncio.create_subprocess_exec(
         ROOT / "app/.venv/bin/python",
@@ -114,6 +114,39 @@ async def test_pair_and_press_through_home_assistant(hass, hass_client, socket_e
                     and result["data"]["delivered"] == "confirmed"
                     and result["data"]["confirmed_keys"] == 1
                 )
+
+            modern = "2026-07-28"
+            headers["MCP-Protocol-Version"] = modern
+            headers["Mcp-Method"] = "server/discover"
+            meta = {
+                "io.modelcontextprotocol/protocolVersion": modern,
+                "io.modelcontextprotocol/clientCapabilities": {},
+            }
+            message = {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "server/discover",
+                "params": {"_meta": meta},
+            }
+            async with client.post(path, headers=headers, json=message) as response:
+                assert response.status == 200
+                result = (await response.json())["result"]
+                assert modern in result["supportedVersions"]
+                assert "tools" in result["capabilities"]
+
+            headers.update({"Mcp-Method": "tools/call", "Mcp-Name": "tv_remote"})
+            message = {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {"_meta": meta, "name": "tv_remote", "arguments": {"keys": ["down"]}},
+            }
+            async with client.post(path, headers=headers, json=message) as response:
+                assert response.status == 200
+                reply = (await response.json())["result"]
+                result = reply["structuredContent"]
+                assert json.loads(reply["content"][0]["text"]) == result
+                assert result["data"]["confirmed_keys"] == 1
     finally:
         try:
             if entry:
@@ -127,4 +160,4 @@ async def test_pair_and_press_through_home_assistant(hass, hass_client, socket_e
                 await proc.wait()
                 raise
     assert proc.returncode == 0
-    assert (data / "last_button").read_text() == "up"
+    assert (data / "last_button").read_text() == "down"

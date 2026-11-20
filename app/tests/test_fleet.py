@@ -155,7 +155,7 @@ def test_sweep_protects_all_live_browser_families():
 
 
 async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
-    import httpx
+    import httpx2
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
@@ -177,7 +177,7 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
     assert a.stage.media_origin == b.stage.media_origin
     for rt in (a, b):
         (rt.stage.media / "clip.mp4").write_bytes(rt.metadata["id"].encode())
-    async with httpx.AsyncClient() as media:
+    async with httpx2.AsyncClient() as media:
         for rt in (a, b):
             event = rt.stage.media_reads["clip.mp4", "127.0.0.1", "test"] = asyncio.Event()
             response = await media.get(
@@ -187,8 +187,8 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
             assert response.status_code == 206 and response.text == rt.metadata["id"][:6]
             assert event.is_set()
     async with (
-        httpx.AsyncClient(headers=headers) as http,
-        streamable_http_client(str(client.make_url("/mcp")), http_client=http) as (read, write, _),
+        httpx2.AsyncClient(headers=headers) as http,
+        streamable_http_client(str(client.make_url("/mcp")), http_client=http) as (read, write),
         ClientSession(read, write) as session,
     ):
         await session.initialize()
@@ -199,10 +199,10 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
         }
         for tool in listed.tools:
             assert tool.description and tool.description.strip(), tool.name
-            assert "tv" in tool.inputSchema["properties"]
-            check_property_descriptions(tool.inputSchema, tool.name)
+            assert "tv" in tool.input_schema["properties"]
+            check_property_descriptions(tool.input_schema, tool.name)
             example = tool.description.split(f"For example, {tool.name} ")[1].removesuffix(".")
-            Draft202012Validator(tool.inputSchema).validate(json.loads(example))
+            Draft202012Validator(tool.input_schema).validate(json.loads(example))
         resources = (await session.list_resources()).resources
         assert all(r.description and r.description.strip() for r in resources)
         prompt, = (await session.list_prompts()).prompts
@@ -214,8 +214,8 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
         apps = await session.read_resource("tv://apps/" + b.metadata["id"])
         assert json.loads(apps.contents[0].text)[0]["name"] == "YouTube"
         result = await session.call_tool("tv_show", {"tv": "Bedroom"})
-        assert result.structuredContent, result.content
-        assert result.structuredContent["screen"]["tv_id"] == b.metadata["id"]
+        assert result.structured_content, result.content
+        assert result.structured_content["screen"]["tv_id"] == b.metadata["id"]
     bad = await (
         await client.post(
             "/api/tvs/" + b.metadata["id"] + "/pair/start",
