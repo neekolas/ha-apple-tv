@@ -8,7 +8,8 @@ case "$(dpkg --print-architecture)" in
   *) exit 1 ;;
 esac
 asset="tvpipe-$version-$arch-unknown-linux-musl"
-curl --fail --location --retry 3 "https://github.com/mitsuhiko/tvpipe/releases/download/v$version/$asset.tar.gz" -o /tmp/tvpipe.tgz
+curl --fail --location --retry 3 --proto '=https' --proto-redir '=https' \
+  "https://github.com/mitsuhiko/tvpipe/releases/download/v$version/$asset.tar.gz" -o /tmp/tvpipe.tgz
 echo "$digest  /tmp/tvpipe.tgz" | sha256sum -c -
 mkdir -p /opt/tvpipe
 tar xzf /tmp/tvpipe.tgz --strip-components=1 -C /opt/tvpipe
