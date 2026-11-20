@@ -201,6 +201,13 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
                 await exercise(tools, frame, "direct" if direct else "iframe")
                 if label == "inline":
                     await exercise_revision(tools, ops, options, frame)
+                if label == "live frame":
+                    # Even a same-document navigation makes the dispatch outcome uncertain.
+                    await frame.evaluate("() => { document.querySelector('button').onclick = () => location.hash = 'step' }")
+                    await asyncio.sleep(1)
+                    data = (await tools.call("tv_page_look", {"find": "Next"}))["data"]
+                    args = {"view": data["view"], "ref": element(data["snapshot"], "button", "Next"), "action": "click"}
+                    assert (await tools.call("tv_page_act", args))["error"]["code"] == "delivery_uncertain"
                 if label == "direct":
                     async with capture.expect_popup() as opened:
                         await capture.evaluate("() => { window.open(location.href) }")

@@ -5,6 +5,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from atv_bridge_app.present.interaction import PageInteraction, Row, snapshot_rows
+from atv_bridge_app.state import Fault
 from atv_bridge_app.tools.contract import SCHEMAS
 
 
@@ -73,6 +74,16 @@ def test_cursor_pages_obey_utf8_budget_and_only_issue_returned_refs():
         assert data["more"] == (start < len(control.rows))
         assert (control.cursor or (None, None))[1] == (start if data["more"] else None)
     assert seen == [row.ref for row in control.rows]
+
+
+async def test_old_scope_ref_expires_even_when_used_with_a_new_view():
+    control = PageInteraction(None)
+    control.next_ref = 3
+    await control.clear()
+    for ref, code in (("e2", "stale_view"), ("e99", "target_missing"), ("other", "target_missing")):
+        with pytest.raises(Fault) as failure:
+            await control.target(ref)
+        assert failure.value.code == code
 
 
 async def test_uncertain_dispatch_is_never_replayed(service):

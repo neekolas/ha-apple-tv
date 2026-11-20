@@ -128,7 +128,8 @@ class PageInteraction:
         self.root = self.frame = self.revision = self.view = None
         self.rows = []
         self.cursor = None
-        self.next_ref = 1
+        self.generation = self.read_generation = 0
+        self.first_ref = self.next_ref = 1
         self.last = {}
 
     def throttle(self, op, interval):
@@ -137,14 +138,21 @@ class PageInteraction:
             raise Fault("busy", "Page operations are arriving too quickly.", "Wait briefly and retry.")
         self.last[op] = now
 
+    def navigated(self, frame):
+        if self.frame and frame in (self.frame, self.frame.page.main_frame):
+            self.generation += 1
+
     async def clear(self, *, keep_document=False):
         handles = [t.handle for t in self.targets.values()]
         if not keep_document:
+            if self.frame:
+                self.frame.page.remove_listener("framenavigated", self.navigated)
             if self.root:
                 handles.append(self.root)
             self.root = self.frame = self.revision = None
         self.view = self.cursor = None
         self.rows = []
+        self.first_ref = self.next_ref
         self.targets.clear()
         self.issued.clear()
         await asyncio.gather(*(handle.dispose() for handle in handles), return_exceptions=True)
@@ -179,7 +187,9 @@ class PageInteraction:
 
     async def check(self):
         frame, revision, _ = await self.binding()
-        if frame != self.frame or revision != self.revision or not self.root or not await self.root.evaluate(
+        if frame != self.frame or revision != self.revision or self.read_generation != self.generation:
+            raise stale()
+        if not self.root or not await self.root.evaluate(
             "el => el === document.documentElement && el.isConnected && /^https?:/.test(document.documentURI)"
         ):
             raise stale()
@@ -250,6 +260,8 @@ class PageInteraction:
                 await self.clear(keep_document=scope is not None)
                 self.frame, self.revision, self.mode = frame, revision, mode
                 if scope is None:
+                    self.read_generation = self.generation
+                    frame.page.on("framenavigated", self.navigated)
                     self.root = await frame.evaluate_handle("document.documentElement")
                 await self.check()
                 locator = frame.locator("aria-ref=" + scope_ref if scope_ref else "body")
@@ -310,6 +322,8 @@ class PageInteraction:
     async def target(self, ref):
         target = self.targets.get(ref)
         if not target or ref not in self.issued:
+            if re.fullmatch(r"e[1-9][0-9]*", ref) and int(ref[1:]) < self.first_ref:
+                raise stale()
             raise missing()
         if not await target.handle.evaluate("el => el.isConnected && el.ownerDocument === document"):
             raise stale()
@@ -356,6 +370,7 @@ class PageInteraction:
                     await handle.focus()
                     await self.check()
                     if not await handle.evaluate("el => el.matches(':focus')"):
+                        dispatched = False  # Focus settled elsewhere. No key or text was sent.
                         raise missing()
                 if action == "click":
                     await handle.click(timeout=TIMEOUT)
