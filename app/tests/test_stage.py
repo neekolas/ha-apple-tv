@@ -58,8 +58,18 @@ async def test_stage_ready_send_and_reconnect(tmp_path, aiohttp_client):
     assert (await client.get("/stage/ws", headers={"Origin": "null"})).status == 403
     await stage.show("example", "https://example.org")
     async with client.ws_connect("/stage/ws", origin="http://127.0.0.1:8766") as socket:
-        assert (await socket.receive_json())["type"] == "show"
-        await socket.send_json({"type": "ready", "page_id": "example"})
+        first = await socket.receive_json()
+        await stage.show("example", "https://example.org")
+        second = await socket.receive_json()
+        assert first["revision"] != second["revision"]
+        await socket.send_json({"type": "ready", "page_id": "example", "revision": first["revision"]})
+        # A subsequent state reply proves the server consumed the stale ready.
+        await socket.send_json({"type": "state", "page_id": "example", "state": "ack"})
+        async with asyncio.timeout(1):
+            while stage.page_state != "ack":
+                await asyncio.sleep(0)
+        assert not stage.ready.is_set()
+        await socket.send_json({"type": "ready", "page_id": "example", "revision": stage.page["revision"]})
         await asyncio.wait_for(stage.ready.wait(), 1)
         sending = asyncio.create_task(stage.send({"n": [1, 2]}))
         packet = await socket.receive_json(timeout=1)

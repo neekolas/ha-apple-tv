@@ -184,12 +184,13 @@ sys.stdin.buffer.read()
     )
     client = await aiohttp_client(service.stage.app())
     service.sender.executable = script
+    service.sender.browser_page = AsyncMock()  # The machine-protocol fixture has no Chromium.
     async with client.ws_connect("/stage/ws", origin="http://127.0.0.1:8766") as socket:
         try:
             for html in ("<h1>One</h1>", "<h1>Two</h1>"):
                 show = asyncio.create_task(service.tools.call("tv_show", {"html": html}))
                 page = await socket.receive_json(timeout=2)
-                await socket.send_json({"type": "ready", "page_id": page["page_id"]})
+                await socket.send_json({"type": "ready", "page_id": page["page_id"], "revision": page["revision"]})
                 result = await asyncio.wait_for(show, 2)
                 assert result["ok"] and result["data"]["page_id"] == page["page_id"]
             assert (tmp_path / "tvpipe" / "launches").read_text().splitlines() == ["start"]

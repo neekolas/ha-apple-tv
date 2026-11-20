@@ -172,7 +172,7 @@ async def test_message_replaces_pending_render_and_hide_cancels(service, aiohttp
         try:
             show = asyncio.create_task(service.tools.call("tv_show", {"html": "Hi"}))
             page = await ws.receive_json(timeout=2)
-            await ws.send_json({"type": "ready", "page_id": page["page_id"]})
+            await ws.send_json({"type": "ready", "page_id": page["page_id"], "revision": page["revision"]})
             assert (await show)["verified"] is False
             await asyncio.wait_for(stage.ready.wait(), 2)
             original = await asyncio.wait_for(renders.get(), 2)
