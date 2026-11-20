@@ -46,6 +46,10 @@ async def test_admin_streamable_http_and_bundle(
 
     response = await client.post("/api/atv_bridge/tool/tv_status", json={})
     assert response.status == 200 and (await response.json())["tool"] == "tv_status"
+    script_url = "/api/atv_bridge/tool/tv_page_run"
+    script = {"script": "document.querySelector(arg).value", "arg": "#note"}
+    response = await client.post(script_url, json=script)
+    assert response.status == 200 and (await response.json())["tool"] == "tv_page_run"
 
     # Core performs a reverse DNS lookup for failed logins. Keep this test on loopback.
     monkeypatch.setattr(
@@ -53,7 +57,7 @@ async def test_admin_streamable_http_and_bundle(
         lambda address: ("localhost", [], [address]),
     )
     count = len(bridge.proxy_calls)
-    for path in (url, "/api/atv_bridge/bundle", "/api/atv_bridge/tool/tv_status"):
+    for path in (url, "/api/atv_bridge/bundle", "/api/atv_bridge/tool/tv_status", script_url):
         for token in ("bad-token", hass_read_only_access_token):
             assert (
                 await client.post(path, headers={"Authorization": f"Bearer {token}"})
