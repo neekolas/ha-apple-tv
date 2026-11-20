@@ -220,3 +220,24 @@ def test_ocr_and_implicit_children_cannot_inherit_supervisor_token(monkeypatch):
     processes.isolate_supervisor_token()
     assert "SUPERVISOR_TOKEN" not in os.environ
     assert processes.supervisor_token() == "sentinel"
+
+
+async def test_failed_mcp_capture_after_success_returns_reason_and_no_image(service, aiohttp_client):
+    client = await aiohttp_client(service.app())
+    headers = {"Authorization": "Bearer " + service.state.token}
+    async with (
+        httpx.AsyncClient(headers=headers) as http,
+        streamable_http_client(str(client.make_url("/mcp")), http_client=http) as (read, write, _),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        first = await session.call_tool("tv_look", {"image": True})
+        assert any(isinstance(block, types.ImageContent) for block in first.content)
+        service.operations.tv_screenshot = AsyncMock(side_effect=Fault(
+            "screen_unavailable", "DVT capture failed (ConnectionTerminatedError).", "Retry capture."
+        ))
+        second = await session.call_tool("tv_look", {"image": True})
+        assert second.isError and all(isinstance(block, types.TextContent) for block in second.content)
+        error = second.structuredContent["error"]
+        assert error["code"] == "screen_unavailable" and "ConnectionTerminatedError" in error["message"]
+        assert "image" not in second.structuredContent["data"]

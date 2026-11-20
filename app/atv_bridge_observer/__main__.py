@@ -16,6 +16,8 @@ from unittest.mock import patch
 from cryptography.exceptions import InvalidTag
 from PIL import Image
 from pymobiledevice3.bonjour import browse_remotepairing
+from pymobiledevice3.dtx import _reader as dtx_reader
+from pymobiledevice3.dtx.exceptions import DTXProtocolError
 from pymobiledevice3.exceptions import PairingError, RemotePairingCompletedError
 from pymobiledevice3.remote import tunnel_service
 from pymobiledevice3.remote.siphash import validate_auth_tag
@@ -45,6 +47,41 @@ class PairingScreenUnavailable(ConnectionError):
 
 class ScreenServiceMissing(ConnectionError):
     """Directed discovery received no RemotePairing endpoint."""
+
+
+class ScreenshotFailure(Exception):
+    """A fresh DVT capture failed before it could produce an image."""
+
+
+async def capture_frame(dvt):
+    # pymobiledevice3 11.61 reads a module-wide 30 MiB limit. Change the
+    # budget only for the reader task that owns this short-lived DVT connection.
+    # Other DTX connections in the same observer retain their original limit.
+    reader_task = dvt.dtx._reader_task
+    fragmenter = dtx_reader.DTXFragmenter
+    assembly_error = None
+
+    def assemble(fragment, buffered, limit):
+        nonlocal assembly_error
+        if asyncio.current_task() is not reader_task:
+            return fragmenter(fragment, buffered, limit)
+        if fragment.data_size > limit:
+            logging.info("Receiving large DVT screenshot message (%d bytes)", fragment.data_size)
+        try:
+            return fragmenter(fragment, buffered, 64 * 1024**2)
+        except DTXProtocolError as exc:
+            # The DTX background reader closes the socket on failure, so
+            # get_screenshot otherwise sees only a generic disconnect.
+            assembly_error = exc
+            raise
+
+    with patch.object(dtx_reader, "DTXFragmenter", assemble):
+        try:
+            async with Screenshot(dvt) as service:
+                return await service.get_screenshot()
+        except Exception as exc:
+            reason = str(assembly_error) if assembly_error else type(exc).__name__
+            raise ScreenshotFailure(f"DVT capture failed ({reason}).") from exc
 
 
 async def endpoint(host, manual):
@@ -309,8 +346,8 @@ class Observer:
             try:
                 async with asyncio.timeout(25):
                     rsd = await self.tunnel.aopen()
-                    async with DvtProvider(rsd) as dvt, Screenshot(dvt) as service:
-                        data = await service.get_screenshot()
+                    async with DvtProvider(rsd) as dvt:
+                        data = await capture_frame(dvt)
                 with Image.open(io.BytesIO(data)) as img:
                     if img.width > width:
                         img = img.resize(
@@ -347,7 +384,9 @@ async def main():
                     logging.info("Observer requires Remote Pairing")
                 else:
                     logging.exception("Observer request failed")
-                if isinstance(exc, ScreenPairingInvalid):
+                if isinstance(exc, ScreenshotFailure):
+                    code = "screen_unavailable"
+                elif isinstance(exc, ScreenPairingInvalid):
                     code = "screen_pairing_invalid"
                 elif isinstance(exc, PairingScreenUnavailable):
                     code = "pairing_screen_unavailable"
@@ -360,7 +399,7 @@ async def main():
                 result = {
                     "ok": False,
                     "code": code,
-                    "message": f"Observer request failed ({type(exc).__name__}).",
+                    "message": str(exc) if isinstance(exc, ScreenshotFailure) else f"Observer request failed ({type(exc).__name__}).",
                 }
             print(json.dumps(result), flush=True)
     finally:

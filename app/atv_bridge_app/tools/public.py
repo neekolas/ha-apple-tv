@@ -394,7 +394,7 @@ class PublicTools:
                 capture = checked(await self.ops.tv_screenshot(max_width))
             except Fault as exc:
                 raise Fault(
-                    "screen_unavailable", "Screen capture failed.", "Check Remote Pairing and retry."
+                    "screen_unavailable", f"Screen capture failed. {exc}", "Read tv_look again for a fresh capture."
                 ) from exc
             result["image"] = capture["image"]
             data.update(toast_visible=True, captured_at=capture["captured_at"])

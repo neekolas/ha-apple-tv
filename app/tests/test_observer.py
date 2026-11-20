@@ -529,3 +529,37 @@ async def test_tunnel_pin_verification_rejection_has_its_own_classification(tmp_
     monkeypatch.setattr(base, "connect", AsyncMock(side_effect=ConnectionRefusedError()))
     with pytest.raises(ConnectionRefusedError):
         await observer.provider()
+
+
+async def test_large_frame_budget_applies_only_to_the_capture_connection(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from pymobiledevice3.dtx.exceptions import DTXProtocolError
+
+    reader = observer_module.dtx_reader
+    fragment = SimpleNamespace(data_size=39167470, identifier=3, count=2)
+    start_read = asyncio.Event()
+    async def assemble_frame():
+        await start_read.wait()
+        return reader.DTXFragmenter(fragment, 0, reader.MAX_BUFFERED_SIZE).declared_size
+
+    task = asyncio.create_task(assemble_frame())
+    provider = SimpleNamespace(dtx=SimpleNamespace(_reader_task=task))
+
+    @asynccontextmanager
+    async def channel(_):
+        async def capture():
+            with pytest.raises(DTXProtocolError, match="31457280"):
+                reader.DTXFragmenter(fragment, 0, reader.MAX_BUFFERED_SIZE)
+            start_read.set()
+            return await task
+        yield SimpleNamespace(get_screenshot=capture)
+
+    monkeypatch.setattr(observer_module, "Screenshot", channel)
+    original = reader.DTXFragmenter
+    try:
+        assert await observer_module.capture_frame(provider) == fragment.data_size
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert reader.DTXFragmenter is original

@@ -102,7 +102,8 @@ class ObserverClient:
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    limit=32 * 1024**2,
+                    # A detailed 4K PNG is transferred as a single base64 JSON line.
+                    limit=64 * 1024**2,
                 )
                 self.stderr_task = asyncio.create_task(forward_observer_errors(self.proc.stderr))
             async with asyncio.timeout(35):
