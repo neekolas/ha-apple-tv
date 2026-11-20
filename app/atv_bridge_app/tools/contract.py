@@ -97,6 +97,26 @@ SCHEMAS = {
             *[{"required": [key]} for key in ("url", "html", "files", "bundle")],
         ],
     ),
+    "tv_page_look": schema({
+        "find": described(TEXT, "Literal, case-insensitive text to find. Includes one neighboring row on each side.", maxLength=160),
+        "scope": described(TEXT, "Region or control ref from the last view on this TV.", maxLength=64),
+        "cursor": described(TEXT, "Continue the previous result with this opaque token. Omit find and scope.", maxLength=64),
+    }, **{"not": {"required": ["cursor"], "anyOf": [{"required": ["find"]}, {"required": ["scope"]}]}}),
+    "tv_page_act": schema({
+        "view": described(TEXT, "Current opaque view token returned by page look or action on this TV.", maxLength=64),
+        "ref": described(TEXT, "Element ref in that view. Use document for a viewport scroll.", maxLength=64),
+        "action": described({"enum": ["click", "fill", "select", "press", "scroll"]}, "Dispatch one browser input to the referenced element."),
+        "text": described({"type": "string", "maxLength": 2048}, "Replacement text for fill. An empty string clears the field."),
+        "value": described({"type": "string", "maxLength": 2048}, "Exact option value for select."),
+        "key": described({"enum": ["Enter", "Space", "Escape", "Tab", "Shift+Tab", "ArrowUp", "ArrowDown",
+                                  "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]}, "One key for press."),
+        "direction": described({"enum": ["up", "down"]}, "Scroll the document or container by one viewport."),
+    }, ["view", "ref", "action"], oneOf=[
+        {"properties": {"action": described({"const": action}, "Operation for this variant.")},
+         "required": [field] if field else [],
+         "not": {"anyOf": [{"required": [other]} for other in ("text", "value", "key", "direction") if other != field]}}
+        for action, field in (("click", None), ("fill", "text"), ("select", "value"), ("press", "key"), ("scroll", "direction"))
+    ]),
     "tv_update": schema({"data": described({}, "Any JSON value to send to the page's message handler.")}, ["data"]),
     "tv_play": schema(
         {
@@ -172,7 +192,8 @@ INSTRUCTIONS = (
     "Read tv_look before interrupting someone. Use tv_open to launch or search, tv_navigate for a labeled item, "
     "tv_remote for individual keys, text or a swipe, and tv_sequence for repeated work with explicit screen checkpoints. "
     "Use tv_power for wake or sleep, tv_play for media and deep links, tv_show for web pages, and tv_update for page messages. "
-    "Actions can wake the receiver and dismiss a screen saver or profile prompt. Inspect verified, evidence and screen. "
+    "Use tv_page_look and tv_page_act to read and operate controls in a live mirror. "
+    "TV actions can wake the receiver and dismiss a screen saver or profile prompt. Inspect verified, evidence and screen. "
     "After uncertain delivery, look before sending further input. Ask before purchases, rentals or upgrades."
 )
 PAGE_GUIDE = """Design for a 1920×1080 canvas with body text of at least 28 px. Put index.html at the root of
@@ -206,11 +227,13 @@ CODES = {
     "screen_pairing_invalid": "screen_unavailable",
     "observer_unavailable": "screen_unavailable",
     "delivery_uncertain": "uncertain",
+    "page_delivery_uncertain": "delivery_uncertain",
     "open_unverified": "uncertain",
     "playback_unverified": "uncertain",
     "stage_delivery_uncertain": "uncertain",
 }
 STABLE = RETRYABLE | {
+    "delivery_uncertain", "stale_view", "target_missing", "page_not_live", "nothing_showing",
     "launch_refused", "tv_required", "mirror_busy", "tv_not_found",
     "not_paired",
     "pairing_removed",

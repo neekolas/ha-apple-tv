@@ -238,7 +238,7 @@ class Stage:
                 event = msg.json()
                 if not self.page or event.get("page_id") != self.page["page_id"]:
                     continue
-                if event.get("type") == "ready":
+                if event.get("type") == "ready" and event.get("revision") == self.page["revision"]:
                     self.ready.set()
                 if event.get("type") in ("state", "sent") and "state" in event:
                     self.page_state = event["state"]

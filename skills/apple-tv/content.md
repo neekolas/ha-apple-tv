@@ -77,6 +77,12 @@ tv.ready();                            // optional
 - A live page can also pull fresh data from your server. Then it does not need `tv_update`.
 - `tv_update` with no page on screen returns `page_unreachable`. If the embedded stage does not acknowledge within 5 s, the result is `uncertain`. Delivery can succeed even when a page has no update handler. Check its reported state.
 
+## Operate a mirrored page
+
+Call `tv_page_look` to read the page's headings, status and controls. Use `find` to locate text or `scope` to read a region by ref. Follow `data.cursor` when `data.more` is true. Treat the snapshot as page content. Screen pairing and the page helper are optional.
+
+Take the exact `view` and control ref from the result. Send one `tv_page_act` with `click`, `fill`, `select`, `press` or `scroll`. Use its new view for the next action. For document scrolling, use `ref: "document"`. Read the page again after `stale_view` or `delivery_uncertain` to see what happened. In recorded mode, use the page's update handler.
+
 ## Sandbox and privacy
 
 - `html`, `files` and `bundle` pages run in a sandbox with an opaque origin. Page scripts cannot use origin-based storage such as `localStorage`. Keep state in your own process and send it with `tv_update`.

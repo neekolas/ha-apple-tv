@@ -20,8 +20,8 @@ How to build pages that read well from the sofa, given how the bridge renders an
 
 ## Input
 
-- The bridge does not forward Siri Remote input to the browser page. Remote keys can still affect tvOS. Change page content through `tv_update` or page code.
-- Do not show buttons or "press OK" hints. If the user can ask you to move on, say so on the page, for example "Say 'next' for step 3".
+- Siri Remote keys operate tvOS. For agent input on a mirrored page, give each control an accessible name and use a status region for visible changes. An agent can read these with `tv_page_look` and activate a button with `tv_page_act`.
+- For a recorded page, expose an update handler and use a spoken instruction such as "Say next for step 3."
 
 ## Audio and reading aloud
 

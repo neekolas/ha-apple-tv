@@ -32,13 +32,14 @@ function connect() {
     if (msg.type === "show") {
       if (current && revision === msg.revision) {
         reply({type:"state", page_id:pageId, state:pageState});
-        reply({type:"ready", page_id:pageId});
+        reply({type:"ready", page_id:pageId, revision});
         return;
       }
       keepAwake(msg.keep_awake ?? true);
       pending?.remove();
       const frame = pending = document.createElement("iframe");
       frame.dataset.pageId = msg.page_id;
+      frame.dataset.revision = msg.revision;
       const live = msg.url && new URL(msg.src, location.href).origin !== location.origin;
       frame.sandbox = "allow-scripts allow-forms allow-presentation" + (live ? " allow-same-origin" : "");
       frame.allow = "autoplay *; fullscreen *";
@@ -52,10 +53,10 @@ function connect() {
         revision = msg.revision;
         pageState = states.get(frame) ?? null;
         reply({type:"state", page_id:pageId, state:pageState});
-        requestAnimationFrame(() => frame.classList.add("visible"));
+        frame.classList.add("visible");
         previous?.classList.remove("visible");
         setTimeout(() => previous?.remove(), 230);
-        reply({type:"ready", page_id:pageId});
+        reply({type:"ready", page_id:pageId, revision});
       };
       frame.src = msg.src;
       document.body.append(frame);

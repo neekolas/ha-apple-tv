@@ -469,7 +469,7 @@ class Tools:
                 if active.mode == "mirror":
                     verified = await active.confirm_frame()
                     if url:
-                        await active.verify_document(url, page_id, direct)
+                        await active.verify_document(url, page_id, direct, self.stage.page["revision"])
                     evidence = [
                         "Browser loaded the page at top level" if direct else "Stage loaded the iframe"
                     ]

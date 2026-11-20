@@ -1,0 +1,104 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+from jsonschema import Draft202012Validator
+
+from atv_bridge_app.present.interaction import PageInteraction, Row, snapshot_rows
+from atv_bridge_app.state import Fault
+from atv_bridge_app.tools.contract import SCHEMAS
+
+
+@pytest.mark.parametrize("extra", [
+    {"action": "fill"}, {"action": "fill", "text": "x" * 2049},
+    {"action": "click", "text": "bad"}, {"action": "click", "selector": "button"},
+    {"action": "press", "key": "Control+V"}, {"action": "select", "value": "a", "key": "Enter"},
+    {"action": "scroll", "direction": "left"}, {"action": "goto", "url": "https://example.org"},
+])
+def test_closed_action_contract(extra):
+    assert not Draft202012Validator(SCHEMAS["tv_page_act"]).is_valid(
+        {"view": "view", "ref": "e1", **extra}
+    )
+
+
+@pytest.mark.parametrize("args", [
+    {"cursor": "token", "scope": "e1"}, {"cursor": "token", "find": "next"}, {"selector": "input"},
+])
+def test_closed_look_contract(args):
+    assert not Draft202012Validator(SCHEMAS["tv_page_look"]).is_valid(args)
+
+
+def test_snapshot_text_cannot_create_refs_or_disclose_field_subtrees():
+    rows = list(snapshot_rows([
+        'button "Not a [ref=e99]" [ref=e1]',
+        {'textbox "Credential" [ref=e2]': [{'text': 'private'}]},
+        {'iframe [ref=e3]': ['button "Nested" [ref=f1e1]']},
+        {'link "News" [ref=e4]': [{'/url': 'https://example.org/private'}]},
+        'checkbox "Awake" [active] [checked] [disabled] [ref=e5]',
+        {'paragraph': 'Visible copy'},
+    ]))
+    assert [r.browser_ref for r in rows] == ["e1", "e2", "e4", "e5", None]
+    assert set(rows[-2].states) == {"focused", "checked", "disabled"}
+    assert rows[-1].line() == 'text "Visible copy"'
+    assert "private" not in "\n".join(r.line() for r in rows)
+
+
+@pytest.mark.parametrize("name", ["tv_page_look", "tv_page_act"])
+async def test_page_failures_skip_tv_io_and_use_active_transport(service, name):
+    tools = service.tools
+    tools.prepare_action = tools.snapshot = AsyncMock(side_effect=AssertionError("TV I/O"))
+    args = {} if name == "tv_page_look" else {"view": "old", "ref": "e1", "action": "click"}
+    result = await tools.call(name, args)
+    assert result["error"]["code"] == "nothing_showing"
+    await service.stage.show("id", "/c/id/index.html")
+    service.operations.presenter = SimpleNamespace(mode="auto", active=SimpleNamespace(mode="play_url"))
+    tools.page_interaction.last.clear()
+    assert (await tools.call(name, args))["error"]["code"] == "page_not_live"
+    assert (await tools.call(name, args))["error"]["code"] == "busy"
+    tools.snapshot.assert_not_awaited()
+
+
+def test_cursor_pages_obey_utf8_budget_and_only_issue_returned_refs():
+    control = PageInteraction(SimpleNamespace(stage=SimpleNamespace(page={"page_id": "a" * 32})))
+    control.title, control.mode, control.view = "🍅" * 160, "iframe", "opaque"
+    control.rows = [Row("button", "🍅" * 160, [], None, ref=f"e{i}") for i in range(90)]
+    seen = []
+    start = 0
+    while start < len(control.rows):
+        data = control.slice(start)
+        lines = data["snapshot"].splitlines()[1:]
+        assert len(data["snapshot"].encode()) <= 2048 and 0 < len(lines) <= 39
+        seen.extend(line.split()[0] for line in lines)
+        assert control.issued == set(seen)
+        start += len(lines)
+        assert data["more"] == (start < len(control.rows))
+        assert (control.cursor or (None, None))[1] == (start if data["more"] else None)
+    assert seen == [row.ref for row in control.rows]
+
+
+async def test_old_scope_ref_expires_even_when_used_with_a_new_view():
+    control = PageInteraction(None)
+    control.next_ref = 3
+    await control.clear()
+    for ref, code in (("e2", "stale_view"), ("e99", "target_missing"), ("other", "target_missing")):
+        with pytest.raises(Fault) as failure:
+            await control.target(ref)
+        assert failure.value.code == code
+
+
+async def test_uncertain_dispatch_is_never_replayed(service):
+    control = service.tools.page_interaction
+    control.binding = AsyncMock()
+    control.check = AsyncMock()
+    control.view = "seen"
+    control.root = SimpleNamespace(evaluate=AsyncMock(return_value={"focused": False, "status": ""}))
+    handle = SimpleNamespace(is_visible=AsyncMock(return_value=True), click=AsyncMock(side_effect=TimeoutError),
+                             evaluate=AsyncMock(return_value={"blocked": False, "disabled": False, "restrictedChild": False, "value": None}))
+    control.target = AsyncMock(return_value=SimpleNamespace(handle=handle, row=Row("button", "Next", [], None)))
+    service.tools.snapshot = service.tools.prepare_action = AsyncMock(side_effect=AssertionError("TV I/O"))
+    args = {"view": "seen", "ref": "e1", "action": "click"}
+    result = await service.tools.call("tv_page_act", args)
+    assert result["error"]["code"] == "delivery_uncertain" and not result["error"]["retryable"]
+    control.last.clear()
+    assert (await service.tools.call("tv_page_act", args))["error"]["code"] == "stale_view"
+    handle.click.assert_awaited_once()

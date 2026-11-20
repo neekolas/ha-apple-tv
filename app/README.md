@@ -18,7 +18,7 @@ The staging script copies the fork into the ignored `app/vendor/pyatv/` director
 
 Run the Home Assistant 2026.11.2 end-to-end test from `app/` with `tests/e2e/run.sh`. It runs HA in the integration test environment and the bridge in its Python 3.13 environment. The bridge pairs with the vendored fake TV over loopback. The test confirms a key press at the receiver after sending it through HA’s authenticated MCP proxy.
 
-To test live framing, top-level fallback, page updates and returning to the stage in one real tvpipe session, use the network-isolated browser sink.
+To test page snapshots, control input, stale refs, live framing, top-level fallback and the loopback debugging listener in one real tvpipe session, use the network-isolated browser sink.
 
 ```sh
 docker run --rm --network none -e PYTHONPATH=/opt/app \
