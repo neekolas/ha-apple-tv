@@ -202,12 +202,19 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
                 if label == "inline":
                     await exercise_revision(tools, ops, options, frame)
                 if label == "live frame":
-                    # Even a same-document navigation makes the dispatch outcome uncertain.
-                    await frame.evaluate("() => { document.querySelector('button').onclick = () => location.hash = 'step' }")
+                    # Single-page apps change the URL in place. The document stays bound.
+                    await frame.evaluate("""() => { document.querySelector('button').onclick = () => {
+                      history.pushState({}, '', '/frame/step-2?x=1#top');
+                      document.querySelector('[role=status]').textContent = 'Routed';
+                    } }""")
                     await asyncio.sleep(1)
                     data = (await tools.call("tv_page_look", {"find": "Next"}))["data"]
                     args = {"view": data["view"], "ref": element(data["snapshot"], "button", "Next"), "action": "click"}
-                    assert (await tools.call("tv_page_act", args))["error"]["code"] == "delivery_uncertain"
+                    routed = await tools.call("tv_page_act", args)
+                    assert routed["ok"] and routed["data"]["status"] == "Routed", routed
+                    await asyncio.sleep(1)
+                    after = await tools.call("tv_page_look", {})
+                    assert after["ok"] and 'status "Routed"' in after["data"]["snapshot"], after
                 if label == "direct":
                     async with capture.expect_popup() as opened:
                         await capture.evaluate("() => { window.open(location.href) }")

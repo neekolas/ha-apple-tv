@@ -128,7 +128,6 @@ class PageInteraction:
         self.root = self.frame = self.revision = self.view = None
         self.rows = []
         self.cursor = None
-        self.generation = self.read_generation = 0
         self.first_ref = self.next_ref = 1
         self.last = {}
 
@@ -138,15 +137,9 @@ class PageInteraction:
             raise Fault("busy", "Page operations are arriving too quickly.", "Wait briefly and retry.")
         self.last[op] = now
 
-    def navigated(self, frame):
-        if self.frame and frame in (self.frame, self.frame.page.main_frame):
-            self.generation += 1
-
     async def clear(self, *, keep_document=False):
         handles = [t.handle for t in self.targets.values()]
         if not keep_document:
-            if self.frame:
-                self.frame.page.remove_listener("framenavigated", self.navigated)
             if self.root:
                 handles.append(self.root)
             self.root = self.frame = self.revision = None
@@ -176,7 +169,29 @@ class PageInteraction:
         except Fault as exc:
             raise stale() from exc
         expected = sender.verified_url if page.get("url") else urljoin(stage.origin, page["src"])
-        if not frame or not expected or urldefrag(frame.url).url != urldefrag(expected).url:
+        if not frame or not expected:
+            raise stale()
+        current, wanted = urlsplit(frame.url), urlsplit(expected)
+        if (current.scheme, current.netloc) != (wanted.scheme, wanted.netloc):
+            raise stale()
+        if page.get("url"):
+            # Single-page apps change the URL in place. Accept a changed URL only
+            # while the frame holds the document last seen at the verified URL.
+            # A reload at the verified URL becomes that document.
+            root = sender.verified_root
+            try:
+                same = root is not None and await root.evaluate(
+                    "el => el === document.documentElement && el.isConnected"
+                )
+            except Error:
+                same = False
+            if not same:
+                if urldefrag(frame.url).url != urldefrag(expected).url:
+                    raise stale()
+                sender.verified_root = await frame.evaluate_handle("document.documentElement")
+                if root is not None:
+                    await asyncio.gather(root.dispose(), return_exceptions=True)
+        elif not current.path.startswith(wanted.path.rsplit("/", 1)[0] + "/"):
             raise stale()
         if urlsplit(expected).scheme not in ("http", "https"):
             raise stale()
@@ -187,7 +202,7 @@ class PageInteraction:
 
     async def check(self):
         frame, revision, _ = await self.binding()
-        if frame != self.frame or revision != self.revision or self.read_generation != self.generation:
+        if frame != self.frame or revision != self.revision:
             raise stale()
         if not self.root or not await self.root.evaluate(
             "el => el === document.documentElement && el.isConnected && /^https?:/.test(document.documentURI)"
@@ -260,8 +275,6 @@ class PageInteraction:
                 await self.clear(keep_document=scope is not None)
                 self.frame, self.revision, self.mode = frame, revision, mode
                 if scope is None:
-                    self.read_generation = self.generation
-                    frame.page.on("framenavigated", self.navigated)
                     self.root = await frame.evaluate_handle("document.documentElement")
                 await self.check()
                 locator = frame.locator("aria-ref=" + scope_ref if scope_ref else "body")

@@ -54,7 +54,7 @@ class TvpipeSender(Sender):
         self.restart_delay = restart_delay
         self.last_teardown = None
         self.url = None
-        self.verified_page = self.verified_url = self.debug_port = None
+        self.verified_page = self.verified_url = self.verified_root = self.debug_port = None
         self.audio = "play"
         self.running_audio = None
         self.frames = 0
@@ -175,7 +175,12 @@ class TvpipeSender(Sender):
                         document["error"]
                         or f"Chromium loaded {document['url']} ({document['state']})"
                     )
-                self.verified_url = document["url"]
+                root = await frame.evaluate_handle("document.documentElement")
+                if self.verified_root:
+                    await asyncio.gather(self.verified_root.dispose(), return_exceptions=True)
+                # Page control binds to this document. Same-document URL changes
+                # (history.pushState) keep it; a new document replaces it.
+                self.verified_url, self.verified_root = document["url"], root
                 self.verified_page = self.page
         except Exception as exc:
             raise page_failure(host, exc) from exc
@@ -332,7 +337,7 @@ class TvpipeSender(Sender):
                 return
             finally:
                 self.started = False
-                self.page = self.verified_page = self.verified_url = self.debug_port = None
+                self.page = self.verified_page = self.verified_url = self.verified_root = self.debug_port = None
                 if proc:
                     cleanup = asyncio.create_task(self._clean_child(proc))
                     try:
