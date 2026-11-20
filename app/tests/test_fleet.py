@@ -23,7 +23,7 @@ def check_property_descriptions(node, path):
             check_property_descriptions(child, f"{path}.{key}")
 
 
-def rooms(tmp_path, limit=1):
+def rooms(tmp_path, limit=1, **options):
     def factory(host, state, **options):
         adapter = FakeAdapter(state)
         adapter.host = adapter.resolver.address = host
@@ -34,6 +34,7 @@ def rooms(tmp_path, limit=1):
     return Fleet(
         tmp_path,
         {
+            **options,
             "max_active_mirrors": limit,
             "apple_tvs": [
                 {"name": "Living Room", "host": "192.0.2.15", "id": "AA:01"},
@@ -43,6 +44,13 @@ def rooms(tmp_path, limit=1):
         factory=factory,
         stage_port=0,
     )
+
+
+async def test_caller_scripts_can_be_disabled_across_receivers(tmp_path):
+    fleet = rooms(tmp_path, page_scripts=False)
+    for runtime in fleet.runtimes.values():
+        reply = await runtime.tools.call("tv_page_run", {"script": "document.title"})
+        assert reply["error"]["code"] == "scripts_disabled"
 
 
 def test_migration_preserves_records_and_never_overwrites_new_pairings(tmp_path):
@@ -88,7 +96,7 @@ async def test_routing_and_independent_locks(tmp_path):
     assert (await fleet.call("tv_status", {}))["data"]["tv"]["name"] == "Living Room"
     b.state.save_pairings(airplay={"ltpk": "b"})
     for name, args in [("tv_sequence", {"steps": [{"key": "up"}]}), ("tv_remote", {"keys": ["up"]}), ("tv_show", {}), ("tv_hide", {}),
-                       ("tv_page_look", {}), ("tv_page_act", {"view": "sample", "ref": "e1", "action": "click"})]:
+                       ("tv_page_run", {"script": "document.title"})]:
         result = await fleet.call(name, args)
         assert result["error"]["code"] == "tv_required" and len(result["data"]["tvs"]) == 2
     for name in ("tv_status", "tv_look"):
@@ -186,8 +194,8 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
         await session.initialize()
         listed = await session.list_tools()
         assert {tool.name for tool in listed.tools} == {
-            "tv_show", "tv_update", "tv_play", "tv_open", "tv_look", "tv_navigate",
-            "tv_remote", "tv_sequence", "tv_power", "tv_pair", "tv_status", "tv_page_look", "tv_page_act",
+            "tv_show", "tv_play", "tv_open", "tv_look", "tv_navigate",
+            "tv_remote", "tv_sequence", "tv_power", "tv_pair", "tv_status", "tv_page_run",
         }
         for tool in listed.tools:
             assert tool.description and tool.description.strip(), tool.name

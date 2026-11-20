@@ -149,7 +149,7 @@ async def test_integration_pairings_and_classification(service):
     assert not (await service.tools.call("tv_open", {}))["ok"]
 
 
-async def test_message_replaces_pending_render_and_hide_cancels(service, aiohttp_client):
+async def test_show_replaces_pending_render_and_hide_cancels(service, aiohttp_client):
     stage = service.stage
     engine = service.engine
     engine.adapter.supports_play_url = True
@@ -176,11 +176,10 @@ async def test_message_replaces_pending_render_and_hide_cancels(service, aiohttp
             assert (await show)["verified"] is False
             await asyncio.wait_for(stage.ready.wait(), 2)
             original = await asyncio.wait_for(renders.get(), 2)
-            send = asyncio.create_task(service.tools.call("tv_update", {"data": {"value": 5}}))
-            command = await ws.receive_json(timeout=2)
-            assert command["data"] == {"value": 5}
-            await ws.send_json({"type": "sent", "id": command["id"], "page_id": page["page_id"]})
-            assert (await send)["data"]["delivered"]
+            replacement = asyncio.create_task(service.tools.call("tv_show", {"html": "Replacement"}))
+            page = await ws.receive_json(timeout=2)
+            await ws.send_json({"type": "ready", "page_id": page["page_id"], "revision": page["revision"]})
+            assert (await replacement)["ok"]
             updated = await asyncio.wait_for(renders.get(), 2)
             assert finished == [original] and not original.exists()
         finally:

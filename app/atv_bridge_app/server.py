@@ -59,6 +59,7 @@ class TVRuntime:
         apple_tv_id="",
         default_profile="",
         app_profile="",
+        page_scripts=True,
     ):
         self.state = state
         self.subscribers = set()
@@ -96,7 +97,7 @@ class TVRuntime:
         self.observer = observer or ReceiverObserver(resolver, state)
         self.operations = Tools(self.engine, self.stage, self.sender, self.observer, state)
         self.operations.live_mirror = mirror
-        self.tools = PublicTools(self.operations, mirror_size)
+        self.tools = PublicTools(self.operations, mirror_size, page_scripts)
         self.pairing = Pairing(self.engine, self.observer)
         self.tools.pairing = self.pairing
         self.tools.default_profile = default_profile

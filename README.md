@@ -27,7 +27,7 @@ Every tool accepts an optional `tv`. Use the name or stable bridge ID from `tv:/
 | Task | MCP call | What to expect |
 | --- | --- | --- |
 | Show a page | `tv_show {"tv":"<TV name>","html":"<h1>Dinner is ready</h1>"}` | Chromium renders on the HA host. tvpipe mirrors the tab with audio. A live HTTP(S) URL, inline files or an uploaded ZIP can supply the page instead. |
-| Change the page | `tv_update {"tv":"<TV name>","data":{"step":3}}` | A page with an update handler receives the data. Dismiss it with `tv_show {"tv":"<TV name>"}`. |
+| Change the page | `tv_page_run {"tv":"<TV name>","script":"window.setStep(arg)","arg":3}` | Call a function on your live page. Dismiss it with `tv_show {"tv":"<TV name>"}`. |
 | Start playback | `tv_play {"tv":"<TV name>","youtube":"jNQXAC9IVRw"}` | Accepts a YouTube ID or URL, media URL, deep link, or an app and title. Playback and title search depend on the installed app. |
 | Open an app | `tv_open {"tv":"<TV name>","app":"Settings"}` | Optionally supply a search or a menu path. Read `tv://apps/<TV ID>` for installed apps. |
 | Read the screen | `tv_look {"tv":"<TV name>"}` | Reads accessibility labels and focus. Some apps expose little text. Set `image` to `true` for a screenshot. tvOS can show a screenshot notice. |
@@ -49,7 +49,7 @@ Home Assistant’s built-in Apple TV integration provides media player and remot
 ## How it works
 
 - **Control.** The app keeps a separate pyatv session for each registered TV. The staged fork includes 18 patches for AirPlay pairing and URL playback, Companion errors and keepalive, and other protocol fixes. [Patch series](docs/pyatv-fork.md)
-- **Presentation.** The default is mirroring at 1920×1080 and 10 fps. One TV can mirror at a time by default. An agent can serve a live web app at a URL reachable from Home Assistant, including over Tailscale. For HTML, files and bundles, `auto` mode can switch to MP4 playback after two failed mirror starts. Live URLs use mirroring. Use `tv_page_look` to read a mirrored page and `tv_page_act` to operate its controls. Use `tv_update` to send JSON to a page with an update handler. [Presentation options](app/DOCS.md)
+- **Presentation.** The default is mirroring at 1920×1080 and 10 fps. One TV can mirror at a time by default. An agent can serve a live web app at a URL reachable from Home Assistant, including over Tailscale. For HTML, files and bundles, `auto` mode can switch to MP4 playback after two failed mirror starts. Live URLs use mirroring. HA admin callers can use `tv_page_run` to call page functions, query the DOM and interact with live content. Set `page_scripts: false` to disable caller scripts. [Presentation options](app/DOCS.md)
 - **Observation.** A separate observer process uses RemotePairing for accessibility text and screenshots. Results depend on what the current app exposes. Protected video may appear black in screenshots. [Screen-reading measurements](docs/live-accessibility.md)
 - **Access.** HA authenticates agent requests and forwards them to the app on loopback port 8765. LAN port 8766 serves the watchdog, uploaded content and rendered media without authentication. The bridge has no purchase guard. Use the agent’s confirmation flow and tvOS purchase settings if you want approval before spending.
 

@@ -1,6 +1,5 @@
 import base64
 import binascii
-import re
 import asyncio
 import io
 import os
@@ -154,20 +153,14 @@ class Stage:
         self.media.mkdir(exist_ok=True)
         self.media_reads = {}
         self.page = None
-        self.page_state = self.direct_browser = None
+        self.direct_browser = None
         self.dns_status = {"hostname": None, "resolved": None}
         self.ws = None
-        self.pending = {}
         self.ready = asyncio.Event()
         self.lock = asyncio.Lock()
 
-    async def current_state(self):
-        if self.direct_browser:
-            return await self.direct_browser.page_state()
-        return self.page_state
-
     async def show(self, page_id, src, title=None, **options):
-        self.page_state = self.direct_browser = None
+        self.direct_browser = None
         self.page = {
             "type": "show",
             "revision": uuid.uuid4().hex,
@@ -181,36 +174,9 @@ class Stage:
         if self.ws:
             await self.ws.send_json(self.page)
 
-    async def send(self, data):
-        if self.direct_browser:
-            await self.direct_browser.post_message(data)
-            return
-        if not self.page or not self.ws or not self.ready.is_set():
-            raise Fault(
-                "stage_unavailable",
-                "The page has no ready stage connection.",
-                "Show a page and wait for it to load.",
-                True,
-            )
-        seq = uuid.uuid4().hex
-        self.pending[seq] = asyncio.get_running_loop().create_future()
-        try:
-            await self.ws.send_json(
-                {"type": "send", "id": seq, "page_id": self.page["page_id"], "data": data}
-            )
-            await asyncio.wait_for(self.pending[seq], 5)
-        except (OSError, TimeoutError) as exc:
-            raise Fault(
-                "stage_delivery_uncertain",
-                "Stage did not acknowledge postMessage.",
-                "Check the shown page.",
-            ) from exc
-        finally:
-            self.pending.pop(seq, None)
-
     async def hide(self):
         self.store.pinned.pop(self, None)
-        self.page = self.direct_browser = self.page_state = None
+        self.page = self.direct_browser = None
         self.ready.clear()
         if self.ws:
             await self.ws.close()
@@ -241,12 +207,6 @@ class Stage:
                     continue
                 if event.get("type") == "ready" and event.get("revision") == self.page["revision"]:
                     self.ready.set()
-                if event.get("type") in ("state", "sent") and "state" in event:
-                    self.page_state = event["state"]
-                if event.get("type") == "sent":
-                    future = self.pending.get(event.get("id"))
-                    if future and not future.done():
-                        future.set_result(True)
         finally:
             if self.ws is ws:
                 self.ws = None
@@ -260,20 +220,6 @@ class Stage:
 
         async def content(request):
             path = self.store.file(request.match_info["page_id"], request.match_info["file"])
-            if path.suffix.lower() in (".html", ".htm"):
-                # Insert before author scripts while preserving the document's doctype.
-                body = await asyncio.to_thread(path.read_bytes)
-                match = re.match(rb"(?:\xef\xbb\xbf)?\s*(?:<!doctype[^>]*>)?", body, re.I)
-                offset = match.end()
-                body = body[:offset] + b'<script src="/tv.js"></script>' + body[offset:]
-                return web.Response(
-                    body=body,
-                    content_type="text/html",
-                    headers={
-                        "Content-Security-Policy": "sandbox allow-scripts allow-forms",
-                        "Access-Control-Allow-Origin": "*",
-                    },
-                )
             return web.FileResponse(
                 path,
                 headers={
@@ -313,15 +259,6 @@ class Stage:
                 if event:
                     event.set()
 
-        async def helper(request):
-            return web.FileResponse(
-                Path(__file__).parent / "data/tv.js",
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Private-Network": "true",
-                },
-            )
-
         async def live(request):
             return web.json_response(success("running"))
 
@@ -332,7 +269,6 @@ class Stage:
         app.add_routes(
             [
                 web.get("/stage", index),
-                web.get("/tv.js", helper),
                 web.get("/stage/ws", websocket),
                 web.get("/c/{page_id}/{file:.*}", content),
                 web.get("/m/{file:.*}", media, name="media"),

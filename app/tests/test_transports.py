@@ -3,7 +3,7 @@ import base64
 import json
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -57,7 +57,7 @@ async def test_real_mcp_sdk_and_rest(service, aiohttp_client):
             json.loads((await session.read_resource("tv://apps")).contents[0].text)[0]["name"]
             == "YouTube"
         )
-        assert "/tv.js" in (await session.read_resource("tv://page-guide")).contents[0].text
+        assert "tv_page_run" in (await session.read_resource("tv://page-guide")).contents[0].text
         alias = await session.call_tool("tv_hide", {})
         assert not alias.isError and alias.structuredContent["screen"]["presenting"] is None
         bad = await session.call_tool("tv_open", {})
@@ -257,7 +257,7 @@ async def test_repin_capture_and_close_failed_cdp_attachment(tmp_path, urls, den
     (tmp_path / "DevToolsActivePort").write_text("9222\n/browser\n")
     session = SimpleNamespace(send=AsyncMock(side_effect=RuntimeError if deny_fails else None), detach=AsyncMock())
     context = SimpleNamespace(new_cdp_session=AsyncMock(return_value=session))
-    context.pages = [SimpleNamespace(url=url, opener=AsyncMock(return_value=None), context=context, is_closed=lambda: False)
+    context.pages = [SimpleNamespace(url=url, opener=AsyncMock(return_value=None), context=context, on=Mock(), is_closed=lambda: False)
                      for url in urls]
     browser = SimpleNamespace(contexts=[context], close=AsyncMock())
     sender.driver = SimpleNamespace(chromium=SimpleNamespace(connect_over_cdp=AsyncMock(return_value=browser)))
@@ -268,6 +268,7 @@ async def test_repin_capture_and_close_failed_cdp_attachment(tmp_path, urls, den
         assert sender.page is None
     else:
         assert await sender.browser_page() is context.pages[0]
+        context.pages[0].on.assert_any_call("response", sender.record_document)
         browser.close.assert_not_awaited()
     if len(urls) == 1:
         session.send.assert_awaited_once_with("Browser.setDownloadBehavior", {"behavior": "deny"})

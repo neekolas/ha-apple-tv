@@ -12,7 +12,7 @@ from ..present.interaction import PageInteraction
 from ..present.media import MediaPlayback
 from ..state import Fault, classify
 from . import link_info, playback_identity
-from .contract import SCHEMAS, UNKNOWN, checked, outcome, public_error, schema
+from .contract import RUN_HELP, SCHEMAS, UNKNOWN, checked, outcome, public_error, schema
 from .sequence import run_sequence
 from .deep_link import confirm_custom_link, link_targets, observed, title_action
 from .pair import exchange
@@ -22,11 +22,9 @@ from .navigation import label, match_app, matches_label, navigate, normal
 RECIPES = yaml.safe_load((Path(__file__).parents[1] / "data/apps.yaml").read_text())
 
 
-PAGE_TOOLS = {"tv_page_look", "tv_page_act"}
-
-
 class PublicTools:
-    def __init__(self, ops, mirror_size):
+    def __init__(self, ops, mirror_size, page_scripts=True):
+        self.page_scripts = page_scripts
         self.ops, self.engine, self.stage = ops, ops.engine, ops.stage
         self.size = mirror_size
         self.lock = asyncio.Lock()
@@ -124,18 +122,18 @@ class PublicTools:
             ):
                 await self.admit(replace)
             already_off = name == "tv_power" and not args["on"] and (await self.engine.status())["power"] == "off"
-            if name not in ("tv_look", "tv_status", "tv_pair", "tv_sequence") and name not in PAGE_TOOLS and not already_off:
+            if name not in ("tv_look", "tv_status", "tv_pair", "tv_sequence", "tv_page_run") and not already_off:
                 await self.prepare_action(force=name == "tv_power" and args["on"])
             result = await getattr(self, name)(**args)
             if self.action_evidence:
                 result["evidence"][:0] = self.action_evidence
             if name != "tv_status" and "screen" not in result:
-                result["screen"] = self.last_screen.copy() if name in PAGE_TOOLS else await self.snapshot()
+                result["screen"] = self.last_screen.copy() if name == "tv_page_run" else await self.snapshot()
             if name == "tv_look":
                 self.last_look = {k: v for k, v in result.items() if k != "image"}
         except Exception as exc:  # noqa: BLE001 - Both public transports use this contract.
             fault = classify(exc)
-            if name not in ("tv_status", "tv_pair") and name not in PAGE_TOOLS:
+            if name not in ("tv_status", "tv_pair", "tv_page_run"):
                 await self.snapshot(
                     read_focus=fault.code
                     not in ("screen_unavailable", "observer_failed", "observer_unavailable")
@@ -147,8 +145,6 @@ class PublicTools:
                 result["screen"] = UNKNOWN.copy()
         finally:
             try:
-                if self.page_interaction.root and self.page_interaction.revision != (self.stage.page or {}).get("revision"):
-                    await self.page_interaction.clear()
                 if hasattr(self, "reconcile"):
                     self.reconcile()
             finally:
@@ -393,7 +389,6 @@ class PublicTools:
                 }
                 for i in items
             ],
-            "page_state": await self.stage.current_state(),
         }
         result = outcome(
             "Read the TV screen.", ["Accessibility observation"] if focus or items else [], data
@@ -793,7 +788,7 @@ class PublicTools:
     ):
         """Present a page, or dismiss it by omitting the source. Can wake the TV and replaces its bridge media or page.
         The HA host renders the page and mirrors it or plays a recording. Live URLs use a mirror. The default fleet limit is one active mirror.
-        Inspect data.transport and screen.presenting. verified means frames were sent or playback was observed. Use tv_update to send new data.
+        Inspect data.transport and screen.presenting. verified means frames were sent or playback was observed. Use tv_page_run to read or change a live page.
         For example, tv_show {"html":"<h1>Hello</h1>"}."""
         await self.media.stop()
         if all(source is None for source in (url, html, files, bundle)):
@@ -822,28 +817,10 @@ class PublicTools:
             result["verified"],
         )
 
-    async def tv_page_look(self, find=None, scope=None, cursor=None):
-        """Read controls, headings and status in the mirrored browser without waking the TV. Use find for literal text, scope for a region or control, or cursor for the next rows.
-        Read data.snapshot and use its element refs with data.view on the same TV. A recording gives page_not_live. The screen field is cached.
-        For example, tv_page_look {"find":"Next"}."""
-        data = await self.page_interaction.look(find, scope, cursor)
-        return outcome("Read the mirrored document.", ["Chromium accessibility snapshot"], data)
+    async def tv_page_run(self, script, arg=None, timeout_ms=5000):
+        if not self.page_scripts:
+            raise Fault("scripts_disabled", "Page script execution is disabled.", "Enable page_scripts in the app options and restart the app.")
+        data = await self.page_interaction.run(script, arg, timeout_ms)
+        return outcome("Ran the page script.", ["Chromium returned the script result"], data)
 
-    async def tv_page_act(self, view, ref, action, **args):
-        """Operate one control in the mirrored browser without waking the TV. Use the view and ref from tv_page_look. Scroll with ref document or a scrollable region.
-        data.dispatched acknowledges input. verified means a focus, value or status change was observed. Use the returned view for the next action. For stale_view, follow error.fix to refresh the view or present the page again. For delivery_uncertain, inspect the page before acting again.
-        For example, tv_page_act {"view":"sample-view","ref":"e2","action":"click"}."""
-        data = await self.page_interaction.act(view, ref, action, **args)
-        return outcome("Dispatched browser input.", ["Chromium accepted the action"], data,
-                       verified=any(k in data for k in ("focus", "focused", "value", "status")))
-
-    async def tv_update(self, data):
-        """Send data to the current page after tv_show. Can wake the TV. The browser posts a message and recorded presentations are rendered again.
-        verified and data.delivered confirm dispatch. Check data.page_state for the page's response and screen.presenting for the active page.
-        For example, tv_update {"data":{"step":2}}."""
-        await self.ops.update_page(data)
-        return outcome(
-            "Delivered the page update.",
-            ["Browser posted the update"],
-            {"delivered": True, "page_state": await self.stage.current_state()},
-        )
+    tv_page_run.__doc__ = RUN_HELP

@@ -502,12 +502,6 @@ class Tools:
                     sender.fail(exc)
                 raise
 
-    async def update_page(self, data):
-        async with self.stage.lock:
-            await self.stage.send(data)
-            if self.presenter.status()["mode"] == "play_url":
-                await self.presenter.start(self.stage.origin + "/stage")
-
     async def tv_hide(self):
         """Stop presenting and close the stage browser."""
         async with self.stage.lock:

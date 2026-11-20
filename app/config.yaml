@@ -23,6 +23,7 @@ options:
   apple_tv_id: ""
   presentation_mode: mirror
   mirror_size: 1920x1080
+  page_scripts: true
   mirror_fps: 10
   default_profile: ""
   app_profile: ""
@@ -37,6 +38,7 @@ schema:
   apple_tv_id: str?
   presentation_mode: list(mirror|play_url|auto)
   mirror_size: list(1280x720|1920x1080)
+  page_scripts: bool
   mirror_fps: int(1,60)
   default_profile: str?
   app_profile: str?

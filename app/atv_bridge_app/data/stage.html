@@ -8,8 +8,7 @@ iframe { position:absolute; inset:0; width:100%; height:100%; border:0; opacity:
 iframe.visible { opacity:1; }
 </style>
 <body><script>
-let current, pending, pageId, revision, pageState = null, wakeLock;
-const states = new WeakMap();
+let current, pending, pageId, revision, wakeLock;
 async function keepAwake(enabled) {
   try {
     await wakeLock?.release();
@@ -19,19 +18,10 @@ async function keepAwake(enabled) {
 function connect() {
   const ws = new WebSocket("ws://" + location.host + "/stage/ws");
   const reply = event => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(event)); };
-  const report = e => {
-    if (!["ready","state"].includes(e.data?.atvBridge)) return;
-    if (pending && e.source === pending.contentWindow) states.set(pending, e.data.state);
-    if (e.source !== current?.contentWindow) return;
-    pageState = e.data.state;
-    reply({type:"state", page_id:pageId, state:pageState});
-  };
-  addEventListener("message", report);
   ws.onmessage = ({ data }) => {
     const msg = JSON.parse(data);
     if (msg.type === "show") {
       if (current && revision === msg.revision) {
-        reply({type:"state", page_id:pageId, state:pageState});
         reply({type:"ready", page_id:pageId, revision});
         return;
       }
@@ -51,8 +41,6 @@ function connect() {
         pending = null;
         pageId = msg.page_id;
         revision = msg.revision;
-        pageState = states.get(frame) ?? null;
-        reply({type:"state", page_id:pageId, state:pageState});
         frame.classList.add("visible");
         previous?.classList.remove("visible");
         setTimeout(() => previous?.remove(), 230);
@@ -60,15 +48,9 @@ function connect() {
       };
       frame.src = msg.src;
       document.body.append(frame);
-    } else if (msg.type === "send" && current && pageId === msg.page_id) {
-      const channel = new MessageChannel();
-      const sent = () => { channel.port1.close(); reply({type:"sent", id:msg.id, page_id:msg.page_id, state:pageState}); };
-      const timeout = setTimeout(sent, 250);
-      channel.port1.onmessage = e => { clearTimeout(timeout); pageState = e.data.state; sent(); };
-      current.contentWindow.postMessage(msg.data, "*", [channel.port2]);
     }
   };
-  ws.onclose = () => { removeEventListener("message", report); setTimeout(connect, 500); };
+  ws.onclose = () => setTimeout(connect, 500);
 }
 connect();
 </script></body>

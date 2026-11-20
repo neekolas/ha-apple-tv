@@ -22,7 +22,7 @@ class MCP:
         resource_help = {
             "screen": "Accessible focus, app and screen state for the default TV, or per-TV text summaries when selection is ambiguous.",
             "apps": "Installed app names and bundle IDs. With several paired TVs, lists are keyed by receiver ID.",
-            "page-guide": "Page sizing, bundle layout, live URLs and the JavaScript update interface for tv_show.",
+            "page-guide": "Page sizing, bundle layout, live URLs and calling page functions with tv_page_run.",
             "tvs": "Registered receiver names, IDs, identifiers and pairing status. Use the ID as the tv selector.",
         }
         scoped_help = {
@@ -102,7 +102,7 @@ class MCP:
                 raise ValueError("Supply a topic to the present prompt.")
             scaffold = """<!doctype html><meta name="viewport" content="width=device-width">
 <style>body{margin:5vw;background:#111;color:white;font:36px system-ui}h1{font-size:64px}</style>
-<h1></h1><main></main><script>tv.on('update', data => {document.querySelector('main').textContent=data.text; tv.state=data}); tv.ready();</script>"""
+<h1></h1><main></main><script>window.render = text => {document.querySelector('main').textContent=text};</script>"""
             return types.GetPromptResult(
                 messages=[
                     types.PromptMessage(

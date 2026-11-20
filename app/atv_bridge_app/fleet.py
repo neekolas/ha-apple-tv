@@ -204,10 +204,12 @@ class Fleet:
             apple_tv_id=meta.get("identifier") or "",
             **{
                 k: self.options[k]
-                for k in ("presentation_mode", "mirror_size", "mirror_fps", "default_profile", "app_profile")
+                for k in ("presentation_mode", "mirror_size", "mirror_fps", "page_scripts", "default_profile", "app_profile")
                 if k in self.options
             },
         )
+        rt.tools.page_interaction.debug_ports = lambda: {runtime.operations.live_mirror.debug_port
+                                                         for runtime in self.runtimes.values()}
         rt.metadata = meta
         rt.stage.store = self.store
         rt.tools.admit = lambda replace: self.reserve(rt, replace)

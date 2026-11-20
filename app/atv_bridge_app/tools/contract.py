@@ -89,6 +89,39 @@ SHOW = {
     "audio": described({"enum": ["play", "mute"]}, "Play or mute page audio.", default="play"),
     "keep_awake": described(BOOL, "Request a browser wake lock while presenting.", default=True),
 }
+# These are caller-side examples. The browser check runs the advertised recipes verbatim.
+OUTLINE_RECIPE = """const roles = {a:'link', button:'button', text:'textbox', password:'textbox', search:'searchbox', h1:'heading', h2:'heading', h3:'heading', h4:'heading', h5:'heading', h6:'heading'};
+const items = [...document.querySelectorAll('button,a[href],input,h1,h2,h3,h4,h5,h6')];
+return items.filter(el => el.checkVisibility({visibilityProperty: true}) && !el.closest('[inert],[aria-hidden=true]')).slice(0, 40)
+  .map(el => ({role: el.getAttribute('role') || roles[el.localName === 'input' ? el.type : el.localName] || el.type, text: (el.getAttribute('aria-label') || el.innerText).trim().slice(0, 100),
+    value: el.matches('input[type=checkbox],input[type=radio]') ? el.checked : undefined}));"""
+FILL_RECIPE = """const el = document.querySelector(arg.selector);
+const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, arg.text);
+for (const type of ['input', 'change']) el.dispatchEvent(new Event(type, {bubbles: true}));"""
+SELECT_RECIPE = """const el = document.querySelector('#size');
+el.value = arg;
+el.dispatchEvent(new Event('change', {bubbles: true}));"""
+WAIT_RECIPE = """const end = performance.now() + 1500;
+while (document.querySelector('#result')?.textContent !== 'Done') {
+  if (performance.now() >= end) throw new Error('Status did not reach Done');
+  await new Promise(resolve => setTimeout(resolve, 25));
+}
+return 'Done';"""
+RUN_HELP = f"""Run JavaScript in the current mirrored document. Supply an expression, function or async function body. Pass JSON input as arg.
+Call functions on your own page directly. Read a known value with document.querySelector('#note').value.
+For discovery, narrow the selector when possible. This outline returns common roles or input types and omits free-text input values:
+{OUTLINE_RECIPE}
+Fill a controlled input or textarea using arg.selector and arg.text:
+{FILL_RECIPE}
+Select an option:
+{SELECT_RECIPE}
+Click with document.querySelector('#advance').click(). Submit with document.querySelector('form').requestSubmit().
+Wait for a status change:
+{WAIT_RECIPE}
+The next call follows navigation. Promises are awaited. Read data.result, or data.preview when data.truncated is true.
+Set page_scripts to false to disable this tool. For example, tv_page_run {{"script":"document.querySelector('#status').innerText"}}."""
+
 SCHEMAS = {
     "tv_show": schema(
         SHOW,
@@ -97,27 +130,11 @@ SCHEMAS = {
             *[{"required": [key]} for key in ("url", "html", "files", "bundle")],
         ],
     ),
-    "tv_page_look": schema({
-        "find": described(TEXT, "Literal, case-insensitive text to find. Includes one neighboring row on each side.", maxLength=160),
-        "scope": described(TEXT, "Region or control ref from the last view on this TV.", maxLength=64),
-        "cursor": described(TEXT, "Continue the previous result with this opaque token. Omit find and scope.", maxLength=64),
-    }, **{"not": {"required": ["cursor"], "anyOf": [{"required": ["find"]}, {"required": ["scope"]}]}}),
-    "tv_page_act": schema({
-        "view": described(TEXT, "Current opaque view token returned by page look or action on this TV.", maxLength=64),
-        "ref": described(TEXT, "Element ref in that view. Use document for a viewport scroll.", maxLength=64),
-        "action": described({"enum": ["click", "fill", "select", "press", "scroll"]}, "Dispatch one browser input to the referenced element."),
-        "text": described({"type": "string", "maxLength": 2048}, "Replacement text for fill. An empty string clears the field."),
-        "value": described({"type": "string", "maxLength": 2048}, "Exact option value for select."),
-        "key": described({"enum": ["Enter", "Space", "Escape", "Tab", "Shift+Tab", "ArrowUp", "ArrowDown",
-                                  "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]}, "One key for press."),
-        "direction": described({"enum": ["up", "down"]}, "Scroll the document or container by one viewport."),
-    }, ["view", "ref", "action"], oneOf=[
-        {"properties": {"action": described({"const": action}, "Operation for this variant.")},
-         "required": [field] if field else [],
-         "not": {"anyOf": [{"required": [other]} for other in ("text", "value", "key", "direction") if other != field]}}
-        for action, field in (("click", None), ("fill", "text"), ("select", "value"), ("press", "key"), ("scroll", "direction"))
-    ]),
-    "tv_update": schema({"data": described({}, "Any JSON value to send to the page's message handler.")}, ["data"]),
+    "tv_page_run": schema({
+        "script": described(TEXT, "JavaScript expression, function expression or async function body. arg is available in the page.", maxLength=65536),
+        "arg": described({}, "Optional JSON input to the script."),
+        "timeout_ms": described(number(1, 30000), "Maximum wait in milliseconds.", default=5000),
+    }, ["script"]),
     "tv_play": schema(
         {
             "youtube": described(TEXT, "YouTube video URL or 11-character video ID."),
@@ -191,19 +208,17 @@ INSTRUCTIONS = (
     "Use tv_status for health and pairing, and tv_pair to repair missing access. "
     "Read tv_look before interrupting someone. Use tv_open to launch or search, tv_navigate for a labeled item, "
     "tv_remote for individual keys, text or a swipe, and tv_sequence for repeated work with explicit screen checkpoints. "
-    "Use tv_power for wake or sleep, tv_play for media and deep links, tv_show for web pages, and tv_update for page messages. "
-    "Use tv_page_look and tv_page_act to read and operate controls in a live mirror. "
+    "Use tv_power for wake or sleep, tv_play for media and deep links, and tv_show for web pages. "
+    "Use tv_page_run to call app functions or read and operate the mirrored document with DOM APIs. "
     "TV actions can wake the receiver and dismiss a screen saver or profile prompt. Inspect verified, evidence and screen. "
     "After uncertain delivery, look before sending further input. Ask before purchases, rentals or upgrades."
 )
 PAGE_GUIDE = """Design for a 1920×1080 canvas with body text of at least 28 px. Put index.html at the root of
-inline files or an uploaded ZIP. Use the base64: prefix for binary inline files. HTML and bundle pages
-receive the tv helper automatically. Use tv.on('update', data => render(data)), tv.ready(), and assign
-tv.state to a JSON value for tv_look. A message event also carries the original update data.
+inline files or an uploaded ZIP. Use the base64: prefix for binary inline files. On authored pages,
+expose named functions on window and call them with tv_page_run.
 For live URLs, keep the server running. The Green loads the real site, including scripts, fetches,
 WebSockets and reloads. For a local server, use tailscale serve and pass its HTTPS MagicDNS URL.
-To use the helper on a live page, include <script src="http://127.0.0.1:8766/tv.js"></script>
-and allow that script in the site's CSP. Pages that block framing open at the top level.
+Pages that block framing open at the top level.
 Page audio plays by default. Use audio: "mute" for a silent presentation."""
 RETRYABLE = {"tv_unreachable", "page_unreachable", "screen_unavailable", "busy"}
 CODES = {
@@ -217,7 +232,6 @@ CODES = {
     "app_not_found": "app_not_installed",
     "keyboard_unfocused": "no_text_field",
     "fork_required": "launch_refused",
-    "stage_unavailable": "page_unreachable",
     "bundle_missing": "page_unreachable",
     "stage_timeout": "page_unreachable",
     "sender_failed": "page_unreachable",
@@ -227,13 +241,11 @@ CODES = {
     "screen_pairing_invalid": "screen_unavailable",
     "observer_unavailable": "screen_unavailable",
     "delivery_uncertain": "uncertain",
-    "page_delivery_uncertain": "delivery_uncertain",
     "open_unverified": "uncertain",
     "playback_unverified": "uncertain",
-    "stage_delivery_uncertain": "uncertain",
 }
 STABLE = RETRYABLE | {
-    "delivery_uncertain", "stale_view", "target_missing", "page_not_live", "nothing_showing",
+    "scripts_disabled", "script_error", "stale_view", "target_missing", "page_not_live", "nothing_showing",
     "launch_refused", "tv_required", "mirror_busy", "tv_not_found",
     "not_paired",
     "pairing_removed",

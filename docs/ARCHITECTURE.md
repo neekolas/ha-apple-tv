@@ -53,9 +53,7 @@ Each advertised tool accepts an optional `tv` selector. Use a name or ID from `t
 | `tv_power` | Request on or off and check the receiver's power state. |
 | `tv_play` | Play YouTube, a media URL or an app title, or open a deep link and report where it landed. |
 | `tv_show` | Show a URL, HTML, inline files or a stored bundle. With only the selector, dismiss that TV's page. |
-| `tv_page_look` | Read a bounded snapshot of the mirrored document. Search by text, scope by ref or continue with a cursor. |
-| `tv_page_act` | Dispatch one action to a control or scroll the document using the current view. |
-| `tv_update` | Post JSON to the current page and return its reported state, if available. |
+| `tv_page_run` | Await caller JavaScript in the presented document and return bounded JSON. The `page_scripts` app option controls this tool. |
 
 Tool calls wait up to ten seconds for the selected TV's tool lock. Results contain `ok`, `summary`, `verified`, `evidence` and `data`. All tools except `tv_status` include `screen`. Errors add `code`, `message`, `retryable` and `fix` under `error`. In a fleet summary, inspect the individual receiver results. The bridge has no purchase guard.
 
@@ -63,7 +61,9 @@ MCP exposes `tv://tvs`, `tv://screen`, `tv://apps`, receiver-specific screen and
 
 ## Presenting a page
 
-The default mirror uses 1920×1080 at a target of 10 fps and 4,000 kbit/s. The 1280×720 option uses 2,500 kbit/s. Chromium loads the page and tvpipe sends the tab over AirPlay. The stage swaps iframes on a page change and uses `postMessage` for updates. When a live site blocks framing, the sender opens it in the captured tab. The next show can return to the stage. A live URL must be reachable from the HA host. A media URL supplied to `tv_play` must be reachable from the Apple TV.
+The default mirror uses 1920×1080 at a target of 10 fps and 4,000 kbit/s. The 1280×720 option uses 2,500 kbit/s. Chromium loads the page and tvpipe sends the tab over AirPlay. The stage swaps iframes on a page change. When a live site blocks framing, the sender opens it in the captured tab. The next show can return to the stage. A live URL must be reachable from the HA host. A media URL supplied to `tv_play` must be reachable from the Apple TV.
+
+Page control follows the captured tab or the stage iframe identified by the current presentation revision. One evaluation checks the committed document URI and executes the script in that frame. The caller supplies plain JavaScript and optional JSON input. Chromium awaits the result and caps its serialized size before sending it to the app. Each call follows the current content document after navigation. The capture browser starts with `--autoplay-policy=no-user-gesture-required`. The stage iframe allows autoplay. The admin-only script tool runs in the current content document. Its code runs with page privileges. Bridge listeners and browser-internal documents are excluded.
 
 For stored pages, `play_url` renders an MP4 for the receiver to fetch. In `auto` mode two failed mirror starts trigger recording. Live URLs always use the mirror. The default mirror limit is one. A full fleet returns `mirror_busy`. A show with `replace: true` can stop another receiver's presentation.
 

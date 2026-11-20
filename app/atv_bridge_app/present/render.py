@@ -17,7 +17,7 @@ PAGE_INFO = """() => {
   const media = [...document.querySelectorAll("audio, video")];
   const active = media.filter(el => !el.paused || (el.autoplay && el.ended));
   const finite = active.length && active.every(el => !el.loop && Number.isFinite(el.duration));
-  const dynamic = document.querySelector("script:not([src='/tv.js']), video, canvas, iframe, svg animate, svg animateTransform, picture, img[src$='.gif' i], img[src$='.webp' i]") ||
+  const dynamic = document.querySelector("script, video, canvas, iframe, svg animate, svg animateTransform, picture, img[src$='.gif' i], img[src$='.webp' i]") ||
     document.getAnimations().length || [...document.images].some(img => !img.complete);
   if (!dynamic && finite) {
     for (const el of active) { el.pause(); el.currentTime = 0; }

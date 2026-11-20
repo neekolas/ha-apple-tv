@@ -263,7 +263,6 @@ async def test_remote_uncertain_no_text_field_and_observer_failure(ui):
         ("tv_open", {"app": "TV"}),
         ("tv_show", {}),
         ("tv_hide", {}),
-        ("tv_update", {"data": None}),
         ("tv_navigate", {"to": "TV"}),
         ("tv_remote", {"swipe": "left"}),
         ("tv_play", {"youtube": "123"}),
@@ -347,7 +346,7 @@ async def test_power_auto_rebuild_and_confirm_sleep(service):
         ({}, True, True),
     ],
 )
-async def test_live_page_frame_fallback_updates_and_return(
+async def test_live_page_frame_fallback_and_return(
     ui, aiohttp_server, policy, timeout, top_level
 ):
     service, _, _ = ui
@@ -363,18 +362,12 @@ async def test_live_page_frame_fallback_updates_and_return(
     mirror.start = AsyncMock(side_effect=[TimeoutError(), None, None] if timeout else None)
     mirror.verify_document = AsyncMock()
     mirror.confirm_frame = AsyncMock(return_value=True)
-    mirror.post_message = AsyncMock()
-    mirror.page_state = AsyncMock(return_value={"step": 3})
     call = service.tools.call
     r = await call("tv_show", {"url": url, "audio": "mute"})
     assert r["verified"] and r["data"]["transport"] == "mirror" and mirror.audio == "mute"
     assert [args.args[0] for args in mirror.start.await_args_list] == (
         [STAGE_URL, url] if top_level else [STAGE_URL]
     )
-    if top_level:
-        update = await call("tv_update", {"data": {"step": 3}})
-        assert update["data"] == {"delivered": True, "page_state": {"step": 3}}
-        mirror.post_message.assert_awaited_once_with({"step": 3})
     mirror.confirm_frame.return_value = False
     r = await call("tv_show", {"files": {"index.html": "<h1>Next</h1>", "img.png": "base64:aGk="}})
     assert (
@@ -383,7 +376,6 @@ async def test_live_page_frame_fallback_updates_and_return(
     assert service.stage.store.file(r["data"]["page_id"], "img.png").read_bytes() == b"hi"
     assert mirror.start.await_args.args == (STAGE_URL,) and service.stage.direct_browser is None
     assert (await call("tv_show", {}))["screen"]["presenting"] is None
-    assert (await call("tv_update", {"data": "next"}))["error"]["code"] == "page_unreachable"
 
 
 async def test_missing_bundle_bad_inline_and_http_error(ui, aiohttp_server):
