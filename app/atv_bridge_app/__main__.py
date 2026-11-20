@@ -11,6 +11,19 @@ from .processes import isolate_supervisor_token, supervisor_token
 from .fleet import Fleet
 from .ingress import panel
 
+LAG_LIMIT = 1.0
+
+
+async def watch_event_loop():
+    """Warn when the event loop stalls, which delays every tool call at once."""
+    log = logging.getLogger(__name__)
+    loop = asyncio.get_running_loop()
+    while True:
+        before = loop.time()
+        await asyncio.sleep(0.5)
+        if (lag := loop.time() - before - 0.5) > LAG_LIMIT:
+            log.warning("Event loop stalled for %d ms", lag * 1000)
+
 
 async def main():
     os.umask(0o077)
@@ -22,6 +35,9 @@ async def main():
     logging.getLogger("pyatv").setLevel(logging.WARNING)
     # Status-only AirPlay traces omit credentials, headers, URLs and payloads.
     logging.getLogger("pyatv.airplay.url_status").setLevel(max(logging.INFO, logging.getLogger().level))
+    # Stateless MCP logs one "Terminating session: None" line per request. The bridge logs requests itself.
+    logging.getLogger("mcp.server.streamable_http").setLevel(logging.WARNING)
+    watchdog = asyncio.create_task(watch_event_loop())
     service = Fleet(root, options)
     stopped = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -41,6 +57,7 @@ async def main():
         )
         await stopped.wait()
     finally:
+        watchdog.cancel()
         for runner in reversed(runners):
             await runner.cleanup()
 

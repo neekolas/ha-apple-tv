@@ -1,5 +1,7 @@
 import asyncio
 import json
+import logging
+import time
 from contextlib import asynccontextmanager
 from urllib.parse import unquote
 
@@ -12,6 +14,25 @@ from mcp.shared.exceptions import MCPError
 from .stage import MAX_UPLOAD
 from .tools.contract import SCHEMAS, ROUTED_SCHEMAS, INSTRUCTIONS, PAGE_GUIDE
 from .tools.public import PublicTools
+
+_LOG = logging.getLogger(__name__)
+PEEK_LIMIT = 1 << 20
+
+
+def describe(method, body):
+    """Name the JSON-RPC method and tool without logging arguments."""
+    if method != "POST":
+        return method
+    if len(body) > PEEK_LIMIT:
+        return f"POST {len(body)} bytes"
+    try:
+        message = json.loads(body)
+    except ValueError:
+        return "POST unparsed"
+    if not isinstance(message, dict):
+        return "POST batch"
+    params = message.get("params") if isinstance(message.get("params"), dict) else {}
+    return " ".join(str(part) for part in ("POST", message.get("method"), params.get("name")) if part)
 
 
 class MCP:
@@ -172,7 +193,10 @@ class MCP:
 
     async def handle(self, request):
         """Adapt the SDK's ASGI streamable HTTP response to the existing aiohttp listener."""
+        started = time.monotonic()
         body = await request.read()
+        label = describe(request.method, body)
+        _LOG.info("MCP %s received after %d ms of upload", label, (time.monotonic() - started) * 1000)
         scope = {
             "type": "http",
             "asgi": {"version": "3.0"},
@@ -209,5 +233,13 @@ class MCP:
                 if not message.get("more_body"):
                     await response.write_eof()
 
-        await self.manager.handle_request(scope, receive, send)
+        try:
+            await self.manager.handle_request(scope, receive, send)
+        finally:
+            _LOG.info(
+                "MCP %s answered %s in %d ms",
+                label,
+                response.status if response is not None else "nothing",
+                (time.monotonic() - started) * 1000,
+            )
         return response

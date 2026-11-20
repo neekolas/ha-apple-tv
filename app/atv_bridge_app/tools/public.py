@@ -1,6 +1,8 @@
 """The v1 operation dispatcher shared by HTTP, MCP and Home Assistant."""
 
 import asyncio
+import logging
+import time
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
@@ -20,6 +22,9 @@ from .prompts import prompt_choice
 from .navigation import label, match_app, matches_label, navigate, normal
 
 KEY_GAP_MS = 100
+# Longer than any single tool's own deadline (tv_sequence allows 90 s), so it only catches real hangs.
+TOOL_TIMEOUT = 150
+_LOG = logging.getLogger(__name__)
 RECIPES = yaml.safe_load((Path(__file__).parents[1] / "data/apps.yaml").read_text())
 
 
@@ -32,6 +37,7 @@ class PublicTools:
         self.wait_timeout = 10
         self.play_timeout = 20
         self.settle_ms = 300
+        self.tool_timeout = TOOL_TIMEOUT
         self.last_screen = UNKNOWN.copy()
         self.last_look = None
         self.profile_name = None
@@ -93,6 +99,18 @@ class PublicTools:
         return result
 
     async def call(self, name, args, *, replace=False):
+        started = time.monotonic()
+        _LOG.info("Tool %s received", name)
+        result = await self.dispatch(name, args, replace)
+        _LOG.info(
+            "Tool %s finished: %s in %d ms",
+            name,
+            "ok" if result["ok"] else result["error"]["code"],
+            (time.monotonic() - started) * 1000,
+        )
+        return result
+
+    async def dispatch(self, name, args, replace):
         spec = SCHEMAS.get(name, schema() if name == "tv_hide" else None)
         if spec is None or not Draft202012Validator(spec).is_valid(args):
             return self.audit_failure(
@@ -104,9 +122,11 @@ class PublicTools:
                     "Use tools/list for accepted arguments.",
                 ),
             )
+        waiting = time.monotonic()
         try:
             await asyncio.wait_for(self.lock.acquire(), self.wait_timeout)
         except TimeoutError:
+            _LOG.warning("Tool %s gave up waiting for the TV lock", name)
             return self.audit_failure(
                 name,
                 args,
@@ -114,33 +134,49 @@ class PublicTools:
                     "busy", "Another call is using the TV.", "Retry after the current call completes."
                 ),
             )
+        if (waited := time.monotonic() - waiting) > 1:
+            _LOG.info("Tool %s waited %d ms for the TV lock", name, waited * 1000)
+        deadline = asyncio.timeout(self.tool_timeout)
         try:
-            self.action_evidence = []
-            self.prompt_view = None
-            if (
-                name == "tv_show"
-                and args
-                and hasattr(self, "admit")
-                and (args.get("url") or self.ops.sender.mode != "play_url")
-            ):
-                await self.admit(replace)
-            already_off = name == "tv_power" and not args["on"] and (await self.engine.status())["power"] == "off"
-            if name not in ("tv_look", "tv_status", "tv_pair", "tv_sequence", "tv_page_run") and not already_off:
-                await self.prepare_action(force=name == "tv_power" and args["on"])
-            result = await getattr(self, name)(**args)
-            if self.action_evidence:
-                result["evidence"][:0] = self.action_evidence
-            if name != "tv_status" and "screen" not in result:
-                result["screen"] = self.last_screen.copy() if name == "tv_page_run" else await self.snapshot()
-            if name == "tv_look":
-                self.last_look = {k: v for k, v in result.items() if k != "image"}
+            async with deadline:
+                self.action_evidence = []
+                self.prompt_view = None
+                if (
+                    name == "tv_show"
+                    and args
+                    and hasattr(self, "admit")
+                    and (args.get("url") or self.ops.sender.mode != "play_url")
+                ):
+                    await self.admit(replace)
+                already_off = name == "tv_power" and not args["on"] and (await self.engine.status())["power"] == "off"
+                if name not in ("tv_look", "tv_status", "tv_pair", "tv_sequence", "tv_page_run") and not already_off:
+                    await self.prepare_action(force=name == "tv_power" and args["on"])
+                result = await getattr(self, name)(**args)
+                if self.action_evidence:
+                    result["evidence"][:0] = self.action_evidence
+                if name != "tv_status" and "screen" not in result:
+                    result["screen"] = self.last_screen.copy() if name == "tv_page_run" else await self.snapshot()
+                if name == "tv_look":
+                    self.last_look = {k: v for k, v in result.items() if k != "image"}
         except Exception as exc:  # noqa: BLE001 - Both public transports use this contract.
-            fault = classify(exc)
-            if name not in ("tv_status", "tv_pair", "tv_page_run"):
-                await self.snapshot(
-                    read_focus=fault.code
-                    not in ("screen_unavailable", "observer_failed", "observer_unavailable")
+            if deadline.expired():
+                _LOG.warning("Tool %s did not finish within %d s and was cancelled", name, self.tool_timeout)
+                fault = Fault(
+                    "uncertain",
+                    f"The call did not finish within {self.tool_timeout} s and was stopped. An action may have arrived.",
+                    "Read tv_status or tv_look before retrying.",
                 )
+            else:
+                fault = classify(exc)
+            if name not in ("tv_status", "tv_pair", "tv_page_run"):
+                try:
+                    async with asyncio.timeout(10):
+                        await self.snapshot(
+                            read_focus=fault.code
+                            not in ("screen_unavailable", "observer_failed", "observer_unavailable")
+                        )
+                except TimeoutError:
+                    pass
             result = self.failure(name, fault)
             if self.action_evidence:
                 result["evidence"][:0] = self.action_evidence

@@ -189,7 +189,7 @@ Optional `notify: true` requests a reply notification through the phone configur
 
 ## Failures
 
-A tool failure includes `error.code`, `error.message`, `error.retryable` and `error.fix`. Calls to each receiver share a lock. If an action loses confirmation, read the screen before retrying.
+A tool failure includes `error.code`, `error.message`, `error.retryable` and `error.fix`. Calls to each receiver share a lock. If an action loses confirmation, read the screen before retrying. A call that waits more than 10 seconds for the lock returns `busy`. The bridge stops any call that runs longer than 150 seconds and returns `uncertain`. The Home Assistant proxy answers 504 if the app sends nothing for 200 seconds. The app log records each MCP request and tool call with its duration, and warns when its event loop stalls.
 
 | Public code | Meaning | Retryable |
 |---|---|---|

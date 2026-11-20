@@ -747,3 +747,20 @@ async def test_sequence_bounds_final_read_and_preserves_step_history(ui, monkeyp
     assert result["data"]["steps"][0]["ok"] and grid.keys == ["right"]
     assert result["data"]["stopped_at"] == {"phase": "screen"}
     assert not service.tools.lock.locked()
+
+
+async def test_hung_tool_returns_uncertain_and_frees_the_lock(ui, caplog):
+    service, grid, tv = ui
+    service.tools.tool_timeout = 0.2
+
+    async def hang(*args, **kwargs):
+        await asyncio.sleep(60)
+
+    service.tools.tv_navigate = hang
+    with caplog.at_level("INFO"):
+        r = await service.tools.call("tv_navigate", {"to": "Search"})
+    assert r["error"]["code"] == "uncertain" and "did not finish" in r["error"]["message"]
+    assert not service.tools.lock.locked()
+    assert "Tool tv_navigate finished: uncertain" in caplog.text
+    service.tools.tool_timeout = 150
+    assert (await service.tools.call("tv_remote", {"keys": ["right"]}))["ok"]

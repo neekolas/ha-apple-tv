@@ -1,5 +1,7 @@
 """Admin-only streaming proxy to the app."""
 
+import logging
+
 from aiohttp import ClientError, ClientTimeout, web
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from homeassistant.components.http.decorators import require_admin
@@ -23,6 +25,9 @@ RESPONSE_HEADERS = (
     "Allow",
 )
 CHUNK_SIZE = 64 * 1024
+# The app stops a tool call after 150 s, so a silent upstream past this is a hang. GET streams stay open.
+POST_READ_TIMEOUT = 200
+_LOGGER = logging.getLogger(__name__)
 
 
 class BridgeView(HomeAssistantView):
@@ -56,10 +61,18 @@ class BridgeView(HomeAssistantView):
                 data=request.content.iter_chunked(CHUNK_SIZE)
                 if request.can_read_body
                 else None,
-                timeout=ClientTimeout(total=None, connect=10),
+                timeout=ClientTimeout(
+                    total=None,
+                    connect=10,
+                    sock_read=POST_READ_TIMEOUT if request.method == "POST" else None,
+                ),
                 allow_redirects=False,
             )
-        except (ClientError, TimeoutError) as err:
+        except TimeoutError as err:
+            _LOGGER.warning("Apple TV Agent Bridge did not answer %s %s in time", request.method, path)
+            raise web.HTTPGatewayTimeout(text="Apple TV Agent Bridge did not answer in time") from err
+        except ClientError as err:
+            _LOGGER.warning("Cannot reach Apple TV Agent Bridge for %s %s: %s", request.method, path, err)
             raise web.HTTPBadGateway(text="Cannot reach Apple TV Agent Bridge") from err
 
         async with upstream:
