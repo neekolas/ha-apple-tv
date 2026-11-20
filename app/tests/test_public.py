@@ -535,3 +535,157 @@ async def test_invalid_hold_rejects_entire_gesture_before_ready(service):
     assert result["error"]["code"] == "invalid_arguments"
     ready.assert_not_awaited()
     press.assert_not_awaited()
+
+
+@pytest.mark.parametrize("args", [
+    {"steps": [{"key": "right"}, {"expect": {}}]},
+    {"steps": [{"key": "right"}, {"to": "Search", "key": "select"}]},
+    {"steps": [{"key": "right"}, {"expect": {"focus": "$item"}}]},
+    {"steps": [{"key": "right"}] * 2, "for_each": ["X"] * 26},
+])
+async def test_sequence_validates_whole_request_before_wake(ui, args):
+    service, grid, _ = ui
+    service.engine.ready = AsyncMock()
+    result = await service.tools.call("tv_sequence", args)
+    assert result["error"]["code"] == "invalid_arguments"
+    service.engine.ready.assert_not_awaited()
+    assert not grid.steps
+
+
+async def test_sequence_repeats_and_stops_at_first_mismatch(ui):
+    service, grid, _ = ui
+    result = await service.tools.call("tv_sequence", {
+        "for_each": ["Search", "Results"],
+        "steps": [{"to": "$item"}, {"expect": {"visible": " home ", "focus": "$item"}},
+                  {"expect": {"focus": "Search"}}],
+    })
+    assert result["error"]["code"] == "not_found"
+    assert result["data"]["stopped_at"] == {"iteration": 1, "step": 2}
+    rows = result["data"]["steps"]
+    assert [r["ok"] for r in rows] == [True] * 5 + [False]
+    assert rows[-1]["data"]["observed"] == result["screen"]["focus"]["label"] == "Results"
+    assert grid.keys == ["right", "down", "left"]
+
+
+async def test_sequence_fast_keys_read_only_at_checkpoint(ui):
+    service, grid, _ = ui
+    result = await service.tools.call("tv_sequence", {
+        "steps": [{"key": "right"}, {"key": "down"}, {"expect": {"focus": "Succession"}}],
+    })
+    assert result["ok"] and not result["verified"]
+    assert [r["verified"] for r in result["data"]["steps"]] == [False, False, True]
+    assert grid.steps == [("press", "right"), ("press", "down"), ("read", 3)]
+    assert result["screen"]["focus"]["label"] == "Succession"
+
+
+async def test_sequence_lost_key_is_not_replayed(ui):
+    service, grid, tv = ui
+    async def lose_reply(key, hold):
+        await grid.press(key)
+        if key == "select":
+            raise OSError("lost reply")
+    tv.hid = lose_reply
+    result = await service.tools.call("tv_sequence", {
+        "steps": [{"key": "right"}, {"key": "select"}, {"key": "down"}],
+    })
+    assert grid.keys == ["right", "select"]
+    assert result["error"]["code"] == "uncertain"
+    assert result["data"]["steps"][0]["ok"] and not result["data"]["steps"][1]["ok"]
+    assert result["data"]["stopped_at"] == {"iteration": 0, "step": 1}
+
+
+async def test_sequence_unverified_select_stops_before_next_key(ui):
+    service, grid, _ = ui
+    result = await service.tools.call("tv_sequence", {"steps": [{"to": "Search", "select": True}, {"key": "down"}]})
+    assert result["error"]["code"] == "uncertain"
+    assert grid.keys == result["data"]["steps"][0]["data"]["path"] == ["right", "select"]
+    grid.keys.clear()
+    result = await service.tools.call("tv_sequence", {"steps": [{"to": "Sea", "select": True}]})
+    assert result["error"]["code"] == "not_found" and "select" not in grid.keys
+
+
+async def test_sequence_checks_app_and_focused_value(ui):
+    service, _, tv = ui
+    view = {"focused": {"label": "Captions", "value": "On", "bundle_id": "com.apple.TVSettings"},
+            "items": [{"label": "Captions"}]}
+    service.state.save_pairings(remote_pairing={"paired": True})
+    service.observer.call = AsyncMock(return_value=view)
+    tv.type = AsyncMock(return_value=True)
+    steps = [{"pause_ms": 1}, {"text": "Example"}, {"expect": {"app": "settings", "value": "ON"}}]
+    result = await service.tools.call("tv_sequence", {"steps": steps})
+    assert result["verified"] and result["screen"]["focus"]["value"] == "On"
+    tv.type.assert_awaited_once_with("Example", True)
+    view["focused"].pop("bundle_id")
+    tv.app = {"name": "Settings", "bundle_id": "com.apple.TVSettings"}
+    result = await service.tools.call("tv_sequence", {"steps": [steps[-1], {"key": "select"}]})
+    assert result["error"]["code"] == "not_found" and not tv.keys
+
+
+async def test_sequence_timeout_keeps_lock_and_reports_inflight_step(ui, monkeypatch):
+    service, grid, tv = ui
+    started = asyncio.Event()
+    async def blocked(key, hold):
+        await grid.press(key)
+        started.set()
+        await asyncio.Event().wait()
+    tv.hid = blocked
+    monkeypatch.setattr("atv_bridge_app.tools.sequence.TIME_LIMIT", 0.15)
+    service.tools.wait_timeout = 0.01
+    task = asyncio.create_task(service.tools.call("tv_sequence", {"steps": [{"key": "right"}, {"key": "select"}]}))
+    await asyncio.wait_for(started.wait(), 1)
+    assert (await service.tools.call("tv_look", {}))["error"]["code"] == "busy"
+    result = await task
+    assert result["error"]["code"] == "uncertain" and grid.keys == ["right"]
+    assert result["data"]["stopped_at"] == {"iteration": 0, "step": 0}
+    assert result["screen"]["focus"]["label"] == "Search"
+    assert (await service.tools.call("tv_look", {}))["ok"]
+
+
+async def test_sequence_open_path_and_final_snapshot(ui):
+    service, grid, tv = ui
+    async def open_menu(key, hold):
+        await grid.press(key)
+        if key == "select":
+            grid.labels = ["Search", "Query"]
+            grid.cursor = 1
+    tv.hid = open_menu
+    result = await service.tools.call("tv_sequence", {"steps": [{"app": "YouTube", "path": ["Search"]}]})
+    assert result["ok"] and result["verified"]
+    assert tv.targets == ["com.google.ios.youtube"]
+    assert result["data"]["steps"][0]["data"]["steps"][0]["verified"]
+
+
+async def test_sequence_checkpoint_does_not_fill_missing_focus_from_later_read(ui):
+    service, grid, _ = ui
+    service.observer.call = AsyncMock(side_effect=[
+        {"items": [{"label": "Search"}]},
+        {"focused": {"label": "Search"}},
+    ])
+    result = await service.tools.call("tv_sequence", {"steps": [{"expect": {"focus": "Search"}}, {"key": "select"}]})
+    assert result["error"]["code"] == "not_found" and result["screen"]["focus"] is None
+    service.observer.call.assert_awaited_once_with("ax_items", max_items=100)
+    assert not grid.keys
+
+
+async def test_sequence_unverified_open_stops_before_prompt_input(ui):
+    service, grid, _ = ui
+    service.operations.tv_open = AsyncMock(return_value=Fault(
+        "open_unverified", "Foreground app did not match.", "Check tv_look."
+    ).result())
+    service.tools.resolve_prompts = AsyncMock()
+    result = await service.tools.call("tv_sequence", {"steps": [{"app": "YouTube"}, {"key": "select"}]})
+    assert result["error"]["code"] == "uncertain" and not grid.keys
+    service.tools.resolve_prompts.assert_awaited_once_with(system=True)
+
+
+async def test_sequence_bounds_final_read_and_preserves_step_history(ui, monkeypatch):
+    service, grid, _ = ui
+    async def stalled(*args, **kwargs):
+        await asyncio.Event().wait()
+    monkeypatch.setattr("atv_bridge_app.tools.sequence.SCREEN_TIMEOUT", 0.01)
+    service.tools.snapshot = stalled
+    result = await service.tools.call("tv_sequence", {"steps": [{"key": "right"}]})
+    assert result["error"]["code"] == "screen_unavailable" and result["screen"]["power"] == "unknown"
+    assert result["data"]["steps"][0]["ok"] and grid.keys == ["right"]
+    assert result["data"]["stopped_at"] == {"phase": "screen"}
+    assert not service.tools.lock.locked()

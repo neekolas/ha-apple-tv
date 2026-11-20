@@ -11,45 +11,14 @@ from ..live import TAILNET_DNS_FIX
 from ..present.media import MediaPlayback
 from ..state import Fault, classify
 from . import link_info, playback_identity
-from .contract import SCHEMAS, public_error, schema
+from .contract import SCHEMAS, UNKNOWN, checked, outcome, public_error, schema
+from .sequence import run_sequence
 from .deep_link import confirm_custom_link, link_targets, observed, title_action
 from .pair import exchange
 from .prompts import prompt_choice
-from .navigation import label, match_app, navigate, normal
+from .navigation import label, match_app, matches_label, navigate, normal
 
 RECIPES = yaml.safe_load((Path(__file__).parents[1] / "data/apps.yaml").read_text())
-UNKNOWN = {
-    "power": "unknown",
-    "app": None,
-    "playing": None,
-    "presenting": None,
-    "focus": None,
-    "keyboard": False,
-}
-
-
-def outcome(summary, evidence=(), data=None, verified=True):
-    return {
-        "ok": True,
-        "summary": summary,
-        "verified": verified,
-        "evidence": list(evidence),
-        "data": data or {},
-    }
-
-
-def checked(result):
-    if not result["ok"]:
-        e = result["error"]
-        raise Fault(
-            e["code"],
-            e["message"],
-            e["remediation"],
-            e["retryable"],
-            evidence=result.get("evidence", []),
-            **({"errno": result["errno"]} if result.get("errno") is not None else {}),
-        )
-    return result
 
 
 class PublicTools:
@@ -150,9 +119,8 @@ class PublicTools:
             ):
                 await self.admit(replace)
             already_off = name == "tv_power" and not args["on"] and (await self.engine.status())["power"] == "off"
-            if name not in ("tv_look", "tv_status", "tv_pair") and not already_off:
-                checked(await self.engine.ready(force=name == "tv_power" and args["on"]))
-                await self.prepare_ui()
+            if name not in ("tv_look", "tv_status", "tv_pair", "tv_sequence") and not already_off:
+                await self.prepare_action(force=name == "tv_power" and args["on"])
             result = await getattr(self, name)(**args)
             if self.action_evidence:
                 result["evidence"][:0] = self.action_evidence
@@ -218,6 +186,10 @@ class PublicTools:
                     "Check tv_look before retrying.",
                 )
             await asyncio.sleep(0.25)
+
+    async def prepare_action(self, force=False):
+        checked(await self.engine.ready(force=force))
+        await self.prepare_ui()
 
     async def prepare_ui(self):
         if self.engine.last_power == "screensaver":
@@ -344,9 +316,11 @@ class PublicTools:
             },
         )
 
-    async def read_observation(self):
+    async def read_observation(self, *, single_read=False):
         try:
             observation = await self.ops.observer.call("ax_items", max_items=100)
+            if single_read:
+                return {"focused": None, "app": None} | observation
             focus = (
                 observation["focused"]
                 if "focused" in observation
@@ -484,26 +458,30 @@ class PublicTools:
         )
         return result | ({"screen": screen} if screen else {})
 
-    async def tv_navigate(self, to, select=False, within=None):
+    async def tv_sequence(self, steps, for_each=None):
+        """Run bounded remote steps on one receiver, stopping at the first failure."""
+        return await run_sequence(self, steps, for_each)
+
+    async def tv_navigate(self, to, select=False, within=None, *, exact=False):
         """Move focus to an accessible label and optionally select it."""
         previous_value = None
         async def observe_target():
             nonlocal previous_value
             focus, items = await self.observe()
-            if normal(label(focus)).startswith(normal(to)):
+            if matches_label(focus, to, exact):
                 previous_value = focus.get("value")
             return focus, items
-        path = await navigate(observe_target, self.press, to, select, within)
+        path = await navigate(observe_target, self.press, to, select, within, exact=exact)
         screen = await self.snapshot()
         # The first snapshot during a menu transition can still describe the
         # old page or have no focused row. Only repeat the observation.
         if select:
             for _ in range(2):
-                if screen["focus"] and (not normal(label(screen["focus"])).startswith(normal(to)) or (previous_value is not None and screen["focus"].get("value") not in (None, previous_value))):
+                if screen["focus"] and (not matches_label(screen["focus"], to, exact) or (previous_value is not None and screen["focus"].get("value") not in (None, previous_value))):
                     break
                 await asyncio.sleep(0.3)
                 screen = await self.snapshot()
-        moved = not normal(label(screen["focus"])).startswith(normal(to))
+        moved = not matches_label(screen["focus"], to, exact)
         value_changed = (not moved and previous_value is not None and screen["focus"] and
                          screen["focus"].get("value") not in (None, previous_value))
         verified = bool(screen["focus"] and (moved or value_changed)) if select else not moved
@@ -516,9 +494,11 @@ class PublicTools:
             f"{'Selected' if select else 'Focused'} {to}.", evidence, {"path": path}, verified
         ) | {"screen": screen}
 
-    async def open_app(self, app):
+    async def open_app(self, app, *, require_verified_launch=False):
         match = match_app(app, (await self.ops.tv_list_apps())["apps"])
         result = await self.ops.tv_open(app=match["bundle_id"])
+        if require_verified_launch:
+            checked(result)
         if result["ok"] or result["error"]["code"] == "open_unverified":
             await self.resolve_prompts()
         if not result["ok"] and result["error"]["code"] == "open_unverified":
@@ -538,10 +518,10 @@ class PublicTools:
         checked(await self.ops.tv_type(query))
         return "in_app_search"
 
-    async def tv_open(self, app, search=None, path=None):
+    async def tv_open(self, app, search=None, path=None, *, require_verified_launch=False):
         """Open an installed app by name or bundle ID, then search or follow a menu path."""
         await self.takeover()
-        match = await self.open_app(app)
+        match = await self.open_app(app, require_verified_launch=require_verified_launch)
         data = {"app": match}
         verified = True
         evidence = ["Foreground app matched"]

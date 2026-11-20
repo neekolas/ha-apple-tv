@@ -48,7 +48,12 @@ def center(item):
     return None
 
 
-async def navigate(observe, press, to, select=False, within=None):
+def matches_label(item, target, exact):
+    current, wanted = normal(label(item)), normal(target)
+    return current == wanted if exact else current.startswith(wanted)
+
+
+async def navigate(observe, press, to, select=False, within=None, *, exact=False):
     target, path = normal(to), []
     if not target:
         raise Fault(
@@ -66,7 +71,7 @@ async def navigate(observe, press, to, select=False, within=None):
                 path=path,
             )
         current = normal(label(focus))
-        matches = [i for i in items if normal(label(i)).startswith(target)]
+        matches = [i for i in items if matches_label(i, target, exact)]
         if within:
             scoped = [
                 i for i in matches if normal(within) in normal(i.get("within") or i.get("container"))
@@ -76,7 +81,7 @@ async def navigate(observe, press, to, select=False, within=None):
         destination = next(
             (i for i in matches if normal(label(i)) == target), next(iter(matches), None)
         )
-        at_target = current.startswith(target) and (
+        at_target = matches_label(focus, target, exact) and (
             not destination
             or not focus.get("uid")
             or not destination.get("uid")

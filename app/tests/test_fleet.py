@@ -75,7 +75,7 @@ async def test_routing_and_independent_locks(tmp_path):
     a.state.save_pairings(airplay={"ltpk": "a"})
     assert (await fleet.call("tv_status", {}))["data"]["tv"]["name"] == "Living Room"
     b.state.save_pairings(airplay={"ltpk": "b"})
-    for name, args in [("tv_remote", {"keys": ["up"]}), ("tv_show", {}), ("tv_hide", {})]:
+    for name, args in [("tv_sequence", {"steps": [{"key": "up"}]}), ("tv_remote", {"keys": ["up"]}), ("tv_show", {}), ("tv_hide", {})]:
         result = await fleet.call(name, args)
         assert result["error"]["code"] == "tv_required" and len(result["data"]["tvs"]) == 2
     for name in ("tv_status", "tv_look"):

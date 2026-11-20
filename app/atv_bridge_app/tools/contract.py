@@ -1,6 +1,75 @@
 """Public v1 MCP and REST contract."""
 
+from ..state import Fault
 from . import BOOL, KEYS, MEDIA_COMMANDS, TEXT, number, schema
+
+UNKNOWN = {
+    "power": "unknown",
+    "app": None,
+    "playing": None,
+    "presenting": None,
+    "focus": None,
+    "keyboard": False,
+}
+
+
+def outcome(summary, evidence=(), data=None, verified=True):
+    return {
+        "ok": True,
+        "summary": summary,
+        "verified": verified,
+        "evidence": list(evidence),
+        "data": data or {},
+    }
+
+
+def checked(result):
+    if not result["ok"]:
+        e = result["error"]
+        raise Fault(
+            e["code"],
+            e["message"],
+            e["remediation"],
+            e["retryable"],
+            evidence=result.get("evidence", []),
+            **({"errno": result["errno"]} if result.get("errno") is not None else {}),
+        )
+    return result
+
+
+MAX_STEPS = 50
+
+
+def described(spec, description, **annotations):
+    return spec | {"description": description, **annotations}
+
+
+def sequence_schema():
+    target = described(TEXT, "Full accessible label. Use $item for the current for_each label.")
+    check = schema({
+        "focus": described(TEXT, "Exact focused label, or $item."),
+        "visible": described(TEXT, "Exact label in the current accessibility items or focus, or $item."),
+        "value": described({"type": "string"}, "Exact value of the focused item, or $item. An empty string is a value."),
+        "app": described(TEXT, "Exact foreground app name or bundle ID from accessibility, or $item."),
+    }, minProperties=1)
+    steps = [
+        schema({"key": described({"enum": list(KEYS)}, "Send this key once and wait for acknowledgment.")}, ["key"]),
+        schema({"pause_ms": described(number(1, 5000), "Wait this many milliseconds before continuing.")}, ["pause_ms"]),
+        schema({"to": target, "select": described({"type": "boolean"}, "Select after the exact label is focused.", default=False)}, ["to"]),
+        schema({"text": described(TEXT, "Replace the focused field and verify keyboard readback.")}, ["text"]),
+        schema({
+            "app": described(TEXT, "Open this installed app by name or bundle ID."),
+            "path": described({"type": "array", "items": TEXT, "minItems": 1, "maxItems": 10}, "Follow and select up to ten menu labels, as in tv_open."),
+        }, ["app"]),
+        schema({"expect": described(check, "Require all supplied fields to match on the same fresh screen read.")}, ["expect"]),
+    ]
+    return schema({
+        "steps": described({"type": "array", "items": {"oneOf": steps}, "minItems": 1, "maxItems": MAX_STEPS},
+                           "Ordered remote operations. At most 50 steps across all iterations."),
+        "for_each": described({"type": "array", "minItems": 1, "maxItems": MAX_STEPS, "items": TEXT},
+                              "Run all steps once for each listed label, in order. Substitute the whole string $item in to or expect."),
+    }, ["steps"])
+
 
 DIRECTIONS = ["up", "down", "left", "right"]
 SHOW = {
@@ -49,6 +118,7 @@ SCHEMAS = {
             "then": {"properties": {"keys": {"items": {"not": {"enum": list(MEDIA_COMMANDS)}}}}},
         },
     ),
+    "tv_sequence": sequence_schema(),
     "tv_power": schema({"on": BOOL}, ["on"]),
     "tv_pair": schema({
         "kind": {"enum": ["control", "screen"]}, "code": {"type": "string", "pattern": "^[0-9]{4}([0-9]{2})?$"},
