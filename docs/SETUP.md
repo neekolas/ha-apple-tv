@@ -84,6 +84,7 @@ Set these in **Settings → Apps → Apple TV Agent Bridge → Configuration**. 
 | `max_active_mirrors` | `1` | Positive integer. Maximum concurrent mirror sessions across the TVs. |
 | `presentation_mode` | `mirror` | `mirror` streams the Chromium tab. `play_url` renders supplied HTML, files or bundles to MP4. `auto` can fall back to MP4 after two failed mirror starts. Live URLs always mirror. |
 | `mirror_size` | `1920x1080` | `1920x1080` or `1280x720`. Use the smaller size to reduce encoding work. |
+| `page_network_allow` | `[]` | Extra destinations accessible to every page. Use exact DNS names, IPs, CIDRs or host and port entries. Use brackets around IPv6 with a port. Restart the app after editing. |
 | `page_scripts` | `true` | Permit HA admin callers to run JavaScript in the presented document. Set to `false` and restart the app to disable `tv_page_run`. |
 | `mirror_fps` | `10` | Integer from 1 through 60. Higher frame rates need more CPU. |
 | `default_profile` | empty | Preferred label on the tvOS profile picker. The bridge needs screen pairing to read and select it. |
@@ -148,7 +149,7 @@ Pass the returned string to `tv_show {"tv":"<TV name>","bundle":"<returned bundl
 
 ## Tailscale for remote agents and live pages
 
-Tailscale is optional. A live page must be reachable **from the HA host**, where Chromium runs. If the agent and its web server already have LAN access, pass the server’s LAN URL to `tv_show`.
+Tailscale is optional. A live page must be reachable **from the HA host**, where Chromium runs. Public and tailnet URLs work by default. For a trusted LAN dashboard, set `page_network_allow: ["dashboard.example:8443"]`, restart the app, then pass its URL to `tv_show`. A port limits the grant to that service. Keep using relative URLs for assets and links inside an uploaded bundle.
 
 1. Install the **Tailscale** community app on HA and sign it in to the same tailnet as the agent. Set `userspace_networking: false` for outbound access from HA. Enable MagicDNS and HTTPS certificates in the Tailscale admin console if you want to share a local web app with HTTPS. [HA Tailscale app](https://github.com/hassio-addons/app-tailscale/blob/main/tailscale/DOCS.md)
 2. Allow the agent to reach the HA web port in your tailnet policy. Set the agent’s `HA_URL` to HA’s tailnet hostname and web port. To show an agent-hosted page, also allow HA to reach the serving port on the agent. If you prefer HA’s LAN address, advertise the LAN subnet with the HA Tailscale app’s `advertise_routes` option and approve that route in the Tailscale admin console. On a Linux agent, accept subnet routes with `tailscale set --accept-routes`. Permit the HA LAN address and web port in the tailnet policy. [Tailscale subnet routers](https://tailscale.com/kb/1019/subnets)
@@ -173,6 +174,7 @@ Tailscale is optional. A live page must be reachable **from the HA host**, where
 | `tv_unreachable` | Wake the TV with the Siri Remote. Check LAN access and any configured address. Use **Run self-test** on that receiver’s HA device. |
 | `screen_unavailable` | Check screen pairing in `tv_status`. For `screen_pairing_invalid`, open the TV pairing menu and choose **Configure → Re-pair screen**. An app with no accessible labels can also cause this error. |
 | `mirror_busy` or `busy` | For `mirror_busy`, inspect `data.holders`. Dismiss the intended holder, or set `replace: true` on the new show if stopping another TV’s presentation is intended. For `busy`, let the current operation finish. |
+| `blocked_address` | Use a public URL or Tailscale Serve. For a trusted LAN service on another machine, add its host and port to `page_network_allow` and restart. The HA host and its local services stay protected. |
 | `page_unreachable` | Check the URL from the HA network, DNS, TLS, server and app logs. The same code can report a missing bundle or sender failure. Use the returned `error.fix`. |
 | `uncertain` or `verified: false` after input | Read the evidence and use a targeted `tv_look` before sending more input. |
 | Page stutters | Try a lower `mirror_fps` or `mirror_size: 1280x720`. |

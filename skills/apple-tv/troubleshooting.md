@@ -13,6 +13,7 @@ A failed tool result has `ok: false` and `error` with `code`, `message`, `retrya
 | `launch_refused` | no | For a refused link, inspect the screen and try an installed app or another confirmed link. For a media URL, check `data.capabilities.play_media` and the staged pyatv fork. |
 | `page_unreachable` | yes | Check that the HA host can reach the page and its server is running. For a missing bundle, upload it again. For an update without a ready page, call `tv_show` first. |
 | `stale_view` | no | The document changed during execution. Inspect its current state with `tv_page_run` before retrying a change. |
+| `blocked_address` | no | Present a bundle, use a public or Tailscale Serve URL, or ask the operator to add the trusted dashboard’s host and port to `page_network_allow`. |
 | `script_error` | no | Inspect the message and stack. A timed-out script may still have effects. |
 | `scripts_disabled` | no | Enable the app option `page_scripts` and restart the app to allow caller scripts. |
 | `target_missing` | no | Show a content page. The current document is a protected bridge listener or a browser-internal page. |

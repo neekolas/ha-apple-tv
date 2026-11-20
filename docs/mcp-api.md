@@ -78,6 +78,8 @@ Supply one source to present, or just the room selector (or `{}` with a default)
 
 Optional fields are `title`, `audio` (`play` by default, or `mute`), `keep_awake` (defaults to true and requests a browser wake lock) and `replace` (defaults to false). The default mirror capacity is one. If `mirror_busy` names other rooms in `data.holders`, `replace: true` can stop the oldest holder before starting the new presentation.
 
+The bridge checks the resolved address before connecting, including after redirects. Public sites, reachable tailnet sites and the bridge’s active stage origins work by default. A blocked URL returns `blocked_address` with the address class and a fix. Operators can grant additional LAN destinations with `page_network_allow`.
+
 A show returns `data.page_id`, `data.size` and `data.transport`. A mirror reports the configured size (default `1920x1080`, also `1280x720`). Verification means the sender reported pushing frames. Recorded playback reports `video` at `1920x1080` and checks AirPlay playback. The result can have `verified: false`. Live URLs always use mirroring. Keep their server running. See [Present content](../skills/apple-tv/content.md).
 
 ### tv_page_run
@@ -92,11 +94,12 @@ Click with `document.querySelector('#next').click()`. Submit with `document.quer
 
 Scripts generate synthetic events. A dispatched key reaches JavaScript handlers but does not insert text or perform a key's default browser action. Chromium allows media autoplay with sound, and the stage iframe delegates autoplay. APIs such as fullscreen and the file picker can still require permissions or transient user activation. Synthetic events do not grant trusted input. Allow 250 ms between scripts. [Interaction recipes](../skills/apple-tv/examples.md)
 
-Page control requires HA administrator access through the bridge endpoint on the private network. The bridge selects the presented content iframe or captured top-level tab and excludes the stage wrapper, browser error pages and bridge listeners. Scripts run with that page's browser privileges. They can read field values, make requests, submit forms and navigate. Set the app option `page_scripts: false` to disable the whole tool, including read-only calls. The option applies to caller scripts and leaves normal site JavaScript enabled.
+Page control requires HA administrator access through the bridge endpoint on the private network. The bridge selects the presented content iframe or captured top-level tab and excludes the stage wrapper, browser error pages and bridge listeners. Scripts run with that page's browser privileges. They can read field values, make requests, submit forms and navigate. Every script uses the same destination policy as the page. A blocked fetch rejects with a network error. Bundle-relative requests, links and anchors work on the stage origin. Set the app option `page_scripts: false` to disable the whole tool, including read-only calls. The option applies to caller scripts and leaves normal site JavaScript enabled.
 
 
 | Error | How to proceed |
 |---|---|
+| `blocked_address` | The presented document attempted to navigate to a protected address. Show an allowed URL or bundle. |
 | `stale_view` | Follow `error.fix`. Run a read-only script on the current document before retrying a change. |
 | `target_missing` | Present a content document instead of a bridge listener or browser error page. |
 | `scripts_disabled` | Enable `page_scripts` in the app options to allow caller scripts. |
@@ -106,6 +109,8 @@ Page control requires HA administrator access through the bridge endpoint on the
 | `busy` | Wait for the per-TV lock or rate limit before retrying. |
 
 ### tv_play
+
+The Apple TV fetches media URLs over its own network connection. Browser egress rules apply to presented pages.
 
 Use one of these forms. Starting playback takes over the room's presentation.
 

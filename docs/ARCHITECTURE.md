@@ -67,6 +67,23 @@ Page control follows the captured tab or the stage iframe identified by the curr
 
 For stored pages, `play_url` renders an MP4 for the receiver to fetch. In `auto` mode two failed mirror starts trigger recording. Live URLs always use the mirror. The default mirror limit is one. A full fleet returns `mirror_busy`. A show with `replace: true` can stop another receiver's presentation.
 
+## Page network security
+
+The mirror and MP4 renderer each start a loopback HTTP proxy before launching Chromium. A fixed proxy and the `<-loopback>` bypass rule route documents, subresources, fetches, WebSockets, EventSource, workers and navigations through the proxy. Removing Chromium’s implicit loopback bypass matters on this host-networked app. The bridge checks every DNS answer and opens TCP to an approved numeric address. HTTP keeps the original Host header. HTTPS uses a CONNECT tunnel, so Chromium still checks the certificate against the original hostname. The live URL probe applies the same check on each redirect and retains the hostname for TLS. [Chromium proxy rules](https://chromium.googlesource.com/chromium/src/+/HEAD/net/docs/proxy.md)
+
+| Destination | Page access |
+| --- | --- |
+| Public internet | Allowed. Directly attached networks require an explicit grant. |
+| Tailnet | Allowed on `100.64.0.0/10` and `fd7a:115c:a1e0::/48`. A MagicDNS name goes through the same address check. Network routes and Tailscale ACLs still apply. |
+| Stage | Allowed on literal `127.0.0.1` at active stage ports. Bundles can load relative assets and navigate to another file or anchor. |
+| Bridge host and HA Supervisor | Protected on every host interface, including its tailnet address. The Supervisor subnet `172.30.32.0/23` stays blocked even with a broader LAN grant. The HA API, ingress and Chromium debugging socket are unavailable to pages on these addresses. |
+| Other private, link-local, multicast, unspecified, reserved and IPv6 unique-local addresses | Blocked by default. The policy checks IPv4-mapped addresses as IPv4. It rejects loopback aliases and mDNS names. |
+| Operator grants | `page_network_allow` accepts exact hostnames, IPs, CIDRs and host/port pairs. A grant applies to every presented page and the URL probe. Loopback, host interfaces, multicast, unspecified, scoped IPv6, transition ranges and mDNS remain protected. |
+
+The wrapper disables QUIC, direct socket APIs and non-proxied WebRTC UDP. Managed Chromium policies enforce the WebRTC setting and turn off DNS-over-HTTPS and network prediction. The proxy owns DNS resolution. A denied in-page request fails at the network layer. A denied presentation or observed document navigation reports `blocked_address`. [Browser launcher](../app/build/chromium-wrapper) · [Managed policies](../app/build/chromium-network-policy.json)
+
+tvpipe v0.2.0 injects a capture script that streams frames to a token-protected loopback WebSocket. The mirror verifies that its own running tvpipe child owns the listener and identifies the pinned release’s capture service before forwarding a WebSocket upgrade. The renderer uses tab capture and MediaRecorder. Native AirPlay connects from tvpipe to the receiver over the LAN. The Apple TV fetches `tv_play` media URLs itself. [tvpipe capture implementation](https://github.com/mitsuhiko/tvpipe/blob/v0.2.0/crates/tvpipe/src/browser/share.rs)
+
 ## Internal routes
 
 | Method and path | Result or inputs |

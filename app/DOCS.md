@@ -80,7 +80,16 @@ The **page_scripts** app option defaults to `true`. It lets callers with an HA a
 
 Pass one of `url`, `html`, `files` or `bundle` to `tv_show`. Inline files need an `index.html` entry and relative asset paths. Prefix binary contents with `base64:`. For larger pages, POST a ZIP with `index.html` at its root to `/api/atv_bridge/bundle` and pass the returned `bundle`. The ZIP and its unpacked contents each have a 50 MiB limit. A ZIP may contain up to 8,192 entries. Stored pages share a 500 MiB cache.
 
-For a live web app, keep its server running and pass its URL. Chromium on the Green loads the site, including its JavaScript, fetch requests and WebSockets. For a server on your own machine, share it with `tailscale serve`. Enable kernel networking in the HA Tailscale app. If HA cannot resolve MagicDNS names, record the existing upstream servers with `ha dns info` before running `ha dns options --servers dns://100.100.100.100`. That command replaces the Supervisor DNS server list. For LAN URLs, Tailscale is optional. The bridge checks tailnet DNS in `tv_status` even before a page is shown. The `tailnet_dns_missing` problem includes the HA DNS command. For each live URL, the bridge probes the server and checks the loaded Chromium document. A `page_unreachable` result includes the network error and a suggested fix. A site that refuses framing opens in the captured tab. The next show returns to the stage.
+For a live web app, keep its server running and pass its URL. Chromium on the Green loads the site, including its JavaScript, fetch requests and WebSockets. For a server on your own machine, share it with `tailscale serve`. Enable kernel networking in the HA Tailscale app. If HA cannot resolve MagicDNS names, record the existing upstream servers with `ha dns info` before running `ha dns options --servers dns://100.100.100.100`. That command replaces the Supervisor DNS server list. To use a LAN dashboard, grant access to its destination in the app options. The bridge checks tailnet DNS in `tv_status` even before a page is shown. The `tailnet_dns_missing` problem includes the HA DNS command. For each live URL, the bridge probes the server and checks the loaded Chromium document. A `page_unreachable` result includes the network error and a suggested fix. A site that refuses framing opens in the captured tab. The next show returns to the stage.
+
+The **page_network_allow** option defaults to an empty list. To grant every presented page access to a trusted LAN service, add its exact DNS name, IP, CIDR or host and port, then restart the app. This example grants one service.
+
+```yaml
+page_network_allow:
+  - "dashboard.example:8443"
+```
+
+A host without a port grants every TCP port on that host. Use brackets for an IPv6 host with a port, such as `[2001:db8::8]:8443`. Each grant applies to page scripts, embedded resources and the bridge’s live URL check. The HA host, the Supervisor subnet, loopback services and mDNS names stay protected. Use relative links and asset paths inside bundles. Public sites and reachable Tailscale Serve URLs work with the default options. The Apple TV fetches `tv_play` media URLs itself.
 
 Expose an application function for the caller, for example `window.setStep = n => document.querySelector('h1').textContent = 'Step ' + n`. Invoke it with `tv_page_run {"script":"window.setStep(arg)","arg":2}`.
 

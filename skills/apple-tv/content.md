@@ -33,7 +33,7 @@ Then call `tv_show {"bundle": "<id>"}`. An invalid ZIP within the request size l
 
 ## Live URLs
 
-- Chromium on the HA host loads live HTTP and HTTPS URLs. Scripts, fetch, WebSockets and live reload work. Use a public site, LAN address or reachable tailnet URL.
+- Chromium on the HA host loads live HTTP and HTTPS URLs. Scripts, fetch, WebSockets and live reload work. Use a public site or a reachable tailnet URL. LAN dashboards require an operator grant in `page_network_allow`.
 - To show a server on your own machine, share it on the tailnet:
 
   ```sh
@@ -64,6 +64,7 @@ The capture browser allows autoplay with sound. Choose `audio: "play"` to send p
 
 Page control uses the HA administrator token on the private network. Caller JavaScript runs with the privileges of the presented document, including access to its field values and network requests. Set `page_scripts: false` in the app options to disable `tv_page_run`.
 
+- Use relative asset paths, links such as `details.html`, and anchors such as `#step` in bundles. Page JavaScript, including `tv_page_run`, can reach public sites, tailnet peers, active stage origins and configured destinations. Requests to HA, its API and debug ports, mDNS names and other private addresses fail by default.
 - `html`, `files` and `bundle` pages run in a sandbox with an opaque origin. Page scripts cannot use origin-based storage such as `localStorage`. Keep state in your own process or in the current document.
 - Load assets with relative paths.
 - The HA host serves stored pages on LAN port 8766 under `/c/<page_id>/<file>` without HA authentication. Do not put secrets or private data you would not show on the LAN into a page.
