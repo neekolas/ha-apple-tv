@@ -167,6 +167,26 @@ async def exercise_revision(tools, ops, options, frame):
     assert (await tools.call("tv_page_act", {"view": read["view"], "ref": ref, "action": "click"}))["error"]["code"] == "stale_view"
 
 
+async def exercise_large_page(tools, frame):
+    await frame.evaluate("""() => {
+        const buttons = Array.from({length: 1500}, (_, i) => {
+            const button = document.createElement('button');
+            button.textContent = 'Control ' + i;
+            return button;
+        });
+        document.body.replaceChildren(...buttons);
+    }""")
+    for label, args in (("first page", {}), ("find last", {"find": "Control 1499"})):
+        await asyncio.sleep(1)
+        started = time.perf_counter()
+        result = await tools.call("tv_page_look", args)
+        print("1500 controls", label, "ms", round(1000 * (time.perf_counter() - started)), flush=True)
+        assert result["ok"], result
+        data = result["data"]
+        assert data["more"] == (not args)
+        element(data["snapshot"], "button", "Control 1499" if args else "Control 0")
+
+
 async def check(root):
     store = State(root)
     stage = Stage(root)
@@ -266,6 +286,7 @@ os.execvp('tvpipe',['tvpipe',*args,'--port','0'])
                     await asyncio.sleep(1)
                     after = await tools.call("tv_page_look", {})
                     assert after["ok"] and 'status "Routed"' in after["data"]["snapshot"], after
+                    await exercise_large_page(tools, frame)
                 if label == "direct":
                     await exercise_form(tools, frame, submissions)
                     await exercise_snapshot(tools, frame)

@@ -58,22 +58,25 @@ async def test_page_failures_skip_tv_io_and_use_active_transport(service, name):
     tools.snapshot.assert_not_awaited()
 
 
-def test_cursor_pages_obey_utf8_budget_and_only_issue_returned_refs():
+async def test_cursor_pages_obey_utf8_budget_and_only_issue_returned_refs():
     control = PageInteraction(SimpleNamespace(stage=SimpleNamespace(page={"page_id": "a" * 32})))
     control.title, control.mode, control.view = "🍅" * 160, "iframe", "opaque"
-    control.rows = [Row("button", "🍅" * 160, [], None, ref=f"e{i}") for i in range(90)]
+    control.check = AsyncMock()
+    rows = [Row("button", "🍅" * 160, [], None, ref=f"e{i}") for i in range(90)]
     seen = []
     start = 0
-    while start < len(control.rows):
-        data = control.slice(start)
+    control.pending = control.visible_rows(rows, None)
+    control.next_row = await anext(control.pending)
+    while start < len(rows):
+        data = await control.slice()
         lines = data["snapshot"].splitlines()[1:]
         assert len(data["snapshot"].encode()) <= 2048 and 0 < len(lines) <= 39
         seen.extend(line.split()[0] for line in lines)
         assert control.issued == set(seen)
         start += len(lines)
-        assert data["more"] == (start < len(control.rows))
-        assert (control.cursor or (None, None))[1] == (start if data["more"] else None)
-    assert seen == [row.ref for row in control.rows]
+        assert data["more"] == (start < len(rows))
+        assert control.cursor == data.get("cursor")
+    assert seen == [row.ref for row in rows]
 
 
 async def test_old_scope_ref_expires_even_when_used_with_a_new_view():
@@ -161,3 +164,22 @@ def test_scoped_composites_project_options_and_nested_treeitems_only():
             {'treeitem "Folder" [ref=e3]': [{'text': 'Folder'}, {'group': ['treeitem "Leaf" [ref=e4]']}]},
             {'textbox [ref=e5]': [{'text': 'private'}]}]
     assert [r.browser_ref for r in snapshot_rows(tree, scoped=True)] == ["e1", "e2", "e3", "e4", "e5"]
+
+async def test_large_snapshot_limits_reads_and_resolves_find_neighbors():
+    rows = [Row("button", f"Control {i}", [], f"e{i}") for i in range(1500)]
+    control = PageInteraction(SimpleNamespace(stage=SimpleNamespace(page={"page_id": "id"})))
+    control.read_row = AsyncMock(return_value=True)
+    control.check = AsyncMock()
+    control.title, control.view, control.mode = "Controls", "seen", "iframe"
+    control.pending = control.visible_rows(rows, None)
+    control.next_row = await anext(control.pending)
+    first = await control.slice()
+    assert first["more"] and '"Control 38"' in first["snapshot"] and control.read_row.await_count <= 48
+    second = await control.slice()
+    assert '"Control 39"' in second["snapshot"] and control.read_row.await_count <= 80
+    await control.clear()
+
+    control.read_row.reset_mock()
+    result = [row.name async for row in control.visible_rows(rows, "CONTROL 1498")]
+    assert result == ["Control 1497", "Control 1498", "Control 1499"]
+    assert control.read_row.await_count == 3

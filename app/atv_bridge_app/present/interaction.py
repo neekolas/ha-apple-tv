@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+from itertools import islice
 from dataclasses import dataclass
 from secrets import token_urlsafe
 from urllib.parse import urldefrag, urljoin, urlsplit
@@ -145,7 +146,7 @@ class PageInteraction:
         self.targets = {}
         self.issued = set()
         self.root = self.frame = self.revision = self.view = None
-        self.rows = []
+        self.pending = self.next_row = None
         self.cursor = None
         self.first_ref = self.next_ref = 1
         self.last = {}
@@ -163,7 +164,9 @@ class PageInteraction:
                 handles.append(self.root)
             self.root = self.frame = self.revision = None
         self.view = self.cursor = None
-        self.rows = []
+        if self.pending is not None:
+            await self.pending.aclose()
+        self.pending = self.next_row = None
         self.first_ref = self.next_ref
         self.targets.clear()
         self.issued.clear()
@@ -280,9 +283,9 @@ class PageInteraction:
             async with self.ops.stage.lock, asyncio.timeout(5):
                 if cursor:
                     await self.check()
-                    if self.cursor is None or cursor != self.cursor[0]:
+                    if cursor != self.cursor:
                         raise stale()
-                    return self.slice(self.cursor[1])
+                    return await self.slice()
                 frame, revision, mode = await self.binding()
                 scope_ref = None
                 options = []
@@ -307,29 +310,12 @@ class PageInteraction:
                 rows = list(snapshot_rows(tree, scoped=scope is not None))
                 if options and rows and rows[0].browser_ref == scope_ref:
                     rows = [rows[0], *options]
-                visible = []
-                for offset in range(0, len(rows), 16):
-                    chunk = rows[offset:offset + 16]
-                    async with asyncio.TaskGroup() as batch:
-                        reads = [batch.create_task(self.read_row(row)) for row in chunk]
-                    visible.extend(row for row, read in zip(chunk, reads) if read.result())
-                rows = visible
-                await self.check()
-                if find:
-                    query = find.casefold()
-                    hits = set()
-                    for index, row in enumerate(rows):
-                        position = row.name.casefold().find(query)
-                        if position >= 0 or query in row.line().casefold():
-                            hits.update(range(max(0, index - 1), min(len(rows), index + 2)))
-                            if position > 64 and row.role == "text":
-                                row.name = "…" + row.name[position - 24:]
-                    rows = [row for index, row in enumerate(rows) if index in hits]
-                self.rows = rows
+                self.pending = self.visible_rows(rows, find)
+                self.next_row = await anext(self.pending, None)
                 self.title = await frame.title() or self.ops.stage.page.get("title") or ""
                 await self.check()
                 self.view = token_urlsafe(14)
-                return self.slice(0)
+                return await self.slice()
         except (yaml.YAMLError, ValueError, RecursionError) as exc:
             await self.clear()
             raise Fault("page_unreachable", "Chromium returned an unreadable snapshot.",
@@ -338,25 +324,79 @@ class PageInteraction:
             await self.clear()
             raise stale() from exc
 
-    def slice(self, start):
+    async def visible_rows(self, rows, find):
+        """Resolve a small batch at a time. A cursor resumes this snapshot."""
+        query = find.casefold() if find else ""
+        inspected = {}
+
+        async def read(index):
+            if index not in inspected:
+                row = rows[index]
+                inspected[index] = row if await self.read_row(row) else None
+            return inspected[index]
+
+        def candidate(row):
+            # Fields, live regions and scrolling containers gain searchable text
+            # during inspection. Ordinary buttons already have their label and states.
+            if row.role not in CONTROLS or row.role in FIELDS:
+                return True
+            if re.match(r"^e?\d", query):
+                return True  # A public ref is assigned during inspection.
+            masked = Row(row.role, "[masked]", row.states, None)
+            return (query in row.name.casefold() or query in row.line().casefold() + " focused"
+                    or query in masked.line().casefold() + " focused")
+
+        indices = (i for i, row in enumerate(rows) if not query or candidate(row))
+        last = -1
+        while batch := list(islice(indices, 16)):
+            async with asyncio.TaskGroup() as group:
+                for index in batch:
+                    group.create_task(read(index))
+            for index in batch:
+                row = inspected[index]
+                if row is None:
+                    continue
+                if not query:
+                    yield row
+                    continue
+                position = row.name.casefold().find(query)
+                if position < 0 and query not in row.line().casefold():
+                    continue
+                if position > 64 and row.role == "text":
+                    row.name = "…" + row.name[position - 24:]
+                # Include the nearest visible row on either side, once, even
+                # when a generic container disappears during inspection.
+                before, after = index - 1, index + 1
+                while before > last and await read(before) is None:
+                    before -= 1
+                while after < len(rows) and await read(after) is None:
+                    after += 1
+                for neighbor in (before, index, after):
+                    if last < neighbor < len(rows):
+                        yield inspected[neighbor]
+                        last = neighbor
+
+    async def slice(self):
         page_id = self.ops.stage.page["page_id"]
         header = f"page_id={page_id} view={self.view} title={quote(self.title)} more="
         lines = []
         size = len(header.encode()) + 5
-        for row in self.rows[start:start + 39]:
-            line = row.line()
+        self.cursor = None
+        while self.next_row is not None and len(lines) < 39:
+            line = self.next_row.line()
             size += len(line.encode()) + 1
             if size > 2048:
                 break
-            if row.ref:
-                self.issued.add(row.ref)
+            if self.next_row.ref:
+                self.issued.add(self.next_row.ref)
             lines.append(line)
-        end = start + len(lines)
-        more = end < len(self.rows)
-        self.cursor = (token_urlsafe(14), end) if more else None
+            self.next_row = await anext(self.pending, None)
+        await self.check()
+        more = self.next_row is not None
+        self.cursor = token_urlsafe(14) if more else None
         return {"page_id": page_id, "view": self.view, "mode": self.mode, "more": more,
                 "snapshot": "\n".join([header + str(more).lower(), *lines]),
-                **({"cursor": self.cursor[0]} if more else {})}
+                **({"cursor": self.cursor} if more else {})}
 
     async def target(self, ref):
         target = self.targets.get(ref)
