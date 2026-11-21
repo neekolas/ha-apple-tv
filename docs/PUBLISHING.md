@@ -42,3 +42,34 @@ Gitleaks found five credential-shaped values in the tracked files and their hist
 2. Assemble the reviewed file set in an empty directory, including this guide and any approved new files. Use the current working-tree contents. Copying the entire checkout would include ignored captures and private Git objects. An archive of the old HEAD would miss uncommitted redactions.
 3. Scan that directory with `gitleaks dir --redact .` and the private search terms. Review image pixels and metadata, then run the app and integration tests. Compare the file list to the approved export before initializing Git.
 4. Initialize a fresh repository there. Set the intended public author name and email, create one root commit, and verify that `git rev-list --all --count` returns `1`. Push only the new branch to a new, empty GitHub repository. Retain the original checkout and its refs privately.
+
+## App image
+
+The workflow `.github/workflows/app-image.yml` builds the app image on every push to `main`. It can also run by hand through `workflow_dispatch`. Each architecture builds on a native runner: `ubuntu-24.04-arm` for `aarch64` and `ubuntu-latest` for `amd64`. The workflow runs `app/build/stage-context.sh` before it builds `app/Dockerfile`, the same staging step that `push-app` runs. Build layers are cached in the GitHub Actions cache, one scope per architecture.
+
+The workflow pushes these images to GitHub Container Registry:
+
+| Image | Platform |
+| --- | --- |
+| `ghcr.io/neekolas/aarch64-tv-use-bridge` | `linux/arm64` |
+| `ghcr.io/neekolas/amd64-tv-use-bridge` | `linux/amd64` |
+| `ghcr.io/neekolas/tv-use-bridge` | Multi-arch manifest of both |
+
+Each push to `main` adds the tags `sha-<7-character commit>`, `latest` and the `version` from `app/config.yaml`. A manual run from another branch adds only the `sha-` tag. The version tag moves to the newest build on every push to `main`, so it does not identify one build until the version changes. Each image carries the OCI labels `org.opencontainers.image.source`, `revision` and `version`.
+
+The workflow uses `GITHUB_TOKEN` and requests `packages: write`. A new package is private by default. Make each package public in its package settings before any host pulls it without credentials.
+
+### Image drift
+
+The Dockerfile runs `apt-get upgrade` and installs apt packages without pinned versions. Two builds of the same commit can therefore contain different Debian packages. The `sha-` tag names the source commit, not a fixed set of packages. The Python base image, tvpipe binary and Python requirements are pinned.
+
+### Pull images in Home Assistant
+
+The Supervisor still builds the app locally. `app/config.yaml` has no `image:` key. With `image:` set, the Supervisor pulls the image and does not build it, and `push-app` development deploys stop working. Make this switch as a separate decision. It would look like this:
+
+```yaml
+version: 0.1.3
+image: ghcr.io/neekolas/{arch}-tv-use-bridge
+```
+
+The Supervisor replaces `{arch}` with the host architecture and pulls the tag that equals `version`. It pulls only when `version` changes. A new image under the same version never reaches an installed app. Bump `version` in `app/config.yaml` in the same push to `main` as the app change, so the workflow publishes that version tag before hosts see the new version.

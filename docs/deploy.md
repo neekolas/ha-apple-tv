@@ -47,6 +47,8 @@ vi "$HOME/.config/atv-bridge/ha_token"
 
    The command runs `app/build/stage-context.sh` to copy the vendored pyatv fork into `app/vendor/pyatv`. It replaces the app source at `/local_apps/atv_bridge` or `/addons/atv_bridge`, reloads the store and installs `local_atv_bridge`. On later deploys, it updates a changed store version or rebuilds the same version. A rebuild interrupts the running app. Pairings live in the app data directory.
 
+   The Supervisor builds the image on the HA host. GitHub Actions also publishes app images to GitHub Container Registry on every push to `main`, but the app does not pull them. [App image](PUBLISHING.md#app-image)
+
    Discovery is the default. Optional flags are `--apple-tv-host` with an IPv4 address, `--log-level` with `debug`, `info`, `warning` or `error`, and `--presentation-mode` with `mirror`, `play_url` or `auto`. An omitted flag keeps the installed option or the new install’s default. Set the receiver list, profiles, mirror capacity, resolution and frame rate on the app’s **Configuration** tab. [App options](SETUP.md#app-options)
 
    The 15-minute deadline starts at store reload. The deployer follows logs while waiting for `http://<HA host>:8766/api/health` to return `"ok":true` and `"state":"running"`. This works before pairing. If the deadline expires or a reply is lost, inspect app status and Supervisor jobs before retrying. The build may still be running.
