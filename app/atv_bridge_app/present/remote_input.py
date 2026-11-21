@@ -142,7 +142,7 @@ TVOS_HELPER = r"""() => {
   if (window.__tvRemoteFocus) return;
   window.__tvRemoteFocus = 'tvos';
   // Values that the page set before the helper started win over these. A later change to a field
-  // applies at once: the style sheet is written again.
+  // applies at once: the style sheet and the lift of the focused item are written again.
   const CONFIG = window.__tvRemoteConfig = new Proxy(Object.assign({
     scale: 1.06,            // Lift of the focused item.
     wideScale: 1.03,        // Lift of an item wider than wideRatio of the screen.
@@ -168,7 +168,7 @@ TVOS_HELPER = r"""() => {
     scrollBehavior: 'instant',
     scrollMarginY: 60,      // Room kept above and below the focused item when it scrolls into view.
     scrollMarginX: 80,
-  }, window.__tvRemoteConfig), {set: (config, key, value) => { config[key] = value; style(); return true; }});
+  }, window.__tvRemoteConfig), {set: (config, key, value) => { config[key] = value; refresh(); return true; }});
   const FOCUSABLE = 'a[href],button,input,select,textarea,summary,[tabindex],[contenteditable=""],[contenteditable="true"]';
   // A trusted Enter already activates these elements.
   const NATIVE = 'a[href],button,select,textarea,summary,input:not([type=checkbox]):not([type=radio])';
@@ -230,12 +230,14 @@ TVOS_HELPER = r"""() => {
     }
     return [r.left, r.right];
   };
+  const lift = el => root.style.setProperty('--tv-remote-scale',
+    el.offsetWidth > innerWidth * CONFIG.wideRatio ? CONFIG.wideScale : CONFIG.scale);
+  const refresh = () => { style(); lift(document.activeElement || root); };
   addEventListener('focusin', event => {
     const el = event.target;
     if (!(el instanceof Element)) return;
     lifted.add(el);
-    root.style.setProperty('--tv-remote-scale',
-      el.offsetWidth > innerWidth * CONFIG.wideRatio ? CONFIG.wideScale : CONFIG.scale);
+    lift(el);
   }, true);
   let lastKey = -Infinity, fastTimer = 0, pressedTimer = 0;
   // The bubble phase lets the page handle the key first.

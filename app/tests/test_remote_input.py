@@ -1738,8 +1738,10 @@ async def test_tvos_keeps_the_config_of_the_page_and_applies_later_changes(tvos)
     assert await frame.evaluate(color) == "rgb(255, 0, 0)"
     assert await frame.evaluate("[__tvRemoteConfig.pressedMs, __tvRemoteConfig.fastRunMs]") == [50, 250]
     # A later change applies at once, also to the look.
-    await frame.evaluate("__tvRemoteConfig.ringColor = 'rgb(0, 255, 0)'")
+    await frame.evaluate("__tvRemoteConfig.ringColor = 'rgb(0, 255, 0)'; __tvRemoteConfig.scale = 1.2")
     assert await frame.evaluate(color) == "rgb(0, 255, 0)"
+    await asyncio.sleep(0.45)
+    assert await frame.evaluate("getComputedStyle(document.activeElement).scale") == "1.2"
 
 @TVOS_PAGE
 async def test_tvos_flick_lands_on_the_right_item_and_scrolls_at_once(tvos):
