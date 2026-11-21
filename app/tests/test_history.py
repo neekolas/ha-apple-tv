@@ -3,6 +3,7 @@
 import asyncio
 import json
 import stat
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -220,6 +221,104 @@ async def test_an_untitled_reading_does_not_extend_a_titled_entry(watch):
     assert [(row.get("title"), row["watched_s"]) for row in rows][2:] == [("Sample Song", 60)]
 
 
+async def test_a_late_title_takes_an_untitled_entry_only_when_its_position_fits(watch):
+    service, step = watch
+    tv = service.engine.client
+    video = {"title": "Sample Video", "artist": "Sample Channel", "duration_s": 600}
+    # Five minutes of untitled playback. The next video reports its title at once and is 3 s in.
+    await step(0, YOUTUBE, state="playing", title="")
+    await step(300, YOUTUBE, state="playing", title="")
+    await step(5, YOUTUBE, state="playing", position_s=3, **video)
+    rows = await step(60, YOUTUBE, state="playing", position_s=63, **video)
+    # The untitled entry closes without a title. The video starts its own entry.
+    assert [(row.get("title"), row["watched_s"]) for row in rows] == [(None, 305), ("Sample Video", 60)]
+    # One untitled reading is enough. The time since that reading counts as played.
+    await step(1000, MUSIC, state="playing", title="")
+    await step(300, MUSIC, state="playing", title="Sample Song", position_s=3)
+    rows = await step(30, MUSIC, state="playing", title="Sample Song", position_s=33)
+    assert [(row.get("title"), row["watched_s"]) for row in rows][2:] == [(None, 300), ("Sample Song", 30)]
+    # A position that covers the untitled time is the same item. Ten seconds of slack are allowed.
+    other = {"title": "Other Video", "artist": "Sample Channel", "duration_s": 900}
+    await step(1000, YOUTUBE, state="playing", title="")
+    await step(20, YOUTUBE, state="playing", title="")
+    rows = await step(4, YOUTUBE, state="playing", position_s=14, **other)
+    assert [(row.get("title"), row["watched_s"]) for row in rows][4:] == [("Other Video", 24)]
+    # An item that was resumed far in has a position well above its untitled time.
+    await step(1000, HULU, state="playing", title="")
+    await step(20, HULU, state="playing", title="")
+    rows = await step(4, HULU, **episode(624))
+    assert [(row.get("title"), row["watched_s"]) for row in rows][5:] == [(episode(0)["title"], 24)]
+    # Without an engine report the untitled time is not counted. An entry that short is dropped.
+    await step(1000, NETFLIX, state="playing")
+    step.clock.advance(300)
+    tv.media = {"state": "playing", "title": "Sample Film", "position_s": 3}
+    await service.history.sample()
+    rows = await step(30, NETFLIX, state="playing", title="Sample Film", position_s=33)
+    assert [(row.get("title"), row["watched_s"]) for row in rows][6:] == [("Sample Film", 30)]
+
+
+async def test_a_restart_after_a_break_is_a_rewatch_once_the_entry_is_past_half(watch):
+    service, step = watch
+    tv = service.engine.client
+    first, second, third = (episode(0, number=number) for number in (1, 2, 3))
+    # The last reading of the first episode is at 85%. It plays to its end and the next one starts.
+    await step(0, HULU, **first)
+    for position in (300, 600, 900, 1096):
+        await step(position - tv.media["position_s"], HULU, **(first | {"position_s": position}))
+    await step(194, HULU, **second)
+    rows = await step(60, HULU, **(second | {"position_s": 60}))
+    # The time played after the last reading moved the stored position to the end.
+    assert [(row["episode"], row["watched_s"], row["position_s"]) for row in rows] == [(1, 1290, 1290), (2, 60, 60)]
+    # The first episode starts again from the beginning. That is a new viewing.
+    await step(1, HULU, **first)
+    rows = await step(100, HULU, **(first | {"position_s": 100}))
+    assert [(row["episode"], row["watched_s"]) for row in rows] == [(1, 1290), (2, 61), (1, 100)]
+    # The rule does not need the engine's report of the stop. This entry stops at 62% and the TV goes idle.
+    await step(1, HULU, **third)
+    await step(400, HULU, **(third | {"position_s": 400}))
+    await step(400, HULU, **(third | {"position_s": 800}))
+    step.clock.advance(300)
+    tv.media = None
+    await service.history.sample()
+    await step(60, HULU, **(third | {"position_s": 2}))
+    rows = await step(50, HULU, **(third | {"position_s": 52}))
+    assert [(row["episode"], row["watched_s"], row["position_s"]) for row in rows][3:] == [(3, 800, 800), (3, 50, 52)]
+    # An entry that is not past half continues, also from the beginning.
+    fourth = episode(0, number=4)
+    await step(1, HULU, **fourth)
+    await step(300, HULU, **(fourth | {"position_s": 300}))
+    await step(1, HULU, **(third | {"position_s": 53}))
+    await step(1, HULU, **fourth)
+    rows = await step(100, HULU, **(fourth | {"position_s": 100}))
+    assert [(row["episode"], row["watched_s"]) for row in rows][4:] == [(3, 52), (4, 401)]
+    # A scrub back to the start is not a rewatch while the item stays on, playing or paused.
+    await step(300, HULU, **(fourth | {"position_s": 800}))
+    await step(60, HULU, **(fourth | {"position_s": 5}))
+    await step(60, HULU, **(fourth | {"position_s": 900, "state": "paused"}))
+    await step(60, HULU, **(fourth | {"position_s": 0, "state": "paused"}))
+    rows = await step(1, HULU, **fourth)
+    rows = await step(100, HULU, **(fourth | {"position_s": 100}))
+    assert [(row["episode"], row["watched_s"]) for row in rows][5:] == [(4, 921)]
+
+
+async def test_a_short_item_that_ends_before_a_reading_past_half_can_be_rewatched(watch):
+    _, step = watch
+    clip = {"title": "Sample Clip", "state": "playing", "duration_s": 40}
+    await step(0, YOUTUBE, position_s=0, **clip)
+    await step(15, YOUTUBE, position_s=15, **clip)
+    # The clip ends 25 s after its last reading, at 38%. The engine reports the next video.
+    await step(25, YOUTUBE, state="playing", title="Other Video", position_s=0, duration_s=600)
+    rows = await step(60, YOUTUBE, state="playing", title="Other Video", position_s=60, duration_s=600)
+    assert [(row["title"], row["watched_s"], row["position_s"]) for row in rows] == [
+        ("Sample Clip", 40, 40), ("Other Video", 60, 60),
+    ]
+    await step(1, YOUTUBE, position_s=0, **clip)
+    rows = await step(20, YOUTUBE, position_s=20, **clip)
+    assert [(row["title"], row["watched_s"]) for row in rows] == [
+        ("Sample Clip", 40), ("Other Video", 61), ("Sample Clip", 20),
+    ]
+
+
 async def test_a_returning_item_continues_and_a_rewatch_starts_again(watch):
     _, step = watch
     first, second = episode(0, number=1), episode(0, number=2)
@@ -231,7 +330,7 @@ async def test_a_returning_item_continues_and_a_rewatch_starts_again(watch):
     await step(1, HULU, **(first | {"position_s": 600}))
     rows = await step(600, HULU, **(first | {"position_s": 1200}))
     assert [(row["episode"], row["watched_s"]) for row in rows] == [(1, 1201), (2, 61)]
-    # It had reached its last tenth. Starting it again from the beginning is a new viewing.
+    # It had reached its last tenth. It starts again from the beginning without a break: a new viewing.
     await step(60, HULU, **(first | {"position_s": 5}))
     rows = await step(100, HULU, **(first | {"position_s": 105}))
     assert [(row["episode"], row["watched_s"]) for row in rows] == [(1, 1261), (2, 61), (1, 100)]
@@ -357,6 +456,87 @@ async def test_restart_resumes_the_entry_and_the_file_stays_small_and_private(se
     assert list(reloaded.entries.values()) == third.entries()
 
 
+async def test_a_sample_cancelled_during_compaction_finishes_before_the_next_write(service, tmp_path):
+    tv = await service.engine.ensure()
+    tv.app = HULU
+    recorder = Recorder(tmp_path, service.engine, service.stage, max_entries=3)
+    clock = Clock().attach(recorder)
+
+    async def publish(seconds, **media):
+        clock.advance(seconds)
+        tv.media = media
+        recorder.notice({"connected": True, **await tv.status()})
+
+    await publish(0, **episode(0, number=1))
+    await recorder.sample()
+    await publish(20, **episode(20, number=1))
+    await recorder.sample()
+    store = recorder.store
+    inside, gate, rewrite = threading.Event(), threading.Event(), store.rewrite
+
+    def held(text):
+        inside.set()
+        gate.wait(5)
+        rewrite(text)
+
+    store.rewrite = held
+    # The next write compacts the file. It is the write that closes the first entry.
+    store.lines = 2 * store.limit - 1
+    await publish(30, **episode(0, number=2))
+    cancelled = asyncio.create_task(recorder.sample())
+    assert await asyncio.to_thread(inside.wait, 5)
+    cancelled.cancel()
+    await asyncio.sleep(0.05)
+    try:
+        # The write thread cannot be stopped. The sample keeps the lock until the write ends.
+        assert recorder.lock.locked() and not cancelled.done()
+        await publish(40, **episode(40, "paused", number=2))
+        following = asyncio.create_task(recorder.sample())
+        await asyncio.sleep(0.05)
+        assert not following.done()
+    finally:
+        gate.set()
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled
+    await following
+    # The cancelled sample did all of its work. No playing time is lost or counted twice.
+    assert [(row["episode"], row["watched_s"]) for row in recorder.entries()] == [(1, 50), (2, 40)]
+    # The line that was appended after the compaction is in the file.
+    reloaded = HistoryStore(store.path, store.limit)
+    reloaded.load()
+    assert list(reloaded.entries.values()) == recorder.entries()
+    # A cancelled stop also waits for its write.
+    await publish(1, **episode(40, number=2))
+    await recorder.sample()
+    await publish(30, **episode(70, number=2))
+    await recorder.sample()
+    inside.clear()
+    gate.clear()
+    store.lines = 2 * store.limit - 1
+    stopping = asyncio.create_task(recorder.stop())
+    assert await asyncio.to_thread(inside.wait, 5)
+    stopping.cancel()
+    await asyncio.sleep(0.05)
+    try:
+        assert recorder.lock.locked() and not stopping.done()
+    finally:
+        gate.set()
+    with pytest.raises(asyncio.CancelledError):
+        await stopping
+    reloaded = HistoryStore(store.path, store.limit)
+    reloaded.load()
+    assert list(reloaded.entries.values()) == recorder.entries()
+    assert [row["watched_s"] for row in recorder.entries()] == [50, 70]
+    # The read is not held. A sample that is cancelled there frees the lock and keeps the engine's report.
+    await publish(5, **episode(75, "paused", number=2))
+    tv.status = asyncio.Event().wait
+    hung = asyncio.create_task(recorder.sample())
+    await asyncio.sleep(0.05)
+    hung.cancel()
+    await asyncio.wait([hung], timeout=1)
+    assert hung.cancelled() and not recorder.lock.locked() and recorder.noticed is not None
+
+
 def test_series_fields_from_app_title_formats():
     disney = {"title": "Example Kids Show", "artist": "S1:E2 Sample Episode", "app_id": "com.disney.disneyplus"}
     derive(disney)
@@ -392,13 +572,47 @@ def test_only_allowed_descriptive_fields_are_kept():
         "mediaSubType": "Podcast",
         "isAlwaysLive": True,
     }
-    # A content identifier that is a link is dropped, except for the video ID of a YouTube link.
-    status = {"app": HULU, "now_playing": {"state": "playing", "content_identifier": "https://example.org/v?token=s"}}
-    assert "content_id" not in reading(status, None)
-    status = {"app": YOUTUBE, "now_playing": {"content_identifier": f"https://www.youtube.com/watch?v={VIDEO_ID}&t=s"}}
-    assert reading(status, None)["content_id"] == VIDEO_ID
-    status = {"app": HULU, "now_playing": {"content_identifier": "EP000123"}}
-    assert reading(status, None)["content_id"] == "EP000123"
+
+
+def test_a_content_identifier_is_stored_only_as_a_plain_token_or_a_youtube_video_id():
+    def kept(app, value):
+        return reading({"app": app, "now_playing": {"content_identifier": value}}, None).get("content_id")
+
+    # Another app's identifier is kept when it is a plain token of at most 200 characters.
+    for value in ("EP000123", "tv.show.1", "abc.DEF:12-34_56", "x" * 200):
+        assert kept(HULU, value) == value
+    # A link is dropped, with or without a scheme. So is text with any other character, and a value that is not text.
+    for value in (
+        "https://example.org/v?token=s", "//example.org/v?token=s", "example.org/v?token=s", "token=s", "a b",
+        "EP000123\n", "x" * 201, "", 7, ["EP000123"],
+    ):
+        assert kept(HULU, value) is None, value
+    # On YouTube only the video ID is kept, from a bare ID or from a link that holds one.
+    for value in (VIDEO_ID, f"https://www.youtube.com/watch?v={VIDEO_ID}&t=s", f"youtu.be/{VIDEO_ID}"):
+        assert kept(YOUTUBE, value) == VIDEO_ID
+    for value in (
+        "EP000123", VIDEO_ID + "A", VIDEO_ID[:-1], VIDEO_ID[:-1] + "!", VIDEO_ID + "&list=x",
+        "https://www.youtube.com/watch?v=" + VIDEO_ID + "%0A", "https://example.org/v?token=s", "https://[broken", 7,
+    ):
+        assert kept(YOUTUBE, value) is None, value
+    # The same video ID in a link of another app is not a token.
+    assert kept(HULU, f"https://www.youtube.com/watch?v={VIDEO_ID}") is None
+
+
+def test_a_youtube_link_is_built_only_from_the_checked_video_id():
+    def link(content_id, app_id="com.google.ios.youtube"):
+        entry = {"app_id": app_id, "content_id": content_id}
+        derive(entry)
+        return entry.get("url")
+
+    expected = "https://www.youtube.com/watch?v=" + VIDEO_ID
+    assert link(VIDEO_ID) == expected and link("a-b_c-D_E-9") == "https://www.youtube.com/watch?v=a-b_c-D_E-9"
+    # An older file can hold other text around the ID. The link holds the checked ID alone.
+    for stored in (f"x?v={VIDEO_ID}&t=1", f"junk/{VIDEO_ID}", f"{VIDEO_ID}/"):
+        assert link(stored) == expected, stored
+    for stored in (VIDEO_ID + "&list=x", VIDEO_ID + "A", VIDEO_ID[:-1], VIDEO_ID[:-1] + "!", "//[broken", ""):
+        assert link(stored) is None, stored
+    assert link(VIDEO_ID, "com.hulu.plus") is None
 
 
 async def test_recorder_wakes_on_a_published_change_and_backs_off(service, monkeypatch):

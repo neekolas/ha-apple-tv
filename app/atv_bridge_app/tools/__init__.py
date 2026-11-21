@@ -67,7 +67,11 @@ def invalid(message):
 
 
 def youtube_id(url):
-    parts = urlsplit(url)
+    """The 11-character video ID in a link or a bare ID. None when the text holds no valid ID."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return None
     found = parse_qs(parts.query).get("v", [None])[0] or parts.path.rstrip("/").rsplit("/", 1)[-1]
     return found if re.fullmatch(VIDEO_ID["pattern"], found or "") else None
 

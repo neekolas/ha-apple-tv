@@ -26,6 +26,16 @@ UNTITLED_GAP_S = 15 * 60
 # How many recent entries a returning item is matched against.
 RECENT = 10
 SLACK_S = 5
+# A reading in the first tenth of an item is a restart. A restart is a rewatch, and a new entry, when
+# the entry had got past half and there was a break, or had reached its last tenth without a break.
+RESTART = 0.1
+REWATCH_AFTER_BREAK = 0.5
+REWATCH_IN_PLACE = 0.9
+# A late title takes an untitled entry when the item's position covers the entry's playing time.
+# The slack allows for buffering and for the two seconds between the engine's reads.
+ADOPT_SLACK_S = 10
+# A stored content identifier is a plain token. It has no character that a link needs.
+CONTENT_ID = re.compile(r"[A-Za-z0-9._:-]{1,200}")
 SHELL_APPS = {
     "com.apple.HeadBoard",
     "com.apple.PineBoard",
@@ -79,16 +89,42 @@ def derive(entry):
         key = "episode_title" if key == "name" else key
         if not entry.get(key):
             entry[key] = int(value) if key in ("season", "episode") else value
-    if entry.get("app_id") == YOUTUBE and youtube_id(entry.get("content_id") or ""):
-        entry["url"] = "https://www.youtube.com/watch?v=" + entry["content_id"]
+    video = youtube_id(entry.get("content_id") or "") if entry.get("app_id") == YOUTUBE else None
+    if video:
+        # The link holds the checked video ID and no other stored text.
+        entry["url"] = "https://www.youtube.com/watch?v=" + video
 
 
-def rewatch(entry, sample):
-    """The entry had reached its last tenth and the sample is back in the first tenth."""
+def content_id(value, app_id):
+    """The content identifier that may be stored, or None. A link can hold account tokens."""
+    if not isinstance(value, str):
+        return None
+    if app_id == YOUTUBE:
+        # A video ID, or a link that holds one. Only the checked ID is kept.
+        return youtube_id(value)
+    return value if CONTENT_ID.fullmatch(value) else None
+
+
+def rewatch(entry, sample, reached):
+    """The entry had got to the given share of the item and the sample is back in its first tenth.
+
+    The check needs a duration and both positions. Without them it is False.
+    """
     length, last, position = entry.get("duration_s"), entry.get("position_s"), sample.get("position_s")
     if not length or last is None or position is None:
         return False
-    return last >= 0.9 * length and position <= 0.1 * length
+    return last >= reached * length and position <= RESTART * length
+
+
+def adopts(entry, sample, played):
+    """A titled sample can take an untitled entry that has played for the given time."""
+    if named(entry) or not named(sample):
+        return True
+    if entry.get("item_id") and entry["item_id"] == sample.get("item_id"):
+        return True
+    # An item that just started cannot be what played before it. Without a position there is no check.
+    position = sample.get("position_s")
+    return position is None or position >= played - ADOPT_SLACK_S
 
 
 def fits(entry, sample):
@@ -105,17 +141,13 @@ def fits(entry, sample):
     if named(entry) and not named(sample):
         # An untitled reading may be anything. Only the same queue item ties it to a titled entry.
         return bool(entry.get("item_id")) and entry["item_id"] == sample.get("item_id")
-    return not rewatch(entry, sample)
+    return True
 
 
 def reading(status, details):
     """Flatten one status snapshot into history fields. Empty values are dropped."""
     media = (status.get("now_playing") or {}) | (details or {})
     app = status.get("app") or {}
-    content = media.get("content_identifier")
-    if isinstance(content, str) and "://" in content:
-        # A link can hold account tokens. Keep a YouTube video ID and nothing else.
-        content = youtube_id(content) if app.get("bundle_id") == YOUTUBE else None
     sample = {
         "app": app.get("name"),
         "app_id": app.get("bundle_id"),
@@ -127,7 +159,7 @@ def reading(status, details):
         "series": media.get("series_name"),
         "season": media.get("season_number"),
         "episode": media.get("episode_number"),
-        "content_id": content,
+        "content_id": content_id(media.get("content_identifier"), app.get("bundle_id")),
         "store_id": media.get("itunes_store_identifier"),
         "item_id": media.get("item_id"),
         "duration_s": media.get("duration_s"),
@@ -148,6 +180,22 @@ def valid(entry):
         if isinstance(value, float) and not math.isfinite(value):
             return False
     return True
+
+
+async def unbroken(work):
+    """Run a coroutine to its end even when the caller is cancelled. Then pass the cancellation on."""
+    task = asyncio.ensure_future(work)
+    cancel = None
+    while not task.done():
+        try:
+            await asyncio.wait([task])
+        except asyncio.CancelledError as exc:
+            cancel = exc
+    if cancel:
+        if not task.cancelled() and task.exception():
+            _LOG.error("Watch history work failed after its caller was cancelled", exc_info=task.exception())
+        raise cancel
+    return task.result()
 
 
 class HistoryStore:
@@ -239,7 +287,7 @@ class Recorder:
             self.task = None
         if self.store and self.store.loaded:
             async with self.lock:
-                await self.flush(force=True)
+                await unbroken(self.flush(force=True))
 
     @staticmethod
     def sign(status):
@@ -296,71 +344,94 @@ class Recorder:
         return sample
 
     async def sample(self):
-        """Take one reading. Return True when the item or its state changed."""
+        """Take one reading. Return True when the item or its state changed.
+
+        The read only looks at memory and can be cancelled. The work after it runs to its end,
+        also when the caller is cancelled. A file write runs on a thread that cannot be stopped,
+        so the lock stays held until the write ends. Work that stopped at a write would also
+        leave playing time to be counted again.
+        """
         async with self.lock:
             if not self.enabled:
                 return False
             if not self.store.loaded:
-                await asyncio.to_thread(self.store.load)
-            now, tick = self.clock(), self.ticks()
-            noticed, self.noticed = self.noticed, None
+                await unbroken(asyncio.to_thread(self.store.load))
             sample = await self.read()
-            if sample is None:
-                self.live = self.before = None
-                self.chain = False
-                await self.flush(force=True)
-                return False
-            changed, own = sample.pop("changed"), sample.pop("own")
-            state, power = sample.pop("state"), sample.pop("power")
-            visible = power != "off" and not own
-            self.live = sample | {"state": state} if visible and state in ("playing", "paused") else None
-            content = named(sample) or (sample.get("app_id") and sample["app_id"] not in SHELL_APPS)
-            playing = state in PLAYING and visible and bool(content)
-            entry, before = self.current, self.before
-            # The previous reading was this entry and this one can be too.
-            attached = bool(entry and self.chain and fits(entry, sample) and self.open(entry, now, tick))
-            if entry and before and before["playing"]:
-                if attached and playing:
-                    elapsed = tick - before["tick"]
-                elif noticed is not None:
-                    # Playback stopped or changed. Count up to the engine's report of that change.
-                    elapsed = noticed - before["tick"]
-                else:
-                    # No report. Only an item that restarted without a break is known to have played on.
-                    elapsed = tick - before["tick"] if playing and not changed else 0
-                # A long gap means the bridge was stalled. Count nothing for it.
-                if 0 < elapsed <= 2 * self.interval + 60:
-                    entry["watched_s"] += elapsed
-                    if not (attached and playing):
-                        entry["end"] = int(entry["end"] + elapsed)
-            if playing and not attached:
-                await self.flush(force=True)
-                self.saved = self.recent(sample, now, tick)
-                entry = self.current = (
-                    dict(self.saved)
-                    if self.saved
-                    else {"id": uuid.uuid4().hex[:12], "start": int(now), "end": int(now), "watched_s": 0}
-                )
-                attached = True
-            if attached and state in ACTIVE:
-                # A title can arrive after playback starts, or only at the first pause.
-                untitled = not named(entry)
-                meta = entry.get("meta", {}) | sample.get("meta", {})
-                entry.update({k: sample[k] for k in FIELDS if k in sample})
-                if meta:
-                    entry["meta"] = meta
-                derive(entry)
-                if playing:
-                    entry["end"] = int(now)
-                    if len(self.seen) > 4 * RECENT:
-                        self.seen = dict(list(self.seen.items())[-RECENT:])
-                    self.seen[entry["id"]] = tick
-                if untitled and named(entry):
-                    await self.absorb(entry, now, tick)
-            self.chain = attached and state in ACTIVE
-            self.before = {"tick": tick, "playing": playing}
-            await self.flush(force=not playing)
-            return changed
+            return await unbroken(self.merge(sample))
+
+    async def merge(self, sample):
+        """Merge one reading into the entries. The caller holds the lock."""
+        now, tick = self.clock(), self.ticks()
+        noticed, self.noticed = self.noticed, None
+        if sample is None:
+            self.live = self.before = None
+            self.chain = False
+            await self.flush(force=True)
+            return False
+        changed, own = sample.pop("changed"), sample.pop("own")
+        state, power = sample.pop("state"), sample.pop("power")
+        visible = power != "off" and not own
+        self.live = sample | {"state": state} if visible and state in ("playing", "paused") else None
+        content = named(sample) or (sample.get("app_id") and sample["app_id"] not in SHELL_APPS)
+        playing = state in PLAYING and visible and bool(content)
+        entry, before = self.current, self.before
+        # The time since the previous reading, if that reading was playing.
+        pending = tick - before["tick"] if before and before["playing"] else 0
+        # The previous reading was this entry and this one can be too.
+        attached = bool(
+            entry
+            and self.chain
+            and fits(entry, sample)
+            and not rewatch(entry, sample, REWATCH_IN_PLACE)
+            and adopts(entry, sample, entry["watched_s"] + pending)
+            and self.open(entry, now, tick)
+        )
+        if entry and pending:
+            if attached and playing:
+                elapsed = pending
+            elif noticed is not None:
+                # Playback stopped or changed. Count up to the engine's report of that change.
+                elapsed = noticed - before["tick"]
+            else:
+                # No report. Only an item that restarted without a break is known to have played on.
+                elapsed = pending if playing and not changed else 0
+            # A long gap means the bridge was stalled. Count nothing for it.
+            if 0 < elapsed <= 2 * self.interval + 60:
+                entry["watched_s"] += elapsed
+                if not (attached and playing):
+                    entry["end"] = int(entry["end"] + elapsed)
+                    if "position_s" in entry:
+                        # The item played on after its position was last read. Move the position with it.
+                        reached = entry["position_s"] + elapsed
+                        entry["position_s"] = round(min(reached, entry.get("duration_s") or reached))
+        if playing and not attached:
+            await self.flush(force=True)
+            self.saved = self.recent(sample, now, tick)
+            entry = self.current = (
+                dict(self.saved)
+                if self.saved
+                else {"id": uuid.uuid4().hex[:12], "start": int(now), "end": int(now), "watched_s": 0}
+            )
+            attached = True
+        if attached and state in ACTIVE:
+            # A title can arrive after playback starts, or only at the first pause.
+            untitled = not named(entry)
+            meta = entry.get("meta", {}) | sample.get("meta", {})
+            entry.update({k: sample[k] for k in FIELDS if k in sample})
+            if meta:
+                entry["meta"] = meta
+            derive(entry)
+            if playing:
+                entry["end"] = int(now)
+                if len(self.seen) > 4 * RECENT:
+                    self.seen = dict(list(self.seen.items())[-RECENT:])
+                self.seen[entry["id"]] = tick
+            if untitled and named(entry):
+                await self.absorb(entry, now, tick)
+        self.chain = attached and state in ACTIVE
+        self.before = {"tick": tick, "playing": playing}
+        await self.flush(force=not playing)
+        return changed
 
     def open(self, entry, now, tick):
         """The entry played recently enough to continue. Monotonic when this process saw it play."""
@@ -368,11 +439,11 @@ class Recorder:
         return 0 <= gap <= (RESUME_GAP_S if named(entry) else UNTITLED_GAP_S)
 
     def recent(self, sample, now, tick, skip=None):
-        """The stored entry that this reading continues, if any."""
+        """The stored entry that this reading continues after a break, if any."""
         for entry in list(self.store.entries.values())[: -RECENT - 1 : -1]:
             if entry["id"] == skip or named(entry) != named(sample) or not fits(entry, sample):
                 continue
-            if self.open(entry, now, tick):
+            if not rewatch(entry, sample, REWATCH_AFTER_BREAK) and self.open(entry, now, tick):
                 return entry
         return None
 
