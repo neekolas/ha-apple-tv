@@ -5,8 +5,8 @@
 <!-- Cook-along: a recipe on the TV, one step per page, driven by voice. Views: overview (the cover),
      step, ingredients (a numbered checklist) and done. Change it only with app.apply(patch); it returns app.state().
 
-     Patch keys. One patch may hold several. They run in the order below, which is the order of PATCH in the code,
-     not the order of keys in the patch: {"step":3,"next":true} shows step 4. A patch that throws changes nothing.
+     Patch keys. One patch may hold several. They run in the order below (the order of PATCH), not the patch's
+     order: {"step":3,"next":true} shows step 4. A patch that throws changes nothing.
        demo          {"demo":true}               load the sample curry. Opening the file with ?demo does the same.
        data          {"data":{"title":"Rice","servings":4,"total_minutes":25,
                        "ingredients":[{"id":"rice","name":"Jasmine rice","amount":"1½ cups"}],
@@ -76,28 +76,28 @@
     background: radial-gradient(1500px 1100px at 22% 18%, #221911, transparent 72%), var(--bg); }
   #stage.nf { --trk: .015em; } /* fallback faces are wider: loosen the display tracking */
   [data-view] { position: absolute; inset: 0; }
-  [data-view][hidden], [data-view] [hidden], #head [hidden] { display: none !important; }
+  [data-view] [hidden], #head [hidden] { display: none !important; }
   h1, p, ul, ol { margin: 0; }
   ul, ol { list-style: none; padding: 0; }
   svg { flex: none; display: block; }
   .caps { font: 600 28px/1.2 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
   .caps b { font-weight: 600; color: var(--accent); }
   .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .cut { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .field { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: linear-gradient(180deg, #261c13, #1d160f); }
   .enter { animation: enter 280ms cubic-bezier(.2, .7, .2, 1); }
   @keyframes enter { from { opacity: 0; transform: translateY(16px); } }
 
   /* Running head: the recipe name on the left, running timers on the right */
   #head { position: absolute; left: 80px; right: 80px; top: 60px; height: 44px; display: flex; align-items: center; gap: 48px; }
-  #crumb { min-width: 0; max-width: 760px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    font: 500 32px/1.3 var(--serif); color: var(--ink-2); }
+  #crumb { min-width: 0; max-width: 760px; font: 500 32px/1.3 var(--serif); color: var(--ink-2); }
   #crumb.caps { font: 600 28px/1.2 var(--sans); }
   #minis { flex: none; margin-left: auto; display: flex; align-items: center; gap: 40px; }
   #head.overview #minis, #head.done #minis { width: 520px; gap: 32px; overflow: hidden; } /* inside the right-hand field */
   .mini { display: flex; align-items: center; gap: 14px; font: 600 30px/1 var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .mini .ring { width: 40px; height: 40px; }
   .mini span { max-width: 200px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: var(--ink-2); }
-  .mini b { font-weight: 600; } /* the same numerals as the rail and the dial */
+  .mini b { font-weight: 600; }
   .mini.done b { font: italic 500 32px/1 var(--serif); color: var(--accent); }
 
   /* Timer rings, in the head, the rail and the step's own big dial */
@@ -108,16 +108,17 @@
 
   /* overview (the cover), and the done page that mirrors it */
   .ov-main { position: absolute; left: 80px; top: 170px; width: 1090px; height: 730px; display: flex; flex-direction: column; }
-  #ov-title { margin-top: 30px; font: 400 168px/.96 var(--serif); letter-spacing: calc(-.035em + var(--trk)); text-wrap: balance; }
+  /* A lower optical size and a little more weight keep the counters of "e" open in a TV's video stream. */
+  #ov-title { margin-top: 30px; font: 450 168px/.96 var(--serif); font-variation-settings: "opsz" 72;
+    letter-spacing: calc(-.035em + var(--trk)); text-wrap: balance; }
   #ov-title em, #done-h em { font-weight: 300; color: var(--accent); }
   #ov-summary { margin-top: auto; }
   .facts { display: flex; gap: 88px; padding-top: 40px; border-top: 4px solid var(--rule); }
-  .fact b { display: block; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font: 400 104px/1 var(--serif); letter-spacing: calc(-.03em + var(--trk)); }
+  .fact b { display: block; max-width: 420px; font: 400 104px/1 var(--serif); letter-spacing: calc(-.03em + var(--trk)); }
   .fact .caps { display: block; margin-top: 14px; }
   .ov-field { right: 0; width: 680px; }
   .dial { position: absolute; left: 100px; top: 170px; width: 480px; height: 480px; }
-  .dial svg { width: 100%; height: 100%; }
+  .dial svg, .hero .ring { width: 100%; height: 100%; }
   .dial circle { fill: none; }
   .dial .seg { stroke: var(--dim); stroke-width: 14; }
   .dial .seg.one { stroke: var(--ink); }
@@ -134,7 +135,7 @@
   #ov-legend p { margin-top: 18px; font: 500 38px/1.28 var(--serif); text-wrap: pretty; -webkit-line-clamp: 3; }
   .legend li { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 10px 0 11px; border-top: 3px solid var(--rule); }
   .legend li:last-child { padding-bottom: 0; }
-  .legend span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 36px/1.25 var(--serif); }
+  .legend span { min-width: 0; font: 500 36px/1.25 var(--serif); }
   .legend b { flex: none; font: 600 30px/1.25 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink-2); }
   .legend i, .mise .more { font: italic 500 32px/1.3 var(--serif); color: var(--ink-2); }
 
@@ -142,7 +143,7 @@
   #done-dial { top: 300px; }
   #done-dial .seg, #done-dial .arc { stroke: var(--accent); }
   #done-dial .dot { fill: var(--accent); }
-  #done-title { flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 500 40px/1.25 var(--serif); color: var(--ink-2); }
+  #done-title { font: 500 40px/1.25 var(--serif); color: var(--ink-2); }
   #done-h { margin: auto 0 40px -8px; font: italic 300 256px/.8 var(--serif); letter-spacing: calc(-.04em + var(--trk)); }
 
   /* step */
@@ -160,12 +161,12 @@
   #st-next i { font: 500 30px/1.3 var(--serif); color: var(--ink-2); }
   .st-field { right: 0; width: 580px; padding: 60px 80px; display: flex; flex-direction: column; }
   .st-field .caps { height: 44px; display: flex; align-items: center; }
-  /* You'll need: name left, amount right. A pair that does not fit on one line stacks; a long name takes two lines. */
+  /* You'll need: name left, amount right; a pair that does not fit stacks. */
   .mise { margin-top: 18px; }
   .mise li { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 20px; padding: 13px 0 14px; border-bottom: 3px solid var(--rule); }
   .mise .n { max-width: 100%; font: 500 36px/1.2 var(--serif); }
   .mise .a { margin-left: auto; max-width: 100%; text-align: right; font: 500 28px/1.3 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink-2); }
-  /* Checked, here and on the ingredients page: a dimmed name and a tick in the margin, so the names keep one edge. */
+  /* Checked, here and on the ingredients page: a dimmed name and a tick in the margin. */
   .mise .ck { position: absolute; left: -40px; top: 25px; width: 26px; height: 26px; color: var(--accent); }
   .mise .on span { color: var(--ink-3); }
   .mise .more { border: 0; }
@@ -174,7 +175,7 @@
   .timers { display: grid; gap: 22px; margin-top: 20px; }
   .timer { display: grid; grid-template-columns: 104px minmax(0, 1fr); column-gap: 30px; align-items: center; }
   .timer .ring { width: 104px; height: 104px; }
-  .timer .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 500 28px/1.2 var(--sans); color: var(--ink-2); }
+  .timer .l { font: 500 28px/1.2 var(--sans); color: var(--ink-2); }
   .timer .time { margin-top: 4px; font: 600 68px/1 var(--sans); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .timer.ready .time { color: var(--ink-2); }
   .time em { margin-left: 16px; font: italic 500 34px/1 var(--serif); letter-spacing: 0; color: var(--ink-3); }
@@ -189,10 +190,9 @@
   /* A step with a timer and nothing to fetch: its timer takes the field as a big dial. */
   #st-hero { flex: 1; display: flex; flex-direction: column; }
   .hero { position: relative; width: 400px; height: 400px; margin: auto 10px; }
-  .hero .ring { width: 100%; height: 100%; }
   .hero circle { stroke-width: 14; }
   .hero .c { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; row-gap: 12px; }
-  .hero .caps { display: block; height: auto; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero .caps { display: block; height: auto; max-width: 300px; }
   .hero b { font: 600 104px/1 var(--sans); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
   .hero b.sm { font-size: 72px; }
   .hero.ready b { color: var(--ink-2); }
@@ -211,17 +211,16 @@
   #ing-list { position: absolute; left: 620px; right: 80px; top: 150px; display: grid; --fs: 44px;
     grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: column; column-gap: 64px; }
   #ing-list.one { right: 500px; grid-template-columns: minmax(0, 1fr); }
-  /* A row: number, name and amount on a rule, and the tick in the gutter beyond the rule. */
   #ing-list li { display: grid; grid-template-columns: 60px minmax(0, 1fr) 32px; align-items: baseline; align-content: end;
-    column-gap: 16px; padding-bottom: 17px; box-sizing: border-box;
+    column-gap: 16px; padding-bottom: 17px;
     background: linear-gradient(var(--rule), var(--rule)) 0 100% / calc(100% - 48px) 3px no-repeat; }
   #ing-list .i { font: 600 28px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink-3); }
   /* The amount sits at the right of the name's last line. The name ends in a hidden copy of the amount, so the
      text keeps clear of it: a long name wraps to a second line, or the amount drops to a line of its own. */
   #ing-list .cell { position: relative; }
   #ing-list .name { display: block; overflow-wrap: anywhere; font: 500 var(--fs)/1.14 var(--serif); letter-spacing: -.01em; }
-  #ing-list .name i, #ing-list .amt { max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font: 500 32px/0 var(--sans); letter-spacing: 0; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  #ing-list .name i, #ing-list .amt { max-width: calc(100% - 16px); font: 500 32px/0 var(--sans); letter-spacing: 0;
+    font-variant-numeric: tabular-nums; color: var(--ink-2); }
   #ing-list .name i { display: inline-block; height: 0; padding-left: 16px; visibility: hidden; }
   #ing-list .amt { position: absolute; right: 0; bottom: 0; }
   #ing-list .amt::before { content: "\200B"; font: 500 var(--fs)/1.14 var(--serif); } /* a strut: the name's own line box */
@@ -236,12 +235,13 @@
   #ing-pager .dots i.on { height: 16px; background: var(--accent); }
 
   /* tv kit: the status line is a running foot in tracked caps. Pending places are blank parts of the cover. */
-  #stage #tv-status { padding: 0; border-radius: 0; background: none; height: 44px; font: 600 28px/1.2 var(--sans); letter-spacing: .16em;
-    text-transform: uppercase; color: var(--ink-2); }
+  #stage #tv-status { padding: 0; background: none; height: 44px; }
+  #stage #tv-status, #stage [data-slot].tv-pending { font: 600 28px/1.2 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
   #stage:has(#tv-status:not([hidden])) #st-next { opacity: 0; }
-  #stage [data-slot].tv-pending { font: 600 28px/1.2 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
   #stage [data-slot].tv-pending::after { display: none; }
-  #stage #ov-title.tv-pending { font: italic 300 168px/.96 var(--serif); letter-spacing: calc(-.02em + var(--trk)); text-transform: none; color: var(--ghost-2); }
+  /* The pending title is muted text, not a ghost: it must read on a TV as "not loaded yet". */
+  #stage #ov-title.tv-pending { font: italic 400 168px/.96 var(--serif); font-variation-settings: "opsz" 72;
+    letter-spacing: calc(-.02em + var(--trk)); text-transform: none; color: var(--ink-3); }
   #stage #ov-summary.tv-pending:not(:has(.facts)) { padding-top: 40px; border-top: 4px solid var(--rule); }
   #stage #ov-summary.tv-pending .fact b { color: var(--rule); }
   /* The blank legend is ruled where the filled one is: three rows of 69 px. */
@@ -277,12 +277,12 @@
   <section data-view="done" hidden>
     <aside class="field ov-field"><div class="dial" id="done-dial"></div></aside>
     <div class="ov-main">
-      <p id="done-title"></p>
+      <p id="done-title" class="cut"></p>
       <h1 id="done-h">Time<br>to <em>eat.</em></h1>
       <div id="done-facts"></div>
     </div>
   </section>
-  <header id="head"><div id="crumb"></div><div id="minis"></div></header>
+  <header id="head"><div id="crumb" class="cut"></div><div id="minis"></div></header>
 </div>
 <script>
   const stage = document.getElementById("stage");
@@ -375,8 +375,7 @@ const SAMPLE = {
 // Everything on screen comes from this. data is the checked recipe; servings is null until scaled.
 // A timer is {id, label, total: seconds, end: ms}.
 const state = { data: null, view: "overview", step: 0, page: 1, from: "overview", servings: null, checked: new Set(), timers: [] };
-// The state keys of content shown under one step, for example "tip". apply() resets each to null when the step,
-// view or recipe changes, unless the same patch sets it. Add a step-scoped key here and to state.
+// The state keys of content shown under one step, for example "tip" (see the header).
 const STEP_SCOPED = [];
 
 // ---- Helpers ----
@@ -389,6 +388,7 @@ const list = v => Array.isArray(v) ? v : [v];
 const WORDS = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ");
 const word = n => WORDS[n] || String(n);
 const plural = (n, one) => n === 1 ? one : one + "s";
+const count = (n, one) => [n, plural(n, one)];
 const two = n => String(n).padStart(2, "0");
 const clock = s => s >= 3600 ? `${Math.floor(s / 3600)}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}` : `${Math.floor(s / 60)}:${two(s % 60)}`;
 const duration = s => {
@@ -406,8 +406,7 @@ const typo = s => String(s).replace(/(^|[\s(\[])"/g, "$1“").replace(/"/g, "”
   .replace(/(?<![\d\/])(\d+ )?([123]\/[2348])(?![\d\/])/g, (m, w, f) => SLASH[f] ? (w || "").trim() + SLASH[f] : m)
   .replace(/([\d½⅓⅔¼¾⅛]) (?=[a-z]{1,5}\b)/g, "$1 ");
 
-// Scale the quantity at the start of a typeset amount by servings: "1½ cups" for 8 instead of 4 is "3 cups",
-// "2–3 cloves" is "4–6 cloves". An amount that does not start with a number stays as written.
+// Scale an amount's leading quantity by servings: "1½ cups" doubled is "3 cups", "2–3 cloves" is "4–6 cloves".
 function times(q, f) {
   const x = ((parseFloat(q) || 0) + (FRAC[q.slice(-1)] || 0)) * f, n = Math.floor(x + .04);
   const part = Object.keys(FRAC).find(k => Math.abs(x - n - FRAC[k]) < .04);
@@ -427,10 +426,9 @@ const ingredient = id => state.data.ingredients.find(g => g.id === id);
 // Pages are balanced: 14 ingredients make 7 + 7, not 12 + 2.
 const pages = () => Math.max(1, Math.ceil(state.data.ingredients.length / 12));
 function pageItems() {
-  const all = state.data.ingredients, per = Math.max(1, Math.ceil(all.length / pages())), start = (state.page - 1) * per;
+  const all = state.data.ingredients, per = Math.ceil(all.length / pages()), start = (state.page - 1) * per;
   return all.slice(start, start + per).map((g, i) => [start + i + 1, g]);
 }
-// The timers the recipe defines, once each.
 const recipeTimers = d => d.steps.map(s => s.timer).filter((t, i, all) => t && all.findIndex(x => x?.id === t.id) === i);
 
 // Check a recipe and fill in defaults. Every error says what to send instead.
@@ -471,7 +469,6 @@ function load(d) {
   state.checked = new Set([...state.checked].filter(ingredient));
   state.step = Math.min(state.step, d.steps.length);
   state.page = Math.min(state.page, pages());
-  if (state.view === "step" && !state.step) state.step = 1;
 }
 
 function go(view) {
@@ -504,19 +501,17 @@ function mark(v, on, key) {
 
 // ---- Drawing helpers ----
 const unpend = el => { el.classList.remove("tv-pending"); return el; };
-const fact = ([b, s]) => `<div class="fact"><b>${b}</b><span class="caps">${s}</span></div>`;
+const facts = rows => `<div class="facts">${rows.map(([b, s]) => `<div class="fact"><b class="cut">${b}</b><span class="caps">${s}</span></div>`).join("")}</div>`;
 
-// Cut text at a word, with an ellipsis, until it fits: by default on one line, or pass your own test.
-// The cut never ends on a joining word: "sauce and…" becomes "sauce…".
+// Cut text at a word, with an ellipsis, until over() is false (default: it fits on one line). "sauce and…" becomes "sauce…".
 function clip(el, s, over = () => el.scrollWidth > el.clientWidth) {
   el.textContent = s;
-  while (s.length > 1 && over()) // drop the last word, or the last letter of one long word
+  while (s.length > 1 && over())
     el.textContent = (s = s.includes(" ") ? s.replace(/([,;:.–-]* +(and|with|of|the|an?|or|for|from|in|on|to|by|&))*[,;:.–-]* +[^ ]*$/i, "") : s.slice(0, -1)) + "…";
 }
 
-// Shrink type until its box fits. With track, the tracking opens up as display type gets smaller.
-function fitText(el, max, min, limit, step = 4, track) {
-  let size = max;
+// Shrink type until over() is false. Below 64 px it gets heavier; with track, tracking and leading open up.
+function shrink(el, size, min, step, over, track) {
   const set = () => {
     el.style.fontSize = size + "px";
     el.style.fontWeight = size < 64 ? 500 : "";
@@ -526,7 +521,7 @@ function fitText(el, max, min, limit, step = 4, track) {
     }
   };
   set();
-  while (size > min && el.offsetHeight > limit) { size -= step; set(); }
+  while (size > min && over()) { size -= step; set(); }
 }
 
 // The cover dial draws the recipe: one outer segment per step, one dot per ingredient, one arc per timer
@@ -543,11 +538,11 @@ function dial(d, fin) {
     const a = (i / k) * 2 * Math.PI - Math.PI / 2;
     h += `<circle cx="${(300 + 236 * Math.cos(a)).toFixed(1)}" cy="${(300 + 236 * Math.sin(a)).toFixed(1)}" r="${k > 28 ? 6 : 9}" class="dot"/>`;
   }
-  h += tracks; // a short timer still gets an arc long enough to read as an arc
+  h += tracks;
   timers.forEach((t, i) => { h += `<circle ${c} r="${192 - i * 30}" class="arc" ` +
     (fin ? "" : `pathLength="100" stroke-dasharray="${Math.max(6, (t.seconds / full) * 100).toFixed(1)} 100" ${turn}`) + `/>`; });
   const m = d.total_minutes === null ? null : Math.round(d.total_minutes);
-  const [big, small] = m === null ? [n, plural(n, "step")] : m < 100 ? [m, "min"] : [`${Math.floor(m / 60)}:${two(m % 60)}`, "hours"];
+  const [big, small] = m === null ? count(n, "step") : m < 100 ? [m, "min"] : [`${Math.floor(m / 60)}:${two(m % 60)}`, "hours"];
   return svg(`${h}<circle ${c} r="98" class="sun"/>`) + `<div class="c"><b class="${String(big).length > 2 ? "sm" : ""}">${big}</b><span>${small}</span></div>`;
 }
 
@@ -560,20 +555,21 @@ function ring(kind, frac, big) {
     : `<circle ${c} class="t"/><circle ${c} class="a" pathLength="100" stroke-dasharray="${(frac * 100).toFixed(2)} 100" transform="rotate(-90 ${v / 2} ${v / 2})"/>`
   ) + `</svg>`;
 }
-const label = t => esc(typo(t.label));
-// A row in the step's rail. A timer not started yet shows its full time, and "ready" when the line has room.
-function railRow(t, ready) {
-  const l = ready ? t.seconds : left(t), kind = ready ? "ready" : l ? "run" : "done";
-  return `<div class="timer ${kind}">${ring(kind, l / t.total)}<div><div class="l">${label(t)}</div><div class="time">` +
-    (kind === "done" ? "Done" : clock(l) + (ready && l < 3600 ? "<em>ready</em>" : "")) + `</div></div></div>`;
+// A timer as drawn: kind is "ready" (a recipe timer not started), "run" or "done"; l is the seconds to show.
+function live(t) {
+  const run = state.timers.find(x => x.id === t.id), l = run ? left(run) : t.seconds;
+  return { kind: !run ? "ready" : l ? "run" : "done", l, frac: run && l / run.total };
 }
-const mini = t => left(t) ? `<span class="mini">${ring("run", left(t) / t.total)}<span>${label(t)}</span><b>${clock(left(t))}</b></span>`
-  : `<span class="mini done">${ring("done")}<span>${label(t)}</span><b>Done</b></span>`;
-// The step's own timer as a big dial, when it takes the field.
+const label = t => esc(typo(t.label));
+const railRow = t => { const { kind, l, frac } = live(t);
+  return `<div class="timer ${kind}">${ring(kind, frac)}<div><div class="l cut">${label(t)}</div><div class="time">` +
+    (kind === "done" ? "Done" : clock(l) + (kind === "ready" && l < 3600 ? "<em>ready</em>" : "")) + `</div></div></div>`; };
+const mini = t => { const { kind, l, frac } = live(t);
+  return `<span class="mini${kind === "done" ? " done" : ""}">${ring(kind, frac)}<span>${label(t)}</span><b>${kind === "done" ? "Done" : clock(l)}</b></span>`; };
 function heroDial(t) {
-  const run = state.timers.find(x => x.id === t.id), l = run ? left(run) : t.seconds, kind = !run ? "ready" : l ? "run" : "done", time = clock(l);
-  return `<div class="caps">This step’s timer</div><div class="hero ${kind}">${ring(kind, run && l / run.total, true)}` +
-    `<div class="c"><span class="caps">${label(t)}</span><b class="${time.length > 5 ? "sm" : ""}">${kind === "done" ? "Done" : time}</b>` +
+  const { kind, l, frac } = live(t), time = clock(l);
+  return `<div class="caps">This step’s timer</div><div class="hero ${kind}">${ring(kind, frac, true)}` +
+    `<div class="c"><span class="caps cut">${label(t)}</span><b class="${time.length > 5 ? "sm" : ""}">${kind === "done" ? "Done" : time}</b>` +
     (kind === "ready" ? "<em>ready</em>" : "") + `</div></div>`;
 }
 // The step's timer takes the field when the step needs no ingredients and at most two other timers run.
@@ -587,30 +583,27 @@ function mise() {
   return { ahead, ids: ahead ? n.uses : s.uses };
 }
 
-// Timers: the rail on a step, the running head elsewhere. Redrawn each second while one runs; nothing here animates.
-// The order is fixed, so the eye keeps its row: the step's own timer first on a step, then the soonest to end.
+// Timers: the rail on a step, the running head elsewhere. The step's own timer first, then the soonest to end.
 function drawTimers() {
-  const byEnd = [...state.timers].sort((a, b) => a.end - b.end);
-  const onStep = state.view === "step" && state.data;
-  $("minis").hidden = !!onStep;
-  if (onStep) {
+  const byEnd = [...state.timers].sort((a, b) => a.end - b.end), minis = $("minis");
+  minis.hidden = state.view === "step";
+  if (minis.hidden) {
     const s = state.data.steps[state.step - 1], hero = heroMode(s), rail = $("rail");
     $("st-hero").hidden = !hero;
     if (hero) $("st-hero").innerHTML = heroDial(s.timer);
-    const rest = byEnd.filter(t => t.id !== s.timer?.id), own = state.timers.find(t => t.id === s.timer?.id);
-    const rows = rest.map(t => railRow(t));
-    if (!hero && s.timer) rows.unshift(own ? railRow(own) : railRow(s.timer, true));
+    const rest = byEnd.filter(t => t.id !== s.timer?.id), rows = rest.map(railRow);
+    if (!hero && s.timer) rows.unshift(railRow(state.timers.find(t => t.id === s.timer.id) || s.timer));
     const shown = rows.slice(0, 6), k = shown.length;
     rail.hidden = !k;
     rail.innerHTML = `<div class="caps">${hero && rest.every(left) ? "Also running" : rows.length > 6 ? `Timers · ${rows.length - 6} more` : "Timers"}</div>` +
       `<div class="timers${k > 4 ? " compact tight" : k > 3 ? " compact" : ""}">${shown.join("")}</div>`;
   } else { // as many as fit beside the running head, whole; the rest are counted
-    const t = byEnd, minis = $("minis"), room = state.view === "overview" || state.view === "done" ? 520 : 1000;
-    for (let max = Math.min(3, t.length); max >= 1; max--) {
-      minis.innerHTML = t.slice(0, max).map(mini).join("") + (t.length > max ? `<span class="mini"><span>+${t.length - max}</span></span>` : "");
+    const room = state.view === "overview" || state.view === "done" ? 520 : 1000;
+    minis.innerHTML = "";
+    for (let max = Math.min(3, byEnd.length); max >= 1; max--) {
+      minis.innerHTML = byEnd.slice(0, max).map(mini).join("") + (byEnd.length > max ? `<span class="mini"><span>+${byEnd.length - max}</span></span>` : "");
       if (minis.scrollWidth <= room) break;
     }
-    if (!t.length) minis.innerHTML = "";
   }
 }
 
@@ -623,30 +616,28 @@ const VIEWS = {
     if (!d) return;
     const title = unpend($("ov-title")), words = typo(d.title).split(/\s+/), last = words.pop();
     title.innerHTML = `${esc(words.join(" "))} <em>${esc(last)}</em>`;
-    // The dial shows the time and the kicker counts the steps, so the facts are what is left. A zero is never a fact.
-    const timers = recipeTimers(d), facts = [];
-    if (d.servings !== null) facts.push([esc(typo(servings())), "Serves"]);
-    if (d.ingredients.length) facts.push([d.ingredients.length, plural(d.ingredients.length, "Ingredient")]);
-    if (timers.length) facts.push([timers.length, plural(timers.length, "Timer")]);
-    if (!facts.length || d.total_minutes !== null && facts.length < 2) facts.push([d.steps.length, plural(d.steps.length, "Step")]);
-    unpend($("ov-summary")).innerHTML = `<div class="facts">${facts.map(fact).join("")}</div>`;
-    fitText(title, 168, 72, 430, 8, true);
-    // Under the dial, its legend: one row per timer arc. A recipe with no timers shows how it starts.
+    // The facts are what the dial and the kicker do not show. A zero is never a fact.
+    const timers = recipeTimers(d), f = [];
+    if (d.servings !== null) f.push([esc(typo(servings())), "Serves"]);
+    if (d.ingredients.length) f.push(count(d.ingredients.length, "Ingredient"));
+    if (timers.length) f.push(count(timers.length, "Timer"));
+    if (!f.length || d.total_minutes !== null && f.length < 2) f.push(count(d.steps.length, "Step"));
+    unpend($("ov-summary")).innerHTML = facts(f);
+    shrink(title, 168, 72, 8, () => title.offsetHeight > 430, true);
+    // The dial's legend: one row per timer arc, or the first step when there are none.
     const rows = timers.length > 3 ? timers.slice(0, 2) : timers;
     unpend($("ov-legend")).innerHTML = timers.length ? `<ul class="legend">` +
-      rows.map(t => `<li><span>${label(t)}</span><b>${duration(t.seconds)}</b></li>`).join("") +
+      rows.map(t => `<li><span class="cut">${label(t)}</span><b>${duration(t.seconds)}</b></li>`).join("") +
       (rows.length < timers.length ? `<li><i>and ${word(timers.length - rows.length)} more timers</i></li>` : "") + `</ul>`
       : `<div class="caps"><b>First</b></div><p class="clamp">${esc(typo(d.steps[0].text))}</p>`;
   },
 
   step() {
     const d = state.data, s = d.steps[state.step - 1], n = d.steps[state.step];
-    // The ghost numeral keeps to its own column: it shrinks until it clears the text, in any face.
+    // The ghost numeral shrinks until it clears the text.
     const num = $("st-num");
-    let size = state.step > 9 ? 360 : 560;
     num.textContent = state.step;
-    num.style.fontSize = size + "px";
-    while (size > 160 && num.offsetWidth > 290) num.style.fontSize = (size -= 20) + "px";
+    shrink(num, state.step > 9 ? 360 : 560, 160, 20, () => num.offsetWidth > 290);
     $("st-kicker").innerHTML = `<b>Step ${word(state.step)}</b>&ensp;of ${word(d.steps.length)}`;
     $("progress").innerHTML = d.steps.map((_, i) => `<i class="${i + 1 < state.step ? "done" : i + 1 === state.step ? "now" : ""}"></i>`).join("");
     $("st-next").innerHTML = n ? `<span class="caps">Next</span><i class="clamp">${esc(typo(n.text))}</i>`
@@ -657,20 +648,20 @@ const VIEWS = {
     // STEP BLOCKS: fill (or hide) any block you add to #st-body here, before the fit below measures it.
     // The instruction gets the room the other blocks in #st-body leave (offsetHeight, so space them with padding).
     const body = $("st-body"), rest = [...body.children].reduce((h, el) => el === ins ? h : h + el.offsetHeight, 0);
-    fitText(ins, 88, 48, body.clientHeight - rest);
+    shrink(ins, 88, 48, 4, () => ins.offsetHeight > body.clientHeight - rest);
     // You'll need (see mise). Rows are cut to the room the timers leave.
     const uses = $("st-uses"), m = mise();
     uses.hidden = !m;
     if (m) {
       const { ahead, ids } = m, room = 960 - ($("rail").hidden ? 0 : $("rail").offsetHeight);
-      for (let count = Math.min(ids.length, 10); ; count--) {
+      for (let k = Math.min(ids.length, 10); ; k--) {
         uses.innerHTML = `<div class="caps">${ahead ? "Coming up" : "You’ll need"}</div>` + (ids.length ? `<ul class="mise">` +
-          ids.slice(0, count).map(id => { const g = ingredient(id);
+          ids.slice(0, k).map(id => { const g = ingredient(id);
             return (state.checked.has(id) ? `<li class="on">${tick("ck")}` : "<li>") +
               `<span class="n clamp">${esc(typo(g.name))}</span><span class="a">${esc(amount(g))}</span></li>`;
-          }).join("") + (count < ids.length ? `<li class="more">and ${word(ids.length - count)} more</li>` : "") + `</ul>`
+          }).join("") + (k < ids.length ? `<li class="more">and ${word(ids.length - k)} more</li>` : "") + `</ul>`
           : `<p class="none">Nothing new<br>for this step.</p>`);
-        if (count <= 1 || uses.offsetHeight <= room) break;
+        if (k <= 1 || uses.offsetHeight <= room) break;
       }
     }
   },
@@ -678,25 +669,25 @@ const VIEWS = {
   ingredients() {
     const d = state.data, items = pageItems(), n = state.checked.size, all = d.ingredients.length, p = pages();
     $("ing-kicker").textContent = d.servings !== null ? `Serves ${typo(servings())}` : "Recipe";
-    const count = $("ing-count");
-    count.className = !all ? "zero" : n === all ? "all" : "";
-    count.innerHTML = `<b>${n}</b>` + (all ? `<span>${n === all ? "all ready" : `of ${all} ready`}</span>` : "");
+    const tally = $("ing-count");
+    tally.className = !all ? "zero" : n === all ? "all" : "";
+    tally.innerHTML = `<b>${n}</b>` + (all ? `<span>${n === all ? "all ready" : `of ${all} ready`}</span>` : "");
     // One to four rows fill a single column. More fill two, and the type grows when the page is short.
     const el = $("ing-list"), k = items.length, one = k <= 4, rows = Math.max(1, one ? k : Math.ceil(k / 2));
     el.hidden = !k;
     $("ing-empty").hidden = !!k;
-    if (!k) { // no ingredients: say what the recipe is instead
-      const facts = [`${word(d.steps.length)} ${plural(d.steps.length, "step")}`];
-      if (d.total_minutes !== null) facts.push(duration(Math.round(d.total_minutes) * 60));
-      if (d.servings !== null) facts.push(`Serves ${typo(servings())}`);
-      $("ing-facts").textContent = facts.join("  ·  ");
+    if (!k) {
+      const f = [`${word(d.steps.length)} ${plural(d.steps.length, "step")}`];
+      if (d.total_minutes !== null) f.push(duration(Math.round(d.total_minutes) * 60));
+      if (d.servings !== null) f.push(`Serves ${typo(servings())}`);
+      $("ing-facts").textContent = f.join("  ·  ");
     }
     el.className = one ? "one" : "";
-    el.style.setProperty("--fs", (one ? 60 : rows <= 4 ? 54 : rows === 5 ? 48 : 44) + "px"); // one name size to a page
+    el.style.setProperty("--fs", (one ? 60 : rows <= 4 ? 54 : rows === 5 ? 48 : 44) + "px");
     el.style.gridTemplateRows = `repeat(${rows}, ${Math.min(170, Math.floor(756 / rows))}px)`;
     el.innerHTML = items.map(([num, g]) => { const on = state.checked.has(g.id), amt = esc(amount(g));
       return `<li class="${on ? "on" : ""}"><span class="i">${two(num)}</span><span class="cell"><span class="name"><span></span>` +
-        `<i aria-hidden="true">${amt}</i></span><span class="amt">${amt}</span></span>${on ? tick("tick") : ""}</li>`;
+        `<i class="cut" aria-hidden="true">${amt}</i></span><span class="amt cut">${amt}</span></span>${on ? tick("tick") : ""}</li>`;
     }).join("");
     // A name takes two lines at most, the amount's place included, and is cut at a word.
     el.querySelectorAll(".name").forEach((name, i) => {
@@ -709,25 +700,21 @@ const VIEWS = {
 
   // The done page is a colophon: the cover again, with the dial drawn complete.
   done() {
-    const d = state.data, facts = [[d.steps.length, plural(d.steps.length, "Step")]];
-    if (d.ingredients.length) facts.push([d.ingredients.length, plural(d.ingredients.length, "Ingredient")]);
-    if (d.servings !== null) facts.push([esc(typo(servings())), "Serves"]);
+    const d = state.data, f = [count(d.steps.length, "Step")];
+    if (d.ingredients.length) f.push(count(d.ingredients.length, "Ingredient"));
+    if (d.servings !== null) f.push([esc(typo(servings())), "Serves"]);
     const title = $("done-title"); // one line: a long title is set smaller, then cut at a word
-    title.style.fontSize = "";
     title.textContent = typo(d.title);
-    if (title.scrollWidth > title.clientWidth) title.style.fontSize = "34px";
+    shrink(title, 40, 34, 6, () => title.scrollWidth > title.clientWidth);
     clip(title, typo(d.title));
     $("done-dial").innerHTML = dial(d, true);
-    $("done-facts").innerHTML = `<div class="facts">${facts.map(fact).join("")}</div>`;
+    $("done-facts").innerHTML = facts(f);
     const h = $("done-h"), main = h.parentNode;
-    let size = 256;
-    h.style.fontSize = "";
-    while (size > 160 && main.scrollHeight > main.clientHeight) h.style.fontSize = (size -= 8) + "px";
+    shrink(h, 256, 160, 8, () => main.scrollHeight > main.clientHeight);
   },
 };
 
-// ---- Patch handlers: one per key, run in this order whatever the patch's order. They change state only.
-// A key for the step on screen (see STEP_SCOPED) goes after back, so it acts on the step the patch ends on. ----
+// ---- Patch handlers: one per key, in run order. They change state only. ----
 const PATCH = {
   demo(on) { if (on) load(normalize(SAMPLE)); },
   data(d) { load(normalize(d)); },
@@ -795,16 +782,16 @@ const PATCH = {
 
 let shown = "";
 function render() {
-  const d = state.data, v = state.view, crumb = $("crumb"), plain = !d || v === "overview";
+  const d = state.data, v = state.view, crumb = $("crumb"), plain = v === "overview";
   stage.classList.toggle("nf", !document.fonts.check('1em "Fraunces"'));
   for (const el of document.querySelectorAll("[data-view]")) el.hidden = el.dataset.view !== v;
-  crumb.className = plain ? "caps" : "";
+  crumb.className = plain ? "cut caps" : "cut";
   crumb.hidden = v === "done";
   $("head").className = v;
   drawTimers(); // first: the step's ingredient list is cut to the room the rail leaves
   VIEWS[v]();
   // The recipe name takes the room the step label leaves, and is cut at a word.
-  crumb.style.maxWidth = v === "step" && d ? 1140 - $("st-kicker").offsetWidth + "px" : "";
+  crumb.style.maxWidth = v === "step" ? 1140 - $("st-kicker").offsetWidth + "px" : "";
   clip(crumb, plain ? "Cook-along" : typo(d.title));
   // Fade in what changed: the whole view, or only the instruction between steps.
   const key = [v, state.step, state.page, d?.title].join("|");
@@ -817,14 +804,12 @@ function render() {
   }
 }
 
-// Tick on whole seconds while a timer runs.
 let ticker = 0;
 function schedule() {
   clearTimeout(ticker);
   if (state.timers.some(t => left(t) > 0)) ticker = setTimeout(() => { drawTimers(); schedule(); }, 1020 - Date.now() % 1000);
 }
 
-// Runs the handlers for the keys present, in PATCH order. A patch that throws changes nothing.
 function apply(patch) {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) fail('app.apply takes an object, for example {"next":true} or {"step":2}.');
   const before = structuredClone(state);
@@ -834,7 +819,6 @@ function apply(patch) {
     Object.assign(state, before);
     throw e;
   }
-  // Content under a step belongs to that step: moving away clears it, unless this patch set it again.
   if ([state.view, state.step, state.data?.title].join() !== [before.view, before.step, before.data?.title].join())
     for (const key of STEP_SCOPED) if (patch[key] === undefined) state[key] = null;
   render();
@@ -863,10 +847,10 @@ function summary() {
 
 window.app = { apply, state: summary };
 
-// The pending cover is a blank cover: a ghost title, facts with no numbers yet, and ruled lines for the legend.
+// The pending cover is a blank cover: a muted title, facts with no numbers yet, and ruled lines for the legend.
 tv.pending("title", "Tonight’s recipe");
 tv.pending("summary");
-$("ov-summary").innerHTML = `<div class="facts">${["Serves", "Ingredients", "Timers"].map(s => fact(["–", s])).join("")}</div>`;
+$("ov-summary").innerHTML = facts(["Serves", "Ingredients", "Timers"].map(s => ["–", s]));
 tv.pending("legend");
 render();
 // Type is fitted by measuring it, so measure again when a face arrives. Load them all up front.

@@ -8,8 +8,8 @@
   trips or recipes. Each poster is drawn from its hue, so no images are needed.
   Views: grid (the wall, five posters a page), detail (one option), chosen (the pick).
 
-  Patch keys for app.apply(patch). They run in this order. Numbers are the ones on screen and
-  run across pages; state().numbers maps them to ids.
+  Patch keys for app.apply(patch), run in this order. Numbers are the ones on screen and run
+  across pages; state().numbers maps them to ids.
     demo    {"demo": true}            load 18 sample films
     data    {"data": {"title": "Movie night", "subtitle": "Rainy Friday", "kicker": "Tonight",
               "items": [{"id": "tide", "title": "Northbound Tide", "meta": "2021 · 1h 58m",
@@ -63,7 +63,6 @@
     -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
   h1, p, ol, dl, dd, blockquote { margin: 0; padding: 0; }
   ol { list-style: none; }
-  h1 { font-weight: 400; }
   .p-tags span, .top p, #title, .slot .m, .crumb .caps, #detail-meta, .facts dt, .facts dd, .lb p, #chosen-meta {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .caps { font: 600 28px/1.25 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
@@ -86,8 +85,7 @@
     color: var(--ink); }
   .p-init b { font: italic 400 15em/.96 var(--serif); }
   .p-tags { position: absolute; left: 1.2em; right: 1.2em; top: 1.15em; color: var(--credit); }
-  .p-tags span { display: block; font: 600 1.71em/1.22 var(--sans); letter-spacing: .1em; text-transform: uppercase;
- }
+  .p-tags span { display: block; font: 600 1.71em/1.22 var(--sans); letter-spacing: .1em; text-transform: uppercase; }
   .p-title { position: absolute; left: 1.2em; right: 1.2em; bottom: .55em; height: 11em; display: flex; align-items: flex-end; }
   .tt { display: block; width: 100%; padding-bottom: .14em; font: 400 4.4em/.98 var(--serif); letter-spacing: -.012em; }
   .tt.sm { font-weight: 600; letter-spacing: 0; }
@@ -184,7 +182,7 @@
   .facts dt { line-height: 32px; }
   .facts dd { font: 600 34px/38px var(--sans); }
   .facts dd.wrap { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-  .lower.noquote .facts { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: 70px; }
+  .lower.noquote .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 70px; }
 
   /* ---------- Chosen: a letterboxed title card ---------- */
   [data-view=chosen] { inset: 0; background: var(--bg); }
@@ -357,6 +355,7 @@ const state = {
 
 // ---------- Helpers ----------
 const $ = id => document.getElementById(id);
+const fail = message => { throw new Error(message); };
 const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 // Typographer's quotes, dashes and ellipses for text that arrives as plain ASCII.
@@ -370,11 +369,11 @@ const titleHTML = t => typo(t).split(/\s+/).map(w => SMALL.test(w) ? `<i>${esc(w
 const WORDS = "No One Two Three Four Five Six Seven Eight Nine Ten Eleven Twelve Thirteen Fourteen Fifteen Sixteen Seventeen Eighteen Nineteen Twenty".split(" ");
 const word = n => WORDS[n] || String(n);
 
+const kept = () => state.items.filter(i => !state.removed.includes(i.id));
 // The visible list, in screen order. Numbers on screen are positions in it, from 1.
 function visible() {
   const only = state.only;
-  const list = state.items.filter(i => !state.removed.includes(i.id) && (!only ||
-    (typeof only === "string" ? i.tags.includes(only) : only.includes(i.id))));
+  const list = kept().filter(i => !only || (typeof only === "string" ? i.tags.includes(only) : only.includes(i.id)));
   if (state.sort === "score") list.sort((a, b) => (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0));
   if (state.sort === "title") list.sort((a, b) => a.title.localeCompare(b.title));
   return list;
@@ -384,11 +383,11 @@ const pages = () => Math.max(1, Math.ceil(visible().length / PER_PAGE));
 const pageOf = id => Math.ceil(numberOf(id) / PER_PAGE);
 const onPage = () => visible().slice((state.page - 1) * PER_PAGE, state.page * PER_PAGE);
 const byId = id => state.items.find(i => i.id === id);
-const allTags = () => [...new Set(state.items.filter(i => !state.removed.includes(i.id)).flatMap(i => i.tags))];
+const allTags = () => [...new Set(kept().flatMap(i => i.tags))];
 
 // ---------- Posters ----------
 // Flat two-ink motifs. Filled shapes and thick strokes only, so the video mirror keeps them.
-const svg = body => `<svg viewBox="0 0 100 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${body}</svg>`;
+const svg = body => `<svg viewBox="0 0 100 64" aria-hidden="true">${body}</svg>`;
 const dots = Array.from({ length: 24 }, (_, i) => i === 10 ? "" :  // a 6 by 4 grid with one dot left out
   `<circle cx="${15 + i % 6 * 14}" cy="${11 + Math.floor(i / 6) * 14}" r="4.6"/>`).join("");
 const MOTIFS = [
@@ -485,7 +484,7 @@ const VIEWS = {
     }
     if (!$("title").classList.contains("tv-pending")) fitText($("title"));
     const list = visible(), shown = onPage(), first = (state.page - 1) * PER_PAGE, total = pages();
-    const left = state.items.length - state.removed.length, wall = $("wall"), aside = $("aside");
+    const left = kept().length, wall = $("wall"), aside = $("aside");
     // The count names the filter and the sort, so people can see why the wall changed.
     const by = { score: "By score", title: "A to Z" }[state.sort];
     $("count").innerHTML = !state.items.length ? "" : (state.only || by ? "<i></i>" : "") + [
@@ -493,7 +492,7 @@ const VIEWS = {
         : `${word(list.length)} option${list.length === 1 ? "" : "s"}`, by && `<b>${by}</b>`].filter(Boolean).join(" · ");
     $("pager").hidden = total < 2;
     $("pager").innerHTML = `<span>Page <b>${state.page}</b> of ${total}</span><span class="segs">` +
-      (total > 13 ? "" : Array.from({ length: total }, (_, p) => p + 1 === state.page ? '<i class="on"></i>' : "<i></i>").join("")) + "</span>";
+      Array.from({ length: total }, (_, p) => p + 1 === state.page ? '<i class="on"></i>' : "<i></i>").join("") + "</span>";
     const redraw = changed("grid", [state.ready, shown, first, total, left, state.items.length, state.chosen, state.kicker, state.only]);
     if (redraw) {
       aside.className = "";
@@ -578,35 +577,35 @@ function render() {
 const text = (v, name) => {
   if (v == null) return "";
   if (typeof v === "number") return String(v);
-  if (typeof v !== "string") throw new Error(`${name} must be text, such as "Movie night".`);
+  if (typeof v !== "string") fail(`${name} must be text, such as "Movie night".`);
   return v.trim();
 };
 const seed = s => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.codePointAt(0), 16777619); return h >>> 0; };
 const ITEM_KEYS = ["id", "title", "meta", "tags", "score", "hue", "description", "facts"];
 function readItems(list) {
   if (!Array.isArray(list) || list.length > 64)
-    throw new Error('data.items must be an array of up to 64 items like {"id":"a","title":"First option"}.');
+    fail('data.items must be an array of up to 64 items like {"id":"a","title":"First option"}.');
   // One number of decimals for every score, so 8 sits beside 8.4 as 8.0.
   const places = list.some(r => typeof r?.score === "number" && !Number.isInteger(r.score)) ? 1 : 0;
   const ids = new Set();
   return list.map((raw, n) => {
     const at = `data.items[${n}]`;
-    if (!isObj(raw)) throw new Error(`${at} must be an object like {"id":"a","title":"First option"}.`);
+    if (!isObj(raw)) fail(`${at} must be an object like {"id":"a","title":"First option"}.`);
     for (const key in raw) if (!ITEM_KEYS.includes(key)) ignored.push(`${at}.${key}`);
     const id = text(raw.id, at + ".id"), title = text(raw.title, at + ".title");
-    if (!id || !title) throw new Error(`${at} needs an id and a title, such as {"id":"item-${n + 1}","title":"First option"}.`);
-    if (ids.has(id)) throw new Error(`${at}.id "${id}" is used twice. Ids must be unique.`);
+    if (!id || !title) fail(`${at} needs an id and a title, such as {"id":"item-${n + 1}","title":"First option"}.`);
+    if (ids.has(id)) fail(`${at}.id "${id}" is used twice. Ids must be unique.`);
     ids.add(id);
     const tags = raw.tags ?? [], facts = raw.facts ?? [], description = text(raw.description, at + ".description");
-    if (!Array.isArray(tags) || tags.length > 2) throw new Error(`${at}.tags must be an array of up to 2 short words, such as ["Comedy","Family"].`);
+    if (!Array.isArray(tags) || tags.length > 2) fail(`${at}.tags must be an array of up to 2 short words, such as ["Comedy","Family"].`);
     if (!Array.isArray(facts) || facts.length > 4 || !facts.every(isObj))
-      throw new Error(`${at}.facts must be an array of up to 4 objects like {"label":"Runtime","value":"1h 52m"}.`);
-    if (description.split(/\s+/).length > 40) throw new Error(`${at}.description has more than 40 words. Send 40 or fewer.`);
+      fail(`${at}.facts must be an array of up to 4 objects like {"label":"Runtime","value":"1h 52m"}.`);
+    if (description.split(/\s+/).length > 40) fail(`${at}.description has more than 40 words. Send 40 or fewer.`);
     let score = raw.score ?? null, hue = raw.hue ?? seed(id) % 360;
     if (typeof score === "number" && isFinite(score)) score = score.toFixed(places);
     else if (typeof score === "string" && score.trim().length <= 6) score = score.trim() || null;
-    else if (score !== null) throw new Error(`${at}.score must be a number or short text such as 8.4 or "92%", or null.`);
-    if (typeof hue !== "number" || !isFinite(hue)) throw new Error(`${at}.hue must be a number from 0 to 360, such as 210.`);
+    else if (score !== null) fail(`${at}.score must be a number or short text such as 8.4 or "92%", or null.`);
+    if (typeof hue !== "number" || !isFinite(hue)) fail(`${at}.hue must be a number from 0 to 360, such as 210.`);
     return { id, title, meta: text(raw.meta, at + ".meta"), description, score, n,
       hue: (Math.round(hue) % 360 + 360) % 360,
       tags: tags.map(t => text(t, at + ".tags")).filter(Boolean),
@@ -616,15 +615,15 @@ function readItems(list) {
 function readNumber(v, key) {
   const list = visible();
   if (!Number.isInteger(v) || v < 1 || v > list.length)
-    throw new Error(`${key} must be a number from 1 to ${list.length}, as shown on screen.`);
+    fail(`${key} must be a number from 1 to ${list.length}, as shown on screen.`);
   return list[v - 1].id;
 }
 function readIds(v, key) {
-  if (!Array.isArray(v) || !v.length) throw new Error(`${key} takes an array of item ids, such as {"${key}": ["tide"]}` +
+  if (!Array.isArray(v) || !v.length) fail(`${key} takes an array of item ids, such as {"${key}": ["tide"]}` +
     (key === "only" ? ', or one tag, such as {"only": "Comedy"}.' : "."));
   const ids = v.map(String);
   for (const id of ids) if (!byId(id))
-    throw new Error(`${key}: "${id}" is not an item id. Map numbers to ids first; on screen now: ${JSON.stringify(snapshot().numbers)}.`);
+    fail(`${key}: "${id}" is not an item id. Map numbers to ids first; on screen now: ${JSON.stringify(snapshot().numbers)}.`);
   return ids;
 }
 
@@ -645,11 +644,11 @@ function backToWall() {
 const PATCH = {
   demo(v) {
     if (v === false) return;
-    if (v !== true) throw new Error('demo must be true, as in {"demo": true}.');
+    if (v !== true) fail('demo must be true, as in {"demo": true}.');
     PATCH.data(SAMPLE);
   },
   data(d) {
-    if (!isObj(d)) throw new Error('data must be an object like {"title":"Movie night","items":[{"id":"a","title":"First option"}]}.');
+    if (!isObj(d)) fail('data must be an object like {"title":"Movie night","items":[{"id":"a","title":"First option"}]}.');
     for (const key in d) if (!["title", "subtitle", "kicker", "items"].includes(key)) ignored.push("data." + key);
     // A new list starts clean, so an old subtitle or kicker never sits over new items.
     if ("items" in d) Object.assign(state, { items: readItems(d.items), ready: true, subtitle: "", kicker: "Tonight",
@@ -657,7 +656,7 @@ const PATCH = {
     if ("title" in d) state.title = text(d.title, "data.title");
     if ("subtitle" in d) state.subtitle = text(d.subtitle, "data.subtitle");
     if ("kicker" in d) state.kicker = text(d.kicker, "data.kicker") || "Tonight";
-    if (state.kicker.length > 16) throw new Error('data.kicker must be 16 characters or fewer, such as "Tonight".');
+    if (state.kicker.length > 16) fail('data.kicker must be 16 characters or fewer, such as "Tonight".');
   },
   remove(v) {
     for (const id of readIds(v, "remove")) if (!state.removed.includes(id)) state.removed.push(id);
@@ -665,18 +664,18 @@ const PATCH = {
   only(v) {
     if (typeof v === "string") {
       const tag = allTags().find(t => t.toLowerCase() === v.trim().toLowerCase());
-      if (!tag) throw new Error(`No option has the tag "${v}". Tags: ${allTags().join(", ")}.`);
+      if (!tag) fail(`No option has the tag "${v}". Tags: ${allTags().join(", ")}.`);
       state.only = tag;
     } else state.only = v === null ? null : readIds(v, "only");
     backToWall();
   },
   sort(v) {
-    if (![null, "score", "title"].includes(v)) throw new Error('sort must be "score", "title" or null.');
+    if (![null, "score", "title"].includes(v)) fail('sort must be "score", "title" or null.');
     state.sort = v;
     backToWall();
   },
   page(v) {
-    if (!Number.isInteger(v) || v < 1 || v > pages()) throw new Error(`page must be a number from 1 to ${pages()}.`);
+    if (!Number.isInteger(v) || v < 1 || v > pages()) fail(`page must be a number from 1 to ${pages()}.`);
     state.page = v;
     if (state.focus && pageOf(state.focus) !== v) state.focus = null;
     state.view = "grid";
@@ -697,24 +696,24 @@ const PATCH = {
     state.view = "grid";
   },
   view(v) {
-    if (!["grid", "detail", "chosen"].includes(v)) throw new Error('view must be "grid", "detail" or "chosen".');
+    if (!["grid", "detail", "chosen"].includes(v)) fail('view must be "grid", "detail" or "chosen".');
     const id = state.item || state.focus;
     if (v === "grid") state.view = "grid";
     else if (numberOf(id)) show(id, v);
-    else throw new Error(`view "${v}" needs an item. Send {"item": 3, "view": "${v}"}.`);
+    else fail(`view "${v}" needs an item. Send {"item": 3, "view": "${v}"}.`);
   },
 };
 
 let ignored = [];  // unknown keys found by the current apply
 function apply(patch) {
-  if (!isObj(patch)) throw new Error('apply takes an object, such as {"item": 3} or {"demo": true}.');
+  if (!isObj(patch)) fail('apply takes an object, such as {"item": 3} or {"demo": true}.');
   ignored = Object.keys(patch).filter(key => !Object.hasOwn(PATCH, key));
   const before = structuredClone(state);
   try {
     for (const key in PATCH) {
       if (!Object.hasOwn(patch, key)) continue;
       if (!state.ready && !["demo", "data", "view"].includes(key))
-        throw new Error(`There are no options yet, so "${key}" cannot apply. Send {"data": {"items": [...]}} or {"demo": true} first.`);
+        fail(`There are no options yet, so "${key}" cannot apply. Send {"data": {"items": [...]}} or {"demo": true} first.`);
       PATCH[key](patch[key]);
     }
   } catch (error) {

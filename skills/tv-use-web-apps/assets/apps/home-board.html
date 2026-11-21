@@ -12,8 +12,10 @@
        status  <- home states: locks, doors, garage, temperature, appliances
      A section you have not sent shows a pending phrase ("Forecast on its way", "Reading the calendar",
      "Gathering notes", "Checking on the house"). Send real values only. If you cannot read a source, leave its
-     key out and send the others. Never send {}: it changes nothing, so app.apply refuses it. Never copy the
-     sample values in this comment or in SAMPLE: they are made up. Send {"demo":true} only when the user asks for a demo.
+     key out, send the others, and tell the user which sources you could not read. If you can read none, still
+     send {"dim":false}: it brings the board up undimmed, invents nothing, and unsent sections stay pending. Never send {}: it
+     changes nothing, so app.apply refuses it. Never copy the sample values in this comment or in SAMPLE: they
+     are made up. Send {"demo":true} only when the user asks for a demo.
 
      app.apply(patch) -> app.state(). Keys left out keep their value. A patch with one bad value throws and
      changes nothing. null sets weather, agenda, notes or status back to pending. A field with ? is optional.
@@ -54,6 +56,7 @@
           "agenda":[{"time":"7:00 PM","title":"Family dinner","where":"Kitchen","now":true},{"time":"8:30 PM","title":"Call Grandma"}],
           "notes":["Library books are due Friday","Water the fern"],
           "status":[{"label":"Front door","value":"Locked"},{"label":"Laundry","value":"Done","alert":true}]}
+                                          If you could read no source: {"dim":false}, and tell the user which ones failed.
        "Show me a demo"                -> {"demo":true}
        "It's raining now, 46 degrees"  -> {"weather":{"now":{"temp":46,"condition":"Rain"}}}
        "Add dentist at 4:30 tomorrow... no, add 'Pick up dry cleaning' at 8:15 tonight"
@@ -64,22 +67,20 @@
        "The garage is open"            -> {"set_status":{"label":"Garage","value":"Open","alert":true}}
        "It's late, dim the board"      -> {"dim":true}           "Brighten it"  -> {"dim":false}
 
-     Script order: SAMPLE, state, helpers, chart(), SECTION (one HTML builder per data-slot), VIEWS.board,
-     value checks (str, num, bool, list, obj), PATCH, apply, window.app.
-     To add a patch key, for example "key":
+     Script order: SAMPLE, state, helpers, chart(), SECTION (the HTML for each data-slot), VIEWS.board,
+     value checks (str, num, bool, list, obj), PATCH, apply, window.app. To add a patch key, for example "key":
        1. A key line above with an example and what null does, and a voice turn.
-       2. state.key = null in the state object (null while unknown).
+       2. state.key = null in state (null while unknown), and a value in SAMPLE: demo runs PATCH[k](SAMPLE[k]) for each.
        3. A PATCH handler named after the key. It checks the value with str(), num() or bool() and changes state only:
             key(v) { state.key = v == null ? null : str(v, "key", '"an example"'); },
           It may throw at any point: apply() then undoes the whole patch.
-       4. A value in SAMPLE, so {"demo":true} shows it. demo runs PATCH.key(SAMPLE.key) for every SAMPLE key.
-       5. Draw it in VIEWS.board, and hide it when null. 6. Report it in app.state(): key: state.key.
+       4. Draw it in VIEWS.board, hidden when null. Report it in app.state(): key: state.key.
      The head column is full. A new line under the date goes in #sub, which makes room for itself. In VIEWS.board:
             $("sub").hidden = state.key == null; if (state.key != null) show($("sub"), esc(state.key));
      Render with preview.py and check that blocks keep 32px between them. The board moves up to 3px against
      burn-in, so content starts 84px from the sides and 64px from the top and bottom. -->
 <style>
-  /* Tokens. Three levels of light: --hi for the current item, --text for words, --soft for labels. */
+  /* Tokens. --hi for the current item, --text for words, --soft for labels. */
   @font-face { font-family: "Inter"; src: url(fonts/inter.woff2) format("woff2"); font-weight: 100 900; }
   @font-face { font-family: "Fraunces"; font-style: italic; src: url(fonts/fraunces-italic.woff2) format("woff2"); font-weight: 100 900; }
   :root { --bg: #0a0d10; --ink: #0f1419; --hi: #dfe3e3; --text: #b8bfc2; --soft: #9da6ab; --rule: #242d34; --accent: #e0a96c;
@@ -121,10 +122,10 @@
   #hm b { display: inline-block; position: relative; top: -.165em; width: .088em; height: .088em; margin: 0 .07em 0 .115em;
     background: currentColor; box-shadow: 0 -.31em 0 currentColor; opacity: .62; }
   #ampm { font-size: 36px; font-weight: 600; letter-spacing: .12em; color: var(--soft); text-transform: uppercase; }
-  #date { margin: 32px 0 0; font-size: 44px; font-weight: 500; line-height: 1.2; color: var(--soft); }
+  #date { margin: 32px 0 0; font-size: 44px; line-height: 1.2; color: var(--soft); }
   #dow { color: var(--text); }
-  /* A spare line under the date for an extension (see the header). Only 39px is free above WEATHER,
-     so a shown #sub moves the clock and date up to keep a 32px gap. */
+  /* A spare line for an extension (see the header). Only 39px is free above WEATHER, so a shown #sub
+     moves the clock and date up to keep a 32px gap. */
   #sub { margin: 8px 0 0; font-size: 28px; line-height: 36px; color: var(--soft); }
   #head:has(#sub:not([hidden])) #time { margin-top: 12px; }
   #head:has(#sub:not([hidden])) #date { margin-top: 15px; }
@@ -133,13 +134,13 @@
   #weather { left: 84px; top: 540px; width: 1000px; }
   #weather [data-slot] { height: 304px; margin-top: 8px; }
   .wx { display: grid; grid-template-columns: 250px 750px; height: 304px; }
-  .wx-now { padding-top: 26px; min-width: 0; }
+  .wx-now { padding-top: 26px; }
   .wx-temp { display: flex; align-items: flex-start; height: 112px; font-size: 112px; font-weight: 400; line-height: 1;
     letter-spacing: -.045em; color: var(--hi); }
   .wx[data-len="4"] .wx-temp { font-size: 92px; }
   .wx[data-len="5"] .wx-temp { font-size: 76px; }
   .wx-u { margin: .13em 0 0 10px; font-size: 30px; font-weight: 600; line-height: 1; letter-spacing: .04em; color: var(--soft); }
-  .wx-c { margin-top: 12px; font-size: 36px; line-height: 42px; color: var(--text); }
+  .wx-c { margin-top: 12px; font-size: 36px; line-height: 42px; }
   .wx-c.long { margin-top: 8px; font-size: 32px; line-height: 38px; }
   /* High and low stay on one line. They may run past the column: the chart's axis starts at its first point */
   .wx-hl { display: flex; flex-wrap: wrap; gap: 0 18px; width: 274px; margin-top: 10px; font-size: 28px; color: var(--soft); white-space: nowrap; }
@@ -172,7 +173,6 @@
   .ag .t { text-align: right; font-size: 28px; font-weight: 600; color: var(--soft); white-space: nowrap; }
   .ag .nd { position: relative; justify-self: center; box-sizing: border-box; width: 20px; height: 20px; border-radius: 50%;
     border: 4px solid #5d6970; background: var(--ink); }
-  .ag .what { min-width: 0; }
   .ag .ti { font-size: 36px; line-height: 40px; }
   .ag .wh { font-size: 28px; line-height: 36px; color: var(--soft); }
   .ag .wh:empty { display: none; }
@@ -197,7 +197,7 @@
   #notes [data-slot] { margin-top: 8px; }
   .nt { list-style: none; margin: 0; padding: 0 0 0 184px; display: grid; gap: 10px; }
   .nt li { position: relative; font-size: 38px; line-height: 46px; }
-  .nt li::before { content: "\2013"; position: absolute; left: -52px; top: 0; width: 44px; text-align: center; color: #6f7b81; }
+  .nt li::before { content: "\2013"; position: absolute; left: -52px; width: 44px; text-align: center; color: #6f7b81; }
   #notes .empty { margin: 0 0 0 184px; font-size: 38px; line-height: 46px; color: var(--soft); }
 
   /* Home status: one quiet row of glyphs and words. It gives way to the status line while the agent works */
@@ -230,30 +230,14 @@
     background: radial-gradient(circle, var(--ink) 0 5px, var(--m1) 6px 9px, transparent 10px) 142.5px 0 / 22px 84px repeat-y,
       linear-gradient(var(--rule), var(--rule)) 152.5px 42px / 3px 252px no-repeat; }
   #board [data-slot="notes"].tv-pending { height: 140px; padding: 1px 0 0 184px;
-    background: linear-gradient(var(--m1), var(--m1)) 144px 23px / 20px 3px no-repeat,
-      linear-gradient(var(--m2), var(--m2)) 144px 79px / 20px 3px no-repeat, linear-gradient(var(--m2), var(--m2)) 144px 135px / 20px 3px no-repeat; }
+    background: linear-gradient(var(--m1), var(--m1)) 144px 23px, linear-gradient(var(--m2), var(--m2)) 144px 79px,
+      linear-gradient(var(--m2), var(--m2)) 144px 135px; background-size: 20px 3px; background-repeat: no-repeat; }
   #board [data-slot="status"].tv-pending { --r: radial-gradient(circle, transparent 0 16px, var(--m2) 17px 20px, transparent 21px);
     height: 76px; padding-left: 66px; line-height: 76px;
-    background: radial-gradient(circle, transparent 0 16px, var(--m1) 17px 20px, transparent 21px) 0 14px / 48px 48px no-repeat,
-      var(--r) 500px 14px / 48px 48px no-repeat, var(--r) 780px 14px / 48px 48px no-repeat,
-      var(--r) 1060px 14px / 48px 48px no-repeat, var(--r) 1340px 14px / 48px 48px no-repeat; }
+    background: radial-gradient(circle, transparent 0 16px, var(--m1) 17px 20px, transparent 21px) 0, var(--r) 500px,
+      var(--r) 780px, var(--r) 1060px, var(--r) 1340px; background-position-y: 14px; background-size: 48px 48px; background-repeat: no-repeat; }
 </style>
 <body>
-<!-- Home status glyphs. To add one, add a symbol here and a test in homeIcon(). -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-lock" viewBox="0 0 48 48"><rect x="11" y="21" width="26" height="20" rx="4"/><path d="M16 21v-5a8 8 0 0 1 16 0v5M24 29v4"/></symbol>
-  <symbol id="i-unlock" viewBox="0 0 48 48"><rect x="11" y="21" width="26" height="20" rx="4"/><path d="M16 21v-5a8 8 0 0 1 15.4-3M24 29v4"/></symbol>
-  <symbol id="i-door" viewBox="0 0 48 48"><path d="M13 41V8h22v33M8 41h32"/><circle cx="29" cy="25" r="1.6" fill="currentColor"/></symbol>
-  <symbol id="i-temp" viewBox="0 0 48 48"><path d="M19.5 28.5V10a4.5 4.5 0 0 1 9 0v18.5a8 8 0 1 1-9 0z"/><path d="M24 20v14"/></symbol>
-  <symbol id="i-laundry" viewBox="0 0 48 48"><rect x="9" y="6" width="30" height="36" rx="5"/><circle cx="24" cy="27" r="8.5"/><path d="M9 14h30M15 10h.1M20 10h.1"/></symbol>
-  <symbol id="i-light" viewBox="0 0 48 48"><path d="M19 35h10M20 41h8M18 29a11 11 0 1 1 12 0c-1.3 1-2 2.2-2 4h-8c0-1.8-.7-3-2-4z"/></symbol>
-  <symbol id="i-garage" viewBox="0 0 48 48"><path d="M6 41V19L24 8l18 11v22"/><path d="M13 41V26h22v15M13 31.5h22M13 36.5h22"/></symbol>
-  <symbol id="i-window" viewBox="0 0 48 48"><rect x="9" y="7" width="30" height="34" rx="3"/><path d="M24 7v34M9 24h30"/></symbol>
-  <symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 6l15 6v10c0 10-6.5 17-15 20-8.5-3-15-10-15-20V12z"/><path d="M18 24l4.5 4.5L31 20"/></symbol>
-  <symbol id="i-drop" viewBox="0 0 48 48"><path d="M24 7c6 8 12 14.5 12 21a12 12 0 0 1-24 0c0-6.5 6-13 12-21z"/></symbol>
-  <symbol id="i-bolt" viewBox="0 0 48 48"><path d="M27 5 12 27h11l-3 16 16-23H25z"/></symbol>
-  <symbol id="i-dot" viewBox="0 0 48 48"><circle cx="24" cy="24" r="13"/><circle cx="24" cy="24" r="4" fill="currentColor" stroke="none"/></symbol>
-</svg>
 <div id="stage">
   <section id="board" data-view="board">
     <header id="head">
@@ -335,10 +319,9 @@
 </script>
 <!-- tv-kit:end -->
 <script>
-// One function scope, so the page adds only window.app beside the kit's window.tv.
 (() => {
 // Demo data for {"demo":true}, and the shape of each section. Made up: never send it as real data.
-// The times are written for the 7 PM hour. PATCH.demo moves them to the current hour.
+// Times are for the 7 PM hour; PATCH.demo moves them to the current hour.
 const SAMPLE = {
   weather: { now: { temp: 48, condition: "partlycloudy", high: 54, low: 41 }, unit: "F", hours: [
     { time: "8 PM", temp: 49, condition: "partlycloudy" }, { time: "9 PM", temp: 47, condition: "cloudy" },
@@ -366,48 +349,32 @@ let ignored = [], stamp = 0, booted = false, statusShown = 0;
 
 // Helpers
 const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const cut = (s, n = 28) => s.length > n ? s.slice(0, n - 1) + "…" : s;
+const TRAIL = /[\s,;:.!?–—-]+$/;   // punctuation to drop before "…"
 const deg = v => v == null ? "" : String(Math.round(v)).replace("-", "−") + "°";
-const fade = el => el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: "cubic-bezier(.2, .7, .2, 1)" });
-// Cut the text of each [data-lines] element at a word until it fits that many lines, and end it with "…".
-const clamp = root => {
-  for (const el of [root, ...root.querySelectorAll("[data-lines]")]) {
-    if (!el.dataset.lines) continue;
-    const max = Math.round(parseFloat(getComputedStyle(el).lineHeight) * el.dataset.lines), words = el.textContent.split(" ");
-    el.style.maxHeight = max + "px";
-    while (el.scrollHeight > max + 2 && words.length > 1) {
-      words.pop();
-      el.textContent = words.join(" ").replace(/[\s,;:.!?–—-]+$/, "") + "…";
-    }
-  }
-};
-// Fill a data-slot or the title, and fit its text. Fade it in only when the HTML changed.
+// Fill a data-slot or the title, cut each [data-lines] text at a word until it fits, and fade in a change.
 const show = (el, html) => {
   const changed = el.dataset.html !== html;
   if (el.dataset.slot) tv.fill(el.dataset.slot, html); else el.innerHTML = html;
   el.dataset.html = html;
-  clamp(el);
-  if (changed && booted) fade(el);
-};
-// A section with no data keeps its place with a pending phrase.
-const slot = (name, html) => {
-  const el = document.querySelector(`[data-slot="${name}"]`);
-  if (html != null) return show(el, html);
-  delete el.dataset.html;
-  if (!el.classList.contains("tv-pending")) tv.pending(name, PENDING[name]);
+  for (const e of [el, ...el.querySelectorAll("[data-lines]")]) if (e.dataset.lines) {
+    const max = Math.round(parseFloat(getComputedStyle(e).lineHeight) * e.dataset.lines), words = e.textContent.split(" ");
+    e.style.maxHeight = max + "px";
+    while (e.scrollHeight > max + 2 && words.length > 1) { words.pop(); e.textContent = words.join(" ").replace(TRAIL, "") + "…"; }
+  }
+  if (changed && booted) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: "cubic-bezier(.2, .7, .2, 1)" });
 };
 
 // Time
 const fmt = opts => new Intl.DateTimeFormat(undefined, { timeZone: state.timezone || undefined, ...opts });
 const parts = opts => Object.fromEntries(fmt(opts).formatToParts(new Date()).map(p => [p.type, p.value]));
-const hourNow = () => +parts({ hour: "numeric", hourCycle: "h23" }).hour % 24;
+const hourNow = () => +parts({ hour: "numeric", hourCycle: "h23" }).hour;
 const dayPart = () => { const h = hourNow(); return h < 5 ? "night" : h < 12 ? "morning" : h < 17 ? "afternoon" : h < 22 ? "evening" : "night"; };
-// The clock follows the locale: "7:53 PM" or "19:53".
 const clock = () => { const p = parts({ hour: "numeric", minute: "2-digit" }); return { h: p.hour, m: p.minute, ampm: p.dayPeriod || "" }; };
-const age = k => Math.round((Date.now() - state.at[k]) / 60000);   // minutes since a section's data was read
+const age = k => Math.round((Date.now() - state.at[k]) / 60000);
 // The board's day starts at 4 AM. Data read before that also names its day: "as of Thu 11:10 PM".
-const dayMin = () => { const p = parts({ hour: "numeric", minute: "numeric", hourCycle: "h23" }); return (p.hour % 24 * 60 + +p.minute + 1200) % 1440; };
+const dayMin = () => { const p = parts({ hour: "numeric", minute: "numeric", hourCycle: "h23" }); return (p.hour * 60 + +p.minute + 1200) % 1440; };
 const asOf = k => { const a = state[k] ? age(k) : 0; return a <= STALE[k] ? "" : "as of " + fmt(a >= 8640 ? { month: "short", day: "numeric" }
   : { ...(a > dayMin() && { weekday: "short" }), hour: "numeric", minute: "2-digit" }).format(state.at[k]).replace(",", ""); };
 // "8 PM" or "8:30 PM", d hours later
@@ -428,12 +395,22 @@ const kind = c => { c = c.toLowerCase();
     : /wind|breez|gust/.test(c) ? "wind" : /partly|partial|mostly (sunny|clear)|few|scattered|broken/.test(c) ? "partly"
     : /cloud|overcast/.test(c) ? "cloud" : /clear|sun|fair/.test(c) ? "clear" : "cloud"; };
 const WORD = { storm: "Storms", snow: "Snow", rain: "Rain", fog: "Fog", wind: "Windy", partly: "Partly cloudy", cloud: "Cloudy", clear: "Clear" };
-const homeIcon = c => { const s = `${c.label} ${c.value}`.toLowerCase();
-  return /unlock/.test(s) ? "unlock" : /lock/.test(s) ? "lock" : /garage/.test(s) ? "garage" : /\bdoors?\b/.test(s) ? "door"
-    : /window/.test(s) ? "window" : /temp|thermo|°|heat|cool|climate|indoor|outdoor/.test(s) ? "temp"
-    : /laundry|wash|dryer/.test(s) ? "laundry" : /light|lamp/.test(s) ? "light"
-    : /alarm|secur|\barmed\b/.test(s) ? "shield" : /leak|water|humid/.test(s) ? "drop"
-    : /power|energy|battery|solar|charg/.test(s) ? "bolt" : "dot"; };
+// Home status glyphs on a 48px grid. The first test that matches "label value" wins. To add one, add a row.
+const LOCK = '<rect x="11" y="21" width="26" height="20" rx="4"/><path d="M16 21v-5a8 8 0 0 1 ';
+const ICONS = [
+  [/unlock/, LOCK + '15.4-3M24 29v4"/>'],
+  [/lock/, LOCK + '16 0v5M24 29v4"/>'],
+  [/garage/, '<path d="M6 41V19L24 8l18 11v22"/><path d="M13 41V26h22v15M13 31.5h22M13 36.5h22"/>'],
+  [/\bdoors?\b/, '<path d="M13 41V8h22v33M8 41h32"/><circle cx="29" cy="25" r="1.6" fill="currentColor"/>'],
+  [/window/, '<rect x="9" y="7" width="30" height="34" rx="3"/><path d="M24 7v34M9 24h30"/>'],
+  [/temp|thermo|°|heat|cool|climate|indoor|outdoor/, '<path d="M19.5 28.5V10a4.5 4.5 0 0 1 9 0v18.5a8 8 0 1 1-9 0z"/><path d="M24 20v14"/>'],
+  [/laundry|wash|dryer/, '<rect x="9" y="6" width="30" height="36" rx="5"/><circle cx="24" cy="27" r="8.5"/><path d="M9 14h30M15 10h.1M20 10h.1"/>'],
+  [/light|lamp/, '<path d="M19 35h10M20 41h8M18 29a11 11 0 1 1 12 0c-1.3 1-2 2.2-2 4h-8c0-1.8-.7-3-2-4z"/>'],
+  [/alarm|secur|\barmed\b/, '<path d="M24 6l15 6v10c0 10-6.5 17-15 20-8.5-3-15-10-15-20V12z"/><path d="M18 24l4.5 4.5L31 20"/>'],
+  [/leak|water|humid/, '<path d="M24 7c6 8 12 14.5 12 21a12 12 0 0 1-24 0c0-6.5 6-13 12-21z"/>'],
+  [/power|energy|battery|solar|charg/, '<path d="M27 5 12 27h11l-3 16 16-23H25z"/>'],
+  [/$/, '<circle cx="24" cy="24" r="13"/><circle cx="24" cy="24" r="4" fill="currentColor" stroke="none"/>']];
+const homeIcon = c => ICONS.find(([re]) => re.test(`${c.label} ${c.value}`.toLowerCase()))[1];
 
 // The weather curve: even steps, monotone so it never overshoots a label
 const chart = (w, W) => {
@@ -467,33 +444,29 @@ const chart = (w, W) => {
   // Sky words name each change of sky. Rain and snow are marked on the baseline.
   let prev = pts[0].now && pts[0].c ? kind(pts[0].c) : null, right = -1e9, marks = "", run = null; const wet = [];
   pts.forEach((p, i) => {
-    const k = p.c ? kind(p.c) : null;
-    const wk = k === "snow" ? "snow" : k === "rain" || k === "storm" ? "rain" : "", a = Math.max(pts[0].x, p.x - step / 2), b = Math.min(pts[n - 1].x, p.x + step / 2);
+    const k = p.c ? kind(p.c) : null, wk = k === "snow" ? "snow" : k === "rain" || k === "storm" ? "rain" : "";
+    const a = Math.max(pts[0].x, p.x - step / 2), b = Math.min(pts[n - 1].x, p.x + step / 2);
     if (wk && run && run.k === wk) run.b = b; else if (wk) wet.push(run = { k: wk, a, b }); else run = null;
-    marks += p.now ? `<circle cx="${p.x}" cy="${p.y}" r="18" fill="none" stroke="#e0a96c" stroke-opacity=".32"/><circle cx="${p.x}" cy="${p.y}" r="9" fill="#e0a96c" stroke="none"/>`
-      : tag.includes(i) ? `<circle cx="${p.x}" cy="${p.y}" r="7" fill="#dfe3e3" stroke="none"/><text class="v" x="${p.x}" y="${r(low(i) ? p.y + 44 : p.y - 22)}" stroke="none">${esc(deg(p.t))}</text>`
-      : `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="#a0a8ac" stroke="none"/>`;
-    if (p.now || i % every === 0) marks += `<text class="h${p.now ? " n" : ""}" x="${p.x}" y="${BASE + 40}" stroke="none">${esc(p.time)}</text>`;
+    marks += p.now ? `<circle cx="${p.x}" cy="${p.y}" r="18" fill="none" stroke="#e0a96c" stroke-opacity=".32" stroke-width="3"/><circle cx="${p.x}" cy="${p.y}" r="9" fill="#e0a96c"/>`
+      : tag.includes(i) ? `<circle cx="${p.x}" cy="${p.y}" r="7" fill="#dfe3e3"/><text class="v" x="${p.x}" y="${r(low(i) ? p.y + 44 : p.y - 22)}">${esc(deg(p.t))}</text>`
+      : `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="#a0a8ac"/>`;
+    if (p.now || i % every === 0) marks += `<text class="h${p.now ? " n" : ""}" x="${p.x}" y="${BASE + 40}">${esc(p.time)}</text>`;
     if (k && k !== prev && !p.now) {
       const wd = WORD[k].length * 14, cx = Math.min(Math.max(p.x, wd / 2), W - wd / 2);
-      if (cx - wd / 2 >= right + 18) { marks += `<text class="a" x="${r(cx)}" y="${BASE + 78}" stroke="none">${WORD[k]}</text>`; right = cx + wd / 2; }
+      if (cx - wd / 2 >= right + 18) { marks += `<text class="a" x="${r(cx)}" y="${BASE + 78}">${WORD[k]}</text>`; right = cx + wd / 2; }
     }
     if (k) prev = k;
   });
-  // The fill starts amber under "Now" and fades to nothing at the last hour.
-  const warm = pts[0].now ? "#e0a96c" : "#a0a8ac";
   return `<defs><linearGradient id="wx-fill" gradientUnits="userSpaceOnUse" x1="${X0}" y1="${TOP}" x2="${X1}" y2="${BASE}">
-    <stop offset="0" stop-color="${warm}" stop-opacity=".17"/><stop offset=".5" stop-color="#a0a8ac" stop-opacity=".07"/>
+    <stop offset="0" stop-color="${pts[0].now ? "#e0a96c" : "#a0a8ac"}" stop-opacity=".17"/><stop offset=".5" stop-color="#a0a8ac" stop-opacity=".07"/>
     <stop offset="1" stop-color="#a0a8ac" stop-opacity="0"/></linearGradient></defs>
     <path d="${line}L${pts[n - 1].x} ${BASE}L${pts[0].x} ${BASE}Z" fill="url(#wx-fill)"/>
     <path d="M${pts[0].x} ${BASE}H${pts[n - 1].x}" fill="none" stroke="#242d34" stroke-width="3"/>
     <path d="${line}" fill="none" stroke="#c3cacc" stroke-width="5" stroke-linecap="round"/>
     <g fill="none" stroke="#6f879b" stroke-width="8" stroke-linecap="round">${wet.map(s =>
-      `<path d="M${r(s.a)} ${BASE}H${r(s.b)}"${s.k === "snow" ? ' stroke-dasharray="1 16"' : ""}/>`).join("")}</g>
-    <g stroke="#e0a96c" stroke-width="3">${marks}</g>`;
+      `<path d="M${r(s.a)} ${BASE}H${r(s.b)}"${s.k === "snow" ? ' stroke-dasharray="1 16"' : ""}/>`).join("")}</g>${marks}`;
 };
 
-// Sections: each returns the HTML for its data-slot
 const agendaShown = () => { const a = state.agenda, start = Math.max(0, a.findIndex(e => e.now)), shown = a.slice(start, start + SHOW.agenda);
   return { shown, more: a.length - start - shown.length }; };
 // The first alert goes first. Only it is drawn as an alert.
@@ -518,7 +491,7 @@ const SECTION = {
     if (!shown.length) return `<p class="empty it">A clear ${dayPart()}</p>`;
     return `<ol class="ag${shown.length < 3 ? " few" : ""}">${shown.map((e, i) =>
       `<li class="${e.now ? "now" : ""}${i === shown.length - 1 ? " end" : ""}"><span class="t num">${esc(e.time)}</span><i class="nd"></i>` +
-      `<span class="what"><span class="ti" data-lines="${e.where ? 1 : 2}">${esc(e.title)}</span><span class="wh" data-lines="1">${esc(e.where)}</span></span></li>`).join("")}</ol>`;
+      `<span><span class="ti" data-lines="${e.where ? 1 : 2}">${esc(e.title)}</span><span class="wh" data-lines="1">${esc(e.where)}</span></span></li>`).join("")}</ol>`;
   },
   notes() {
     const n = state.notes, lines = n.length > 2 ? 2 : n.length === 2 ? 3 : 5;
@@ -528,7 +501,7 @@ const SECTION = {
   status() {
     const s = statusOrder().slice(0, SHOW.status);
     if (!s.length) return `<p class="empty it">All quiet at home</p>`;
-    return `<ul class="hm">${s.map((c, i) => `<li${i === 0 && c.alert ? ' class="alert"' : ""}><svg class="ic" viewBox="0 0 48 48" aria-hidden="true"><use href="#i-${homeIcon(c)}"/></svg>` +
+    return `<ul class="hm">${s.map((c, i) => `<li${i === 0 && c.alert ? ' class="alert"' : ""}><svg class="ic" viewBox="0 0 48 48" aria-hidden="true">${homeIcon(c)}</svg>` +
       `<span class="cx"><span class="cv" data-lines="1">${esc(c.value)}</span><span class="cl" data-lines="1">${esc(c.label)}</span></span></li>`).join("")}</ul>`;
   },
 };
@@ -536,26 +509,28 @@ const SECTION = {
 // Views
 const VIEWS = {
   board() {
-    const c = clock(), title = state.title ?? `Good ${dayPart()}`, hour = hourNow(), time = $("time");
-    $("hm").innerHTML = c.m == null ? esc(c.h) : `${esc(c.h)}<b></b>${esc(c.m)}`;
+    const c = clock(), title = state.title ?? `Good ${dayPart()}`, hour = hourNow(), time = $("time"), now = new Date();
+    $("hm").innerHTML = `${esc(c.h)}<b></b>${esc(c.m)}`;
     $("ampm").textContent = c.ampm;
     $("ampm").hidden = !c.ampm;
     // A wider fallback font or a long hour must not reach the agenda column.
     time.style.fontSize = "";
     if (time.scrollWidth > 1040) time.style.fontSize = Math.floor(320 * 1040 / time.scrollWidth) + "px";
-    $("dow").textContent = fmt({ weekday: "long" }).format(new Date());
-    $("dmy").textContent = fmt({ month: "long", day: "numeric" }).format(new Date());
+    $("dow").textContent = fmt({ weekday: "long" }).format(now);
+    $("dmy").textContent = fmt({ month: "long", day: "numeric" }).format(now);
     $("ag-h").textContent = hour >= 17 || hour < 4 ? "Tonight" : "Today";
     $("title").classList.toggle("long", title.length > 26);
     show($("title"), esc(title));
 
     const more = state.agenda ? agendaShown().more : 0, notesMore = state.notes ? state.notes.length - SHOW.notes : 0;
     $("x-weather").textContent = asOf("weather");
-    // A count and an age can both show: the agenda on two lines, the notes on one.
     $("x-agenda").textContent = [more > 0 && `${more} more later`, asOf("agenda")].filter(Boolean).join("\n");
     $("x-notes").textContent = [notesMore > 0 && `${notesMore} more`, asOf("notes")].filter(Boolean).join(" · ");
     $("x-status").textContent = asOf("status");
-    for (const k in SECTION) slot(k, state[k] && SECTION[k]());
+    for (const k in SECTION) {
+      const el = document.querySelector(`[data-slot="${k}"]`);
+      if (state[k]) show(el, SECTION[k]()); else { delete el.dataset.html; tv.pending(k, PENDING[k]); }
+    }
 
     // Status items keep their natural width. Drop from the end until the row fits.
     const row = document.querySelector(".hm"), items = row ? [...row.children] : [];
@@ -573,23 +548,19 @@ const VIEWS = {
 const fail = msg => { throw new Error(msg); };
 const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
 const EX = {
-  weather: '{"now":{"temp":48,"condition":"Partly cloudy","high":54,"low":41},"hours":[{"time":"9 PM","temp":46,"condition":"Cloudy"}],"unit":"F"}',
-  now: '{"temp":48,"condition":"Partly cloudy","high":54,"low":41}', hour: '{"time":"9 PM","temp":46,"condition":"Cloudy"}',
-  event: '{"time":"7:00 PM","title":"Family dinner","where":"Kitchen","now":true}',
+  hour: '{"time":"9 PM","temp":46,"condition":"Cloudy"}', event: '{"time":"7:00 PM","title":"Family dinner","where":"Kitchen","now":true}',
   status: '{"label":"Front door","value":"Locked","alert":false}',
 };
-// A bad value names what was sent, and says to send a real one or leave the patch key out.
 const bad = (path, want, v) => fail(`${path} must be ${want}; got ${v === undefined ? "nothing" : cut(JSON.stringify(v), 40)}. ` +
   `Send a real value, or leave "${path.split(/[.[]/)[0]}" out of the patch.`);
-// Text is trimmed, and longer than max it is cut at a word with "…". A number is taken as text.
-// Placeholder text like "<hour>", "{...}" or "..." is refused.
+// Text longer than max is cut at a word. Placeholder text like "<hour>", "{...}" or "..." is refused.
 const str = (v, path, ex, max = 80) => {
   if (typeof v === "number" && isFinite(v)) v = String(v);
   if (typeof v !== "string" || !v.trim() || /^\s*(<[^<>]*>|\{[^{}]*\}|\[[^[\]]*\]|\.\.\.|…)\s*$/.test(v)) bad(path, `real text, like ${ex}`, v);
   v = v.trim().replace(/\s+/g, " ");
   if (v.length <= max) return v;
   const sp = v.lastIndexOf(" ", max - 1);
-  return v.slice(0, sp > max * .6 ? sp : max - 1).replace(/[\s,;:.!?–—-]+$/, "") + "…";
+  return v.slice(0, sp > max * .6 ? sp : max - 1).replace(TRAIL, "") + "…";
 };
 const num = (v, path) => {
   if (typeof v === "string" && v.trim() && isFinite(v)) v = Number(v);
@@ -597,11 +568,9 @@ const num = (v, path) => {
 };
 const bool = (v, path) => typeof v === "boolean" ? v : fail(`${path} must be true or false.`);
 const list = (v, path, ex) => Array.isArray(v) ? v.slice(0, KEEP) : bad(path, `a list like [${ex}]`, v);
-// An object. Unknown fields are reported in the ignored list.
 const obj = (v, path, ex, fields) => {
   if (!isObj(v)) bad(path, `an object like ${ex}`, v);
   for (const k in v) if (!fields.includes(k)) ignored.push(`${path}.${k}`);
-  return v;
 };
 const agendaItem = (v, p) => {
   obj(v, p, EX.event, ["time", "title", "where", "now"]);
@@ -641,10 +610,10 @@ const PATCH = {
   dim(v) { state.dim = bool(v, "dim"); },
   weather(v) {
     if (v == null) { state.weather = null; return; }
-    obj(v, "weather", `${EX.weather}, or null to show it as pending`, ["now", "hours", "unit"]);
+    obj(v, "weather", '{"now":{"temp":48,"condition":"Partly cloudy","high":54,"low":41},"hours":[' + EX.hour + '],"unit":"F"}, or null to show it as pending', ["now", "hours", "unit"]);
     const w = state.weather || { now: {}, hours: [], unit: "F" };
     if (v.now != null) {
-      obj(v.now, "weather.now", EX.now, ["temp", "condition", "high", "low"]);
+      obj(v.now, "weather.now", '{"temp":48,"condition":"Partly cloudy","high":54,"low":41}', ["temp", "condition", "high", "low"]);
       for (const k of ["temp", "high", "low"]) if (k in v.now) w.now[k] = v.now[k] == null ? null : num(v.now[k], `weather.now.${k}`);
       if ("condition" in v.now) w.now.condition = v.now.condition == null ? "" : str(v.now.condition, "weather.now.condition", '"Partly cloudy"', 40);
     }

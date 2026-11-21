@@ -8,7 +8,7 @@
 
      Patch keys. apply() runs them in this order, whatever order you send them in. data runs before question, and
      question runs before the keys that act on the current question (picks, scores, double), so {question:8, double:true}
-     doubles question 8. countdown runs last, because it needs the view that question, view and reveal set.
+     doubles question 8. countdown runs last, after question, view and reveal have set the view.
        {demo:true}                 loads the sample game (or open the file with ?demo)
        {reset:true}                clears picks, scores and double and goes back to the lobby
        {data:{title:"Friday Quiz Night", players:[{id:"mia",name:"Mia"}], questions:[{category:"Space",
@@ -61,7 +61,7 @@
 <style>
   @font-face { font-family: "Bricolage"; src: url(fonts/bricolage.woff2) format("woff2"); font-weight: 200 800; font-display: swap; }
   :root { --bg: #2a0c8c; --lift: #4a22d6; --ghost: #6a48ee; --ink: #17063f; --text: #fff6e4; --dim: #d9ccff;
-    --accent: #ffc93c; --coral: #ff6f59; }
+    --accent: #ffc93c; --coral: #ff6f59; --slab: linear-gradient(var(--lift), var(--lift)); }
 
   /* Layout */
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
@@ -74,8 +74,9 @@
   [data-view] { position: absolute; inset: 60px 80px 140px; display: grid; }
   [data-view][hidden] { display: none; }
   [data-view] > * { position: relative; }
-  .caps { color: var(--dim); font-size: 28px; font-weight: 750; line-height: 1.2; letter-spacing: .16em; text-transform: uppercase;
-    white-space: nowrap; }
+  .caps, #l-players.tv-pending, #l-cats.tv-pending, #b-rows.tv-pending { color: var(--dim); font-size: 28px; font-weight: 750;
+    line-height: 1.2; letter-spacing: .16em; text-transform: uppercase; }
+  .caps { white-space: nowrap; }
   .caps b { color: var(--text); font-weight: 800; }
   .enter { animation: enter 260ms ease-out; }
   @keyframes enter { from { opacity: 0; transform: translateY(16px); } }
@@ -119,8 +120,8 @@
   #l-players, #l-cats { grid-row: 3; align-self: end; min-height: 236px; }
   #l-players { grid-column: 1; width: 1140px; }
   #l-cats { grid-column: 2; }
-  /* Up to 4 players: big tokens in columns that grow with the name. .wrap (names too long for one line) and .many
-     (5 to 8 players, a roster with the name beside the token) wrap names in 4 even columns. No name is ever cut. */
+  /* Up to 4 players: big tokens in columns that grow with the name. .wrap (a name too long for one line) and .many
+     (5 to 8 players, the name beside the token) put names in 4 even columns. No name is ever cut. */
   .players { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(264px, max-content); justify-content: start;
     gap: 22px 28px; margin-top: 22px; }
   .players li { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -137,20 +138,18 @@
   .cats { margin-top: 18px; font-size: 38px; font-weight: 700; line-height: 1.28; letter-spacing: -.01em; max-height: 196px;
     overflow: hidden; }
   .cats i { font-style: normal; color: var(--accent); font-weight: 800; padding: 0 .08em; }
-  #l-players.tv-pending, #l-cats.tv-pending, #b-rows.tv-pending { color: var(--dim); font-size: 28px; font-weight: 750;
-    letter-spacing: .16em; text-transform: uppercase; line-height: 1.2; }
   #l-players.tv-pending::after, #l-cats.tv-pending::after { width: 100%; height: 118px; margin-top: 26px; border-radius: 0;
     background: radial-gradient(circle at 59px 59px, var(--lift) 57px, transparent 59px) 0 0 / 300px 118px repeat-x; }
-  #l-cats.tv-pending::after { background: linear-gradient(var(--lift), var(--lift)) 0 0 / 88% 36px no-repeat,
-    linear-gradient(var(--lift), var(--lift)) 0 72px / 56% 36px no-repeat; }
+  #l-cats.tv-pending::after { background: var(--slab) 0 0 / 88% 36px no-repeat, var(--slab) 0 72px / 56% 36px no-repeat; }
 
   /* Question, and its reveal. Grid rows are positional: .meta, #q-text, #q-answers, #q-strip (the rest is absolute).
      Add a row here when you add a line, in the same place as its element in the markup. */
   #v-question { inset: 60px 80px 60px; grid-template: 48px minmax(0, 1fr) auto 100px / minmax(0, 1fr); }
   #clock { left: 1290px; top: -150px; width: 600px; height: 600px; padding: 120px 30px 0 0; }
-  #clock.run { background: conic-gradient(var(--accent) 0 var(--a), #e0a416 calc(var(--a) + .4deg)); color: var(--ink); }
-  #clock.low { background: conic-gradient(var(--coral) 0 var(--a), #dc4a34 calc(var(--a) + .4deg)); color: var(--ink); }
-  #clock.up { background: var(--coral); color: var(--ink); }
+  #clock.run { background: conic-gradient(var(--accent) 0 var(--a), #e0a416 calc(var(--a) + .4deg)); }
+  #clock.low { background: conic-gradient(var(--coral) 0 var(--a), #dc4a34 calc(var(--a) + .4deg)); }
+  #clock.up { background: var(--coral); }
+  #clock.run, #clock.low, #clock.up { color: var(--ink); }
   #clock.stat { color: var(--text); }
   #c-num { font-size: 300px; font-weight: 800; line-height: .86; letter-spacing: -.035em; }
   #clock.up #c-num { width: 330px; font-size: 104px; line-height: .92; letter-spacing: -.02em; }
@@ -163,7 +162,7 @@
   .pips i.done { background: var(--dim); }
   .pips i.now { width: 52px; height: 16px; background: var(--accent); }
   #q-cat { color: var(--accent); overflow: hidden; text-overflow: ellipsis; }
-  /* A sticker on top of the clock (#clock.dbl moves the number down for it), outlined in ink so it holds on yellow too */
+  /* A sticker on the clock (#clock.dbl moves the number down for it), outlined in ink so it holds on yellow too */
   #q-double { position: absolute; left: 1300px; top: 18px; z-index: 1; padding: 8px 22px 6px; border-radius: 16px;
     background: var(--accent); color: var(--ink); font-size: 32px; box-shadow: 0 0 0 6px var(--ink); transform: rotate(-3deg); }
   #q-double b { color: inherit; font-size: 1.3em; line-height: 1; letter-spacing: .02em; }
@@ -177,8 +176,7 @@
     height: 168px; border-radius: 30px; background: var(--lift); }
   .ans .num { align-self: stretch; display: grid; place-items: center; border-radius: 30px 0 0 30px; background: var(--text);
     color: var(--ink); font-size: 112px; font-weight: 800; line-height: 1; letter-spacing: -.04em; }
-  .ans .body { display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 0; height: 100%;
-    padding: 0 34px; box-sizing: border-box; }
+  .ans .body { display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 0; height: 100%; padding: 0 34px; }
   .ans .txt { font-size: 54px; font-weight: 700; line-height: 1.06; letter-spacing: -.012em; overflow: hidden; flex: none; }
   .ans.ok { z-index: 2; background: var(--accent); color: var(--ink); box-shadow: 0 14px 0 var(--ink); transform: scale(1.03); }
   .ans.ok .num { background: var(--ink); color: var(--accent); }
@@ -197,7 +195,7 @@
   .strip .caps { margin-right: 12px; }
 
   /* Scoreboard: a bar race */
-  #v-scoreboard { grid-template: auto auto auto auto / minmax(0, 1fr); align-content: start; }
+  #v-scoreboard { grid-template-columns: minmax(0, 1fr); align-content: start; }
   #b-title { font-size: 168px; font-weight: 800; line-height: .9; letter-spacing: -.02em; margin: 12px 0 0 -6px; }
   #b-disc { left: 1440px; top: -160px; width: 380px; height: 380px; padding-top: 100px; color: var(--text); }
   #b-disc.final { background: var(--accent); color: var(--ink); }
@@ -206,13 +204,12 @@
   #b-disc b svg { width: 160px; height: 140px; }
   #b-disc .caps { color: inherit; margin-top: 4px; }
   #b-art { left: 1060px; top: -60px; width: 420px; height: 290px; }
-  /* Columns: rank, token, name (as wide as the longest name), bar and score, change on the last question */
-  .cols, .row { --tk: 92px; display: grid; grid-template-columns: var(--rk, 84px) var(--tk) var(--nw, 400px) minmax(0, 1fr) 170px;
+  .cols { display: grid; justify-items: end; align-items: center; margin: 56px 0 14px; min-height: 34px; }
+  /* Row columns: rank, token, name (as wide as the longest name), bar and score, change on the last question */
+  .row { --tk: 92px; display: grid; grid-template-columns: var(--rk, 84px) var(--tk) var(--nw, 400px) minmax(0, 1fr) 170px;
     column-gap: 28px; align-items: center; }
-  .cols { margin: 56px 0 14px; min-height: 34px; }
-  .cols span { grid-column: 1 / -1; justify-self: end; }
   .rows { display: grid; grid-auto-rows: var(--row); gap: 16px; }
-  .tight .row, .cols.tight { --tk: 54px; --rk: 60px; }
+  .tight .row { --tk: 54px; --rk: 60px; }
   .row .tok { --s: var(--tk); }
   .row .num { justify-self: start; display: grid; place-items: center; width: 84px; height: 84px; border-radius: 50%;
     color: var(--dim); font-size: 64px; font-weight: 800; line-height: 1; letter-spacing: -.04em; }
@@ -234,16 +231,14 @@
   .tight .name { font-size: var(--ns, 40px); }
   .tight .delta { font-size: 40px; }
   /* Before anyone has points: no ranks, and each bar is an empty lane with the player's color at the start */
-  .zero .row, .cols.zero { grid-template-columns: var(--tk) var(--nw, 400px) minmax(0, 1fr); }
+  .zero .row { grid-template-columns: var(--tk) var(--nw, 400px) minmax(0, 1fr); }
   .zero .bar { flex: 1; height: 44%; background: linear-gradient(90deg, var(--c) 26px, var(--lift) 26px); }
   .zero .score { color: var(--dim); }
   .tight .score { font-size: 62px; }
   #b-rows.tv-pending { display: block; align-self: end; }
   #b-rows.tv-pending::after { width: 100%; height: 420px; margin-top: 30px; border-radius: 0;
-    background: linear-gradient(var(--lift), var(--lift)) 0 0 / 62% 92px no-repeat,
-      linear-gradient(var(--lift), var(--lift)) 0 108px / 46% 92px no-repeat,
-      linear-gradient(var(--lift), var(--lift)) 0 216px / 34% 92px no-repeat,
-      linear-gradient(var(--lift), var(--lift)) 0 324px / 20% 92px no-repeat; }
+    background: var(--slab) 0 0 / 62% 92px no-repeat, var(--slab) 0 108px / 46% 92px no-repeat,
+      var(--slab) 0 216px / 34% 92px no-repeat, var(--slab) 0 324px / 20% 92px no-repeat; }
 </style>
 <body>
 <div id="stage">
@@ -348,7 +343,6 @@ const SAMPLE = {
 
 // The per-question state: each is a map keyed by question number, like double: {8: true}. Add a new one here.
 const PER_QUESTION = ["picks", "scores", "double"];
-// A new game on the same title, players and questions.
 const newGame = () => ({ view: "lobby", question: 1, reveal: false, ...Object.fromEntries(PER_QUESTION.map(k => [k, {}])),
   last: 0,                      // the question that last got scores; the scoreboard shows its points
   clock: { seconds: 0, ends: 0 } });  // ends is the Date.now() when time is up; 0 means no clock
@@ -361,17 +355,16 @@ const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
 // h("li", {class: "x"}, ...children) builds an element. Text children are escaped; {svg: "..."} sets a constant icon.
 const h = (tag, props, ...kids) => {
   const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(props || {})) {
-    if (v == null || v === false) continue;
+  for (const [k, v] of Object.entries(props)) {
     if (k === "class") e.className = v; else if (k === "style") e.style.cssText = v;
-    else if (k === "svg") e.innerHTML = v; else e.setAttribute(k, v);
+    else if (k === "svg") e.innerHTML = v ?? ""; else e.setAttribute(k, v);
   }
-  for (const c of kids.flat(Infinity)) if (c != null && c !== false) e.append(c);
+  e.append(...kids.flat().filter(c => c != null && c !== false));
   return e;
 };
 const fill = (el, ...kids) => { el.classList.remove("tv-pending"); el.replaceChildren(...kids); };
 const restart = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
-// Shrinks type until it fits its box. Measured, so it also holds with fallback fonts.
+// Shrinks type until it fits its box, measured, so it holds with fallback fonts too.
 const fitText = (el, max, min, maxH) => {
   let s = max;
   el.style.fontSize = s + "px";
@@ -396,10 +389,6 @@ const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke
 const CROWN = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 8.5l4.6 3.8L12 5.5l4.4 6.8L21 8.5 19.3 18H4.7z"/></svg>';
 // Player colors, by join order. Sunflower is left out: it is the accent.
 const COLORS = ["#ff6f59", "#5cc8ff", "#3fe0b0", "#ff8ad8", "#ff9a3d", "#9be564", "#b79cff", "#fff6e4"];
-const STAR = Array.from({ length: 10 }, (_, i) => {
-  const r = i % 2 ? 27 : 47, a = -Math.PI / 2 + i * Math.PI / 5;
-  return (i ? "L" : "M") + (50 + r * Math.cos(a)).toFixed(1) + " " + (55 + r * Math.sin(a)).toFixed(1);
-}).join("");
 // One shape per player: [svg, stroke width that rounds its corners, letter size factor, letter offset].
 const SHAPES = [
   ['<circle cx="50" cy="50" r="46"/>', 0, .46, 0],
@@ -407,7 +396,7 @@ const SHAPES = [
   ['<path d="M50 12 92 87H8Z"/>', 10, .34, .13],
   ['<path d="M50 7 93 50 50 93 7 50Z"/>', 8, .38, 0],
   ['<path d="M50 6 88 28V72L50 94 12 72V28Z"/>', 6, .42, 0],
-  [`<path d="${STAR}Z"/>`, 7, .3, .05],
+  ['<path d="M50 8 65.9 33.2 94.7 40.5 75.7 63.3 77.6 93 50 82 22.4 93 24.3 63.3 5.3 40.5 34.1 33.2Z"/>', 7, .3, .05],
   ['<path d="M50 7 93 38 77 90H23L7 38Z"/>', 6, .4, .05],
   ['<path d="M50 5 90 17V47C90 70 73 87 50 95 27 87 10 70 10 47V17Z"/>', 0, .4, -.02],
 ];
@@ -439,8 +428,8 @@ const confetti = (w, ht, pieces) => `<svg viewBox="0 0 ${w} ${ht}" aria-hidden="
 // A filled shape with an ink outline, so it holds on any ground. A waiting token is the outline only.
 function token(id, waiting, small) {
   const i = state.players.findIndex(p => p.id === id), first = s => [...s][0].toUpperCase();
-  // One letter, or two when another player's name starts with the same letter. Small tokens keep to one: two would
-  // be too small to read, and the shape and color still tell the players apart.
+  // Two letters when another player's name starts with the same letter. Small tokens keep to one: the shape and
+  // color still tell the players apart.
   const twin = !small && state.players.some((p, j) => j !== i && first(p.name) === first(state.players[i].name));
   const letters = [...state.players[i].name].slice(0, twin ? 2 : 1).join("").replace(/^./u, first);
   const [shape, sw, f, dy] = SHAPES[i];
@@ -544,16 +533,14 @@ const VIEWS = {
     $("b-title").textContent = final ? "Final scores" : "Scoreboard";
     $("b-art").innerHTML = final && n ? confetti(420, 290, ART.final) : "";
     $("b-art").className = "art" + (fresh ? " go" : "");
-    const rows = $("b-rows"), cols = $("b-cols");
-    if (!n) { cols.replaceChildren(); rows.className = "rows"; return tv.pending("standings", "Waiting for players"); }
+    const rows = $("b-rows");
+    if (!n) { $("b-cols").replaceChildren(); rows.className = "rows"; return tv.pending("standings", "Waiting for players"); }
     const ranked = state.players.map((p, i) => ({ p, i, score: total(p.id) })).sort((a, b) => b.score - a.score || a.i - b.i);
-    // zero: nobody has points yet. The rows are a start line: no ranks, no changes, empty lanes.
     const top = Math.max(0, ranked[0].score), zero = !ranked.some(r => r.score);
-    const rowH = Math.min(133, Math.floor((580 - (n - 1) * 16) / n)), tight = rowH < 92 ? " tight" : "";
-    rows.className = "rows" + tight + (zero ? " zero" : "") + (fresh ? " grow" : "");
+    const rowH = Math.min(133, Math.floor((580 - (n - 1) * 16) / n)), tight = rowH < 92;
+    rows.className = "rows" + (tight ? " tight" : "") + (zero ? " zero" : "") + (fresh ? " grow" : "");
     rows.style.setProperty("--row", rowH + "px");
-    cols.className = "cols caps" + tight + (zero ? " zero" : "");
-    cols.replaceChildren(zero ? h("span", {}, "No points yet") : last ? h("span", {}, `Question ${last}`) : "");
+    $("b-cols").replaceChildren(zero ? h("span", {}, "No points yet") : last ? h("span", {}, `Question ${last}`) : "");
     fill(rows, ...ranked.map(r => {
       const rank = ranked.findIndex(o => o.score === r.score) + 1, isLead = lead.includes(r.p.id), d = points(last, r.p.id);
       return h("li", { class: "row" + (isLead ? " top" : ""), id: `rank-${r.p.id}`,
@@ -565,28 +552,25 @@ const VIEWS = {
           // One crown for one leader. A tie says so, and keeps the gold rank on each tied row.
           h("i", { class: "bar" }, isLead && h("span", { class: "lead", svg: tie ? null : CROWN }, tie ? "Tied" : final ? "Winner" : "Leader")),
           h("span", { class: "score" }, signed(r.score))),
-        !zero && (last ? h("span", { class: "delta" + (d > 0 ? " up" : "") }, d > 0 ? `+${d}` : signed(d)) : h("span")));
+        !zero && (last ? h("span", { class: "delta" + (d > 0 ? " up" : "") }, d > 0 ? `+${d}` : signed(d)) : h("span", {})));
     }));
-    // The name column is as wide as the longest name, so the bars start close to the names. Long names shrink to fit.
+    // The name column is as wide as the longest name. Long names shrink to fit.
     const names = [...rows.querySelectorAll(".name")], widest = () => Math.max(...names.map(e => e.scrollWidth));
     rows.style.setProperty("--nw", "660px");
     rows.style.removeProperty("--ns");
     for (let ns = tight ? 40 : 52; ns > 32 && widest() > 644;) rows.style.setProperty("--ns", (ns -= 2) + "px");
-    const nw = Math.min(660, widest() + 16) + "px";
-    rows.style.setProperty("--nw", nw);
-    cols.style.setProperty("--nw", nw);
+    rows.style.setProperty("--nw", Math.min(660, widest() + 16) + "px");
   },
 };
 
 // The clock disc on the question view. It is drawn on its own, so the tick never redraws the view.
 function drawClock() {
-  const q = state.questions[state.question - 1], picks = state.picks[state.question] || {}, n = state.players.length;
-  const { seconds, ends } = state.clock, left = secondsLeft();
+  const n = state.question, picks = state.picks[n] || {}, { seconds, ends } = state.clock, left = secondsLeft();
   let look = "", big = "?", label = "";
-  if (state.reveal && q && n && Object.keys(picks).length) {
+  if (state.reveal && Object.keys(picks).length) {
     look = "stat";
-    big = state.players.filter(p => picks[p.id] === q.correct).length;
-    label = `of ${n} right`;
+    big = state.players.filter(p => picks[p.id] === state.questions[n - 1].correct).length;
+    label = `of ${state.players.length} right`;
   } else if (ends && !left) { look = "up"; big = "Time’s up"; }
   else if (ends) {
     look = left <= 5 ? "low" : "run";
@@ -596,7 +580,7 @@ function drawClock() {
     const a = left / seconds * 360;
     $("clock").style.setProperty("--a", (a > 350 ? 360 : a).toFixed(1) + "deg");
   }
-  $("clock").className = "disc " + look + (state.double[state.question] ? " dbl" : "");
+  $("clock").className = "disc " + look + (state.double[n] ? " dbl" : "");
   $("c-num").textContent = big;
   $("c-cap").textContent = label;
 }
@@ -608,8 +592,6 @@ function tick() {
   if (ms > 0) ticker = setTimeout(tick, ms % 1000 + 10);
 }
 
-// ---------- patch handlers ----------
-// Checks one text value. A number is not text: the error asks for "88", not 88.
 const text = (v, max, what) => {
   if (typeof v !== "string" || !v.trim())
     fail(`${what} must be a non-empty string` + (typeof v === "number" ? `: send "${v}", not ${v}` : ""));
@@ -619,17 +601,18 @@ const text = (v, max, what) => {
 const yesNo = (v, key) => typeof v === "boolean" || fail(`${key} must be true or false`);
 const needQuestions = key => state.questions.length ||
   fail(`Send questions before ${key}: {"data":{"questions":[{"text":"…","answers":["A","B","C","D"],"correct":1}]}}`);
-function forPlayers(map, key, example, each) {
-  const ids = state.players.map(p => p.id);
+// Sets each player's value in the current question's map state[key]: null clears it, valid(v) keeps it.
+function forPlayers(map, key, example, valid, must) {
+  const ids = state.players.map(p => p.id), cur = state[key][state.question] ??= {};
   if (!ids.length) fail(`Send players before ${key}: {"addPlayer":"Mia"}`);
   if (!isObj(map)) fail(`${key} maps player ids to numbers, like {"${key}":{"${ids[0]}":${example}}}`);
   for (const [id, v] of Object.entries(map)) {
     if (!ids.includes(id)) fail(`Unknown player "${id}" in ${key}. Player ids are: ${ids.join(", ")}`);
-    each(id, v);
+    if (v === null) delete cur[id]; else if (valid(v)) cur[id] = v; else fail(`${key}.${id} must be ${must}`);
   }
 }
 
-// One handler per patch key, run in this order (see the header for why). Each checks its value and changes state only.
+// One handler per patch key, run in this order (see the header).
 const PATCH = {
   demo(v) { yesNo(v, "demo"); if (v) Object.assign(state, structuredClone(SAMPLE), newGame()); },
 
@@ -695,22 +678,13 @@ const PATCH = {
 
   picks(map) {
     needQuestions("picks");
-    const cur = state.picks[state.question] ??= {};
-    forPlayers(map, "picks", 2, (id, v) => {
-      if (v === null) delete cur[id];
-      else if ([1, 2, 3, 4].includes(v)) cur[id] = v;
-      else fail(`picks.${id} must be an answer number 1 to 4, or null to clear it`);
-    });
+    forPlayers(map, "picks", 2, v => [1, 2, 3, 4].includes(v), "an answer number 1 to 4, or null to clear it");
   },
 
   scores(map) {
     needQuestions("scores");
-    const cur = state.scores[state.question] ??= {};
-    forPlayers(map, "scores", 1, (id, v) => {
-      if (v === null) delete cur[id];
-      else if (Number.isInteger(v) && Math.abs(v) <= 1000) cur[id] = v;
-      else fail(`scores.${id} must be the points won on question ${state.question}, a whole number like 1, 0 or -1`);
-    });
+    forPlayers(map, "scores", 1, v => Number.isInteger(v) && Math.abs(v) <= 1000,
+      `the points won on question ${state.question}, a whole number like 1, 0 or -1`);
     state.last = state.question;
   },
 

@@ -14,12 +14,13 @@
        answer     {"answer":"Mars is about *225 million* kilometres from Earth today."}
                   at most 16 words and 110 characters; star one phrase for the accent
        context    {"context":"Its light takes about 12.5 minutes to reach us."}     one sentence, 40 words, 240 characters
-       facts     {"facts":[{"value":"12.5 min","label":"Light travel time"}]}      1 to 3; value at most 16 characters,
+       facts      {"facts":[{"value":"12.5 min","label":"Light travel time"}]}      1 to 3; value at most 16 characters,
                   label at most 40; "12.5 min" shows as numeral and unit
        compare    {"compare":{"title":"Distance from Earth today","unit":"million km","items":[{"label":"Venus","value":118},
                     {"label":"Mars","value":225,"highlight":true,"note":"1.5× the Sun’s distance"}]}}
-                  1 to 5 bars, values of 0 or more; "highlight":true marks an item; a note (at most 32 characters,
-                  one item only) is drawn under its bar; replaces any table
+                  1 to 5 bars, values of 0 or more; the unit shows in the case given; "highlight":true marks an item;
+                  a note (at most 32 characters, one item only) shows under its bar only while that bar is highlighted,
+                  so it never stays under a bar the highlight left; replaces any table
        table      {"table":{"title":"Side by side","columns":["Laptop","Weight"],"rows":[["Model A","1.4 kg"]],"highlight":1}}
                   instead of compare; 2 to 4 columns, 1 to 4 rows, cells at most 18 characters; highlight is a row number.
                   A row of about 36 characters in all fits on one line; past that the widest column wraps
@@ -65,12 +66,15 @@
        7. PATCH: one handler named after the key, in the same position; it checks the value, takes null, and fails with an example
        8. SUMMARY: only if app.state() shows the new value badly (it shows text, or the text in a list or object)
      In the left column the fit and the solo layout pick up a new section by themselves; the right field only steps
-     down to .dense and .tight, then hides related questions. Then render each of these and check that nothing overlaps the Sources line: {"demo":true}; {"demo":true,"compare":null,"related":null};
-     {"clear":true,"<key>":...} (the rest pending); and that patch with "compare":null,"related":null. -->
+     down to .dense and .tight, then hides related questions. Absent sections collapse: with no chart (.nochart) the
+     related questions leave the panel and stand at the foot; with no chart and no related questions (.solo) the left
+     column takes the sheet. Then render each of these and check that nothing overlaps the Sources line: {"demo":true};
+     {"demo":true,"compare":null}; {"demo":true,"compare":null,"related":null}; {"clear":true,"<key>":...} (the rest
+     pending); and that patch with "compare":null,"related":null. -->
 <style>
-  @font-face { font-family: "Newsreader"; src: url(fonts/newsreader.woff2) format("woff2"); font-weight: 200 800; font-style: normal; }
+  @font-face { font-family: "Newsreader"; src: url(fonts/newsreader.woff2) format("woff2"); font-weight: 200 800; }
   @font-face { font-family: "Newsreader"; src: url(fonts/newsreader-italic.woff2) format("woff2"); font-weight: 200 800; font-style: italic; }
-  @font-face { font-family: "Inter"; src: url(fonts/inter.woff2) format("woff2"); font-weight: 100 900; font-style: normal; }
+  @font-face { font-family: "Inter"; src: url(fonts/inter.woff2) format("woff2"); font-weight: 100 900; }
 
   /* ---- Tokens */
   :root {
@@ -86,7 +90,7 @@
   #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden;
     color: var(--paper); background: radial-gradient(1500px 1100px at 12% 0%, #1a1611 0%, #100e0c 55%, #0b0a09 100%);
     font: 500 32px/1.3 var(--sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-  h1, h2, p, ol, table { margin: 0; }
+  h1, h2, p, ol { margin: 0; }
   ol { padding: 0; list-style: none; }
   .off { display: none !important; }
   .caps { font: 700 28px/1.2 var(--sans); letter-spacing: .13em; text-transform: uppercase; }
@@ -107,7 +111,7 @@
   #c.long { font-size: 34px; }
   #f { margin-top: auto; padding-top: 36px; }
 
-  /* Facts: a value like "12.5 min" is a numeral and a unit in small capitals. */
+  /* Facts */
   .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 44px; }
   .facts li { min-width: 0; padding-top: 20px; border-top: 2px solid var(--rule); }
   .facts .val { display: block; white-space: nowrap; overflow: hidden; line-height: 1; }
@@ -121,16 +125,16 @@
     background: linear-gradient(180deg, #1c1914 0%, #171511 60%, #14120f 100%); }
   .top { padding-top: 18px; border-top: 2px solid var(--paper); margin-bottom: 26px; }
   .top h2 { font: 600 38px/1.12 var(--serif); letter-spacing: -.005em; text-wrap: balance; }
-  .top p { margin-top: 10px; color: var(--muted); }
+  .top p { margin-top: 10px; color: var(--muted); letter-spacing: .04em; text-transform: none; }  /* the unit keeps its case: "m" is not "M" */
   #cmp:not(.off) ~ #rel { margin-top: auto; padding-top: 40px; }
 
-  .bars { --lw: max-content; --vw: 130px; }
+  .bars { --vw: 130px; }
   .bars li { position: relative; display: grid; grid-template-columns: var(--lw) minmax(0, 1fr); column-gap: 22px; align-items: center; }
   .bars .l { justify-self: start; max-width: 100%; color: var(--soft); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bars .plot { grid-column: 2; display: flex; align-items: center; gap: 14px; padding: 10px 0; border-left: 2px solid var(--muted); }
   .bars .plot i { flex: none; height: 36px; min-width: 4px; width: calc((100% - var(--vw)) * var(--p)); background: var(--bar); transform-origin: 0 50%; }
   .bars .v { font-weight: 650; font-variant-numeric: tabular-nums; color: var(--soft); white-space: nowrap; }
-  .bars .hi .l, .bars.m .l { color: var(--paper); font-weight: 750; }  /* fitChart measures with .m: every label and value bold */
+  .bars .hi .l, .bars.m .l { color: var(--paper); font-weight: 750; }
   .bars .hi .plot i { background: var(--accent); }
   .bars .hi .v, .bars.m .v { color: var(--paper); font-weight: 800; }
   .bars .hi::before, tr.hi > th::before, .rel .sel::before { content: ""; position: absolute; left: -36px; top: 18px; width: 16px; height: 20px;
@@ -145,14 +149,7 @@
 
   table { width: calc(100% + 16px); margin-left: -16px; border-collapse: collapse; font-size: var(--ts, 32px); line-height: 1.2; font-variant-numeric: tabular-nums; }
   th, td { padding: 19px 0 19px 16px; text-align: right; white-space: nowrap; border-bottom: 2px solid var(--rule); }
-  /* A table too wide at 28 px gets .wrap, and its widest headers and columns (.w) wrap, widest first. */
-  table.wrap th, table.wrap td { padding-left: 10px; }
-  table.wrap th:first-child { padding-left: 16px; }
-  table.wrap thead th { letter-spacing: .03em; }
-  table.wrap tbody th { font-size: 1em; }
-  table.wrap .w { white-space: normal; }
-  table.wrap thead .w span { display: inline-block; width: min-content; min-width: var(--cw); }
-  th:first-child, td:first-child { text-align: left; }
+  th:first-child { text-align: left; }
   th:last-child, td:last-child { padding-right: 16px; }
   thead th { padding-top: 0; padding-bottom: 14px; color: var(--muted); font: 700 28px/1.2 var(--sans); letter-spacing: .08em; text-transform: uppercase;
     border-bottom-color: var(--muted); box-sizing: border-box; }
@@ -160,7 +157,13 @@
   tbody td { font-weight: 550; color: var(--soft); }
   tbody tr:last-child > * { border-bottom: 0; }
   tbody tr.hi > *, table.m tbody tr > * { background: rgba(255, 93, 59, .14); color: var(--paper); font-weight: 750; }
-  tr.hi > th::before { left: -20px; top: 50%; margin-top: -10px; }
+  tr.hi > th::before { left: -20px; }
+  table.wrap th, table.wrap td { padding-left: 10px; }
+  table.wrap th:first-child { padding-left: 16px; }
+  table.wrap thead th { letter-spacing: .03em; }
+  table.wrap tbody th { font-size: 1em; }
+  table.wrap .w { white-space: normal; }
+  table.wrap thead .w span { display: inline-block; width: min-content; min-width: var(--cw); }
 
   .rel-h { color: var(--muted); padding-bottom: 14px; border-bottom: 2px solid var(--rule); }
   .rel li { position: relative; display: flex; align-items: center; gap: 22px; min-height: 84px; box-sizing: border-box; padding: 10px 0; border-bottom: 2px solid var(--rule);
@@ -173,11 +176,13 @@
   .rel li.sel { color: var(--paper); border-bottom-color: var(--accent); }
   .rel li.sel .t { -webkit-text-stroke: .7px; }
   .rel li.sel .n { background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 44px; }
-  .rel .sel::before { top: 50%; margin-top: -10px; }
+  tr.hi > th::before, .rel .sel::before { top: 50%; margin-top: -10px; }
   #cmp.off + #rel .rel-h { padding-top: 18px; border-top: 2px solid var(--paper); }
+  /* No chart: the panel goes and the related questions stand at its foot. */
+  .nochart .rail { background: none; }
+  .nochart #rel { margin-top: auto; }
 
-  /* fitText steps the right field down when it overflows: .dense, then .tight, then it hides related questions from
-     the end. With room to spare it adds .roomy. */
+  /* Set by fitText. */
   .dense .top { margin-bottom: 16px; }
   .dense .bars .plot { padding: 7px 0; }
   .dense .bars .plot i { height: 28px; }
@@ -207,7 +212,7 @@
   #stage #tv-status span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* Solo: no chart and no related questions. The headline takes the whole sheet and the facts stand in a column.
-     --rows is the number of sections in the left column; VIEWS.answer sets it from the markup. */
+     --rows is the number of sections in the left column; VIEWS.answer sets it. */
   .solo { grid-template-columns: minmax(0, 1fr); }
   .solo .rail { display: none; }
   .solo .main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: repeat(var(--rows), max-content) 1fr; column-gap: 112px;
@@ -319,368 +324,364 @@
 <!-- tv-kit:end -->
 <script>
 (() => {
-  // Demo data in patch form: {"demo":true} sends SAMPLE.bars through PATCH, {"demo":"table"} sends SAMPLE.table.
-  const SAMPLE = {
-    bars: {
-      question: "How far is Mars right now?",
-      answer: "Mars is about *225 million* kilometres from Earth today.",
-      context: "It is well past the Sun from our side of the orbit, so its light takes about twelve and a half minutes to reach us.",
-      facts: [{ value: "12.5 min", label: "Light travel time" }, { value: "1.5 AU", label: "In Earth–Sun distances" },
-        { value: "26 mo", label: "Between close approaches" }],
-      compare: { title: "Distance from Earth today", unit: "million km", items: [{ label: "Venus", value: 118 }, { label: "Sun", value: 148 },
-        { label: "Mars", value: 225, highlight: true, note: "1.5× the Sun’s distance" }, { label: "Jupiter", value: 765 }] },
-      related: ["How long would a trip to Mars take?", "When is Mars closest to Earth next?",
-        "Can I see Mars in the sky tonight?", "How big is Mars next to Earth?"],
-      sources: ["orbitdata.example", "skyalmanac.example"],
-    },
-    table: {
-      question: "Compare these three laptops",
-      answer: "*Model B* is the best pick for most people.",
-      context: "It lasts as long as Model A on a charge, weighs less, and costs $500 less than Model C.",
-      facts: [{ value: "$999", label: "Model B price" }, { value: "18 h", label: "Battery, Models A and B" },
-        { value: "1.1 kg", label: "Lightest: Model C" }],
-      table: { title: "Side by side", columns: ["Laptop", "Weight", "Battery", "Price"], highlight: 2,
-        rows: [["Model A", "1.4 kg", "18 h", "$1,199"], ["Model B", "1.2 kg", "18 h", "$999"], ["Model C", "1.1 kg", "12 h", "$1,499"]] },
-      related: ["Which one has the best screen?", "Which is best for photo editing?", "Show their prices over the last year"],
-      sources: ["laptoplab.example", "reviewdesk.example"],
-    },
-  };
+// Demo data in patch form: {"demo":true} sends SAMPLE.bars through PATCH, {"demo":"table"} sends SAMPLE.table.
+const SAMPLE = {
+  bars: {
+    question: "How far is Mars right now?",
+    answer: "Mars is about *225 million* kilometres from Earth today.",
+    context: "It is well past the Sun from our side of the orbit, so its light takes about twelve and a half minutes to reach us.",
+    facts: [{ value: "12.5 min", label: "Light travel time" }, { value: "1.5 AU", label: "In Earth–Sun distances" },
+      { value: "26 mo", label: "Between close approaches" }],
+    compare: { title: "Distance from Earth today", unit: "million km", items: [{ label: "Venus", value: 118 }, { label: "Sun", value: 148 },
+      { label: "Mars", value: 225, highlight: true, note: "1.5× the Sun’s distance" }, { label: "Jupiter", value: 765 }] },
+    related: ["How long would a trip to Mars take?", "When is Mars closest to Earth next?",
+      "Can I see Mars in the sky tonight?", "How big is Mars next to Earth?"],
+    sources: ["orbitdata.example", "skyalmanac.example"],
+  },
+  table: {
+    question: "Compare these three laptops",
+    answer: "*Model B* is the best pick for most people.",
+    context: "It lasts as long as Model A on a charge, weighs less, and costs $500 less than Model C.",
+    facts: [{ value: "$999", label: "Model B price" }, { value: "18 h", label: "Battery, Models A and B" },
+      { value: "1.1 kg", label: "Lightest: Model C" }],
+    table: { title: "Side by side", columns: ["Laptop", "Weight", "Battery", "Price"], highlight: 2,
+      rows: [["Model A", "1.4 kg", "18 h", "$1,199"], ["Model B", "1.2 kg", "18 h", "$999"], ["Model C", "1.1 kg", "12 h", "$1,499"]] },
+    related: ["Which one has the best screen?", "Which is best for photo editing?", "Show their prices over the last year"],
+    sources: ["laptoplab.example", "reviewdesk.example"],
+  },
+};
 
-  // A section is undefined while pending, null when removed, or its value when shown. To add one, follow
-  // ADDING A SECTION in the header.
-  const SLOTS = ["question", "answer", "context", "facts", "compare", "related", "sources"];
-  const state = {
-    question: undefined, answer: undefined, context: undefined,
-    facts: undefined,    // [{value, label}]
-    compare: undefined,  // {kind: "bars", title, unit, items: [{label, value, note}], highlight}
-                         // or {kind: "table", title, columns, rows, highlight}; highlight lists bar or row numbers
-    related: undefined, sources: undefined,  // lists of strings
-    selected: null,      // number of the marked related question
-    working: null,       // status line text
-  };
+// A section is undefined while pending, null when removed, or its value when shown.
+const SLOTS = ["question", "answer", "context", "facts", "compare", "related", "sources"];
+const state = {
+  question: undefined, answer: undefined, context: undefined,
+  facts: undefined,    // [{value, label}]
+  compare: undefined,  // {kind: "bars", title, unit, items: [{label, value, note}], highlight}
+                       // or {kind: "table", title, columns, rows, highlight}; highlight lists bar or row numbers
+  related: undefined, sources: undefined,  // lists of strings
+  selected: null,      // number of the marked related question
+  working: null,       // status line text
+};
 
-  // ---- Text helpers. The checks return a clean value or throw a message that says what to send.
-  const fail = message => { throw new Error(message); };
-  const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
-  const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
-  const text = (key, v, max) => {  // a string, or a number written out
-    if (typeof v === "number" && Number.isFinite(v)) return nf.format(v);
-    const s = typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
-    if (!s || s.length > max) fail(`${key} must be text of 1 to ${max} characters${s ? ` (got ${s.length})` : ""}.`);
-    return s;
-  };
-  const list = (key, v, max, example, min = 1) =>
-    Array.isArray(v) && v.length >= min && v.length <= max ? v : fail(`${key} must be a list of ${min} to ${max}, like ${example}.`);
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  // Typeset plain text: curly quotes, primes after digits, en dashes, minus signs, ellipses and multiplication signs.
-  const typo = s => String(s)
-    .replace(/(\d)"/g, "$1″").replace(/(\d)'(?=[\s\d″]|$)/g, "$1′")
-    .replace(/(^|[\s(\[{–—])"/g, "$1“").replace(/"/g, "”").replace(/(^|[\s(\[{–—])'/g, "$1‘").replace(/'/g, "’")
-    .replace(/\s--?\s/g, " – ").replace(/(^|\s)-(?=\d)/g, "$1−").replace(/\.\.\./g, "…").replace(/(\d)x(?=\s|$)/g, "$1×");
-  const T = s => esc(typo(s));
+// ---- Checks return a clean value or throw a message that says what to send.
+const fail = message => { throw new Error(message); };
+const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
+const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+const text = (key, v, max) => {  // a string, or a number written out
+  if (typeof v === "number" && Number.isFinite(v)) return nf.format(v);
+  const s = typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  if (!s || s.length > max) fail(`${key} must be text of 1 to ${max} characters${s ? ` (got ${s.length})` : ""}.`);
+  return s;
+};
+const optional = (key, v, max) => v == null ? "" : text(key, v, max);
+const list = (key, v, max, example, min = 1) =>
+  Array.isArray(v) && v.length >= min && v.length <= max ? v : fail(`${key} must be a list of ${min} to ${max}, like ${example}.`);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+// Typeset: curly quotes, primes after digits, en dashes, minus signs, ellipses and multiplication signs.
+const typo = s => String(s)
+  .replace(/(\d)"/g, "$1″").replace(/(\d)'(?=[\s\d″]|$)/g, "$1′")
+  .replace(/(^|[\s(\[{–—])"/g, "$1“").replace(/"/g, "”").replace(/(^|[\s(\[{–—])'/g, "$1‘").replace(/'/g, "’")
+  .replace(/\s--?\s/g, " – ").replace(/(^|\s)-(?=\d)/g, "$1−").replace(/\.\.\./g, "…").replace(/(\d)x(?=\s|$)/g, "$1×");
+const T = s => esc(typo(s));
 
-  // ---- Markup. PENDING gives each section's kit label and grey shapes (.g); FILL gives its HTML once it has a value.
-  const g = (w, h) => `<span class="g" style="--w:${w}${h ? `;--h:${h}px` : ""}"></span>`;
-  const PENDING = {
-    question: ["Question", ""],
-    answer: ["Answer", g("48%") + g("100%") + g("56%")],
-    context: ["Context", g("58%") + g("64%")],
-    facts: ["Key facts", '<ol class="facts ghost">' + ["Key facts", g("64%", 22), g("48%", 22)].map(label =>
-      `<li><span class="val"><b class="num">—</b></span><span class="lbl">${label}</span></li>`).join("") + "</ol>"],
-    compare: ["Comparison", '<div class="top ghost"><h2>Comparison</h2></div><ol class="bars ghost" style="--lw:96px">' +
-      [1, .7, .46, .26].map(p => `<li><span class="l"></span><div class="plot"><i style="--p:${p}"></i></div></li>`).join("") + "</ol>"],
-    related: ["Related", '<h2 class="caps rel-h">Related</h2><ol class="rel ghost">' +
-      ["74%", "58%", "66%"].map((w, i) => `<li><span class="n">${i + 1}</span>${g(w, 22)}</li>`).join("") + "</ol>"],
-    sources: ["Sources", g("260px", 20)],
-  };
-  const hi = (c, i) => c.highlight.includes(i + 1) ? ' class="hi"' : "";
-  const caption = (title, unit) => `<div class="top"><h2>${T(title || "Comparison")}</h2>${unit ? `<p class="caps">${T(unit)}</p>` : ""}</div>`;
-  const FILL = {
-    question: T,
-    answer: a => T(a).replace(/\*(.+?)\*/, "<em>$1</em>"),
-    context: T,
-    facts: fs => `<ol class="facts">${fs.map(f => {
-      // "12.5 min" and "3–5 days" split into numeral and unit; "$999", "42%", "2 h 30 min" and "Model B" stay whole.
-      let m = f.value.match(/^([-+−~≈<>$€£¥]?\s?\d[\d.,:]*(?:[-–\/]\d[\d.,:]*)*(?:°[CFK]?|[%×"'])?)\s*(\D.*)?$/);
-      if (m && /\d/.test(m[2] || "")) m = null;
-      const unit = m && m[2] ? `<span class="u">${T(m[2])}</span>` : "";
-      return `<li><span class="val"><b class="num">${T(m ? m[1] : f.value)}</b>${unit}</span><span class="lbl">${T(f.label)}</span></li>`;
-    }).join("")}</ol>`,
-    compare: c => {
-      if (c.kind === "table") return caption(c.title) + "<table><thead><tr>" + c.columns.map(h => `<th scope="col"><span>${T(h)}</span></th>`).join("") +
-        "</tr></thead><tbody>" + c.rows.map((r, i) => `<tr${hi(c, i)}>` +
-          r.map((x, j) => j ? `<td><span>${T(x)}</span></td>` : `<th scope="row"><span>${T(x)}</span></th>`).join("") + "</tr>").join("") + "</tbody></table>";
-      const max = Math.max(...c.items.map(it => it.value)) || 1;
-      return caption(c.title, c.unit) + '<ol class="bars">' + c.items.map((it, i) =>
-        `<li${hi(c, i)}><span class="l">${T(it.label)}</span><div class="plot"><i style="--p:${(it.value / max).toFixed(4)}${it.value ? "" : ";min-width:0"}"></i>` +
-        `<b class="v">${esc(nf.format(it.value))}</b></div>${it.note ? `<p class="note"><span>${T(it.note)}</span></p>` : ""}</li>`).join("") + "</ol>";
-    },
-    related: rs => '<h2 class="caps rel-h">Related</h2><ol class="rel">' +
-      rs.map((r, i) => `<li><span class="n">${i + 1}</span><span class="t">${T(r)}</span></li>`).join("") + "</ol>",
-    sources: () => '<span class="caps">Sources</span><span class="list"></span>',  // fitText writes the list
-  };
+// ---- Markup. PENDING gives each section's kit label and grey shapes (.g); FILL gives its HTML once it has a value.
+const g = (w, h) => `<span class="g" style="--w:${w}${h ? `;--h:${h}px` : ""}"></span>`;
+const PENDING = {
+  question: ["Question", ""],
+  answer: ["Answer", g("48%") + g("100%") + g("56%")],
+  context: ["Context", g("58%") + g("64%")],
+  facts: ["Key facts", '<ol class="facts ghost">' + ["Key facts", g("64%", 22), g("48%", 22)].map(label =>
+    `<li><span class="val"><b class="num">—</b></span><span class="lbl">${label}</span></li>`).join("") + "</ol>"],
+  compare: ["Comparison", '<div class="top ghost"><h2>Comparison</h2></div><ol class="bars ghost" style="--lw:96px">' +
+    [1, .7, .46, .26].map(p => `<li><span class="l"></span><div class="plot"><i style="--p:${p}"></i></div></li>`).join("") + "</ol>"],
+  related: ["Related", '<h2 class="caps rel-h">Related</h2><ol class="rel ghost">' +
+    ["74%", "58%", "66%"].map((w, i) => `<li><span class="n">${i + 1}</span>${g(w, 22)}</li>`).join("") + "</ol>"],
+  sources: ["Sources", g("260px", 20)],
+};
+const hi = (c, i) => c.highlight.includes(i + 1) ? ' class="hi"' : "";
+const caption = (title, unit) => `<div class="top"><h2>${T(title || "Comparison")}</h2>${unit ? `<p class="caps">${T(unit)}</p>` : ""}</div>`;
+const FILL = {
+  question: T,
+  answer: a => T(a).replace(/\*(.+?)\*/, "<em>$1</em>"),
+  context: T,
+  facts: fs => `<ol class="facts">${fs.map(f => {
+    // "12.5 min" and "3–5 days" split into numeral and unit; "$999", "42%", "2 h 30 min" and "Model B" stay whole.
+    let m = f.value.match(/^([-+−~≈<>$€£¥]?\s?\d[\d.,:]*(?:[-–\/]\d[\d.,:]*)*(?:°[CFK]?|[%×"'])?)\s*(\D.*)?$/);
+    if (m && /\d/.test(m[2] || "")) m = null;
+    const unit = m && m[2] ? `<span class="u">${T(m[2])}</span>` : "";
+    return `<li><span class="val"><b class="num">${T(m ? m[1] : f.value)}</b>${unit}</span><span class="lbl">${T(f.label)}</span></li>`;
+  }).join("")}</ol>`,
+  compare: c => {
+    if (c.kind === "table") return caption(c.title) + "<table><thead><tr>" + c.columns.map(h => `<th scope="col"><span>${T(h)}</span></th>`).join("") +
+      "</tr></thead><tbody>" + c.rows.map((r, i) => `<tr${hi(c, i)}>` +
+        r.map((x, j) => j ? `<td><span>${T(x)}</span></td>` : `<th scope="row"><span>${T(x)}</span></th>`).join("") + "</tr>").join("") + "</tbody></table>";
+    const max = Math.max(...c.items.map(it => it.value)) || 1;
+    return caption(c.title, c.unit) + '<ol class="bars">' + c.items.map((it, i) =>
+      `<li${hi(c, i)}><span class="l">${T(it.label)}</span><div class="plot"><i style="--p:${(it.value / max).toFixed(4)}${it.value ? "" : ";min-width:0"}"></i>` +
+      `<b class="v">${esc(nf.format(it.value))}</b></div>${it.note && hi(c, i) ? `<p class="note"><span>${T(it.note)}</span></p>` : ""}</li>`).join("") + "</ol>";
+  },
+  related: rs => '<h2 class="caps rel-h">Related</h2><ol class="rel">' +
+    rs.map((r, i) => `<li><span class="n">${i + 1}</span><span class="t">${T(r)}</span></li>`).join("") + "</ol>",
+  sources: () => '<span class="caps">Sources</span><span class="list"></span>',  // fitText writes the list
+};
 
-  // ---- Views. The answer card is the only one. It redraws only the sections whose value changed.
-  const view = document.querySelector('[data-view="answer"]');
-  const main = view.querySelector(".main"), rail = view.querySelector(".rail");
-  const slotEl = name => view.querySelector(`[data-slot="${name}"]`);
-  const shown = {};
-  const VIEWS = {
-    answer() {
-      for (const name of SLOTS) {
-        const value = state[name], key = value === undefined ? "pending" : JSON.stringify(value), node = slotEl(name);
-        if (shown[name] === key) continue;
-        shown[name] = key;
-        node.classList.remove("off", "enter");
-        if (value === undefined) { tv.pending(name, PENDING[name][0]); node.insertAdjacentHTML("beforeend", PENDING[name][1]); }
-        else if (value === null) { tv.fill(name, ""); node.classList.add("off"); }
-        else { tv.fill(name, FILL[name](value)); void node.offsetWidth; node.classList.add("enter"); }  // reflow restarts the entrance
+// ---- Views. The answer card is the only one. It redraws only the sections whose value changed.
+const view = document.querySelector('[data-view="answer"]');
+const main = view.querySelector(".main"), rail = view.querySelector(".rail");
+const slotEl = name => view.querySelector(`[data-slot="${name}"]`);
+const drawn = {};
+const VIEWS = {
+  answer() {
+    for (const name of SLOTS) {
+      const value = state[name], key = value === undefined ? "pending" : JSON.stringify(value), node = slotEl(name);
+      if (drawn[name] === key) continue;
+      drawn[name] = key;
+      node.classList.remove("off", "enter");
+      if (value === undefined) { tv.pending(name, PENDING[name][0]); node.insertAdjacentHTML("beforeend", PENDING[name][1]); }
+      else if (value === null) { tv.fill(name, ""); node.classList.add("off"); }
+      else { tv.fill(name, FILL[name](value)); void node.offsetWidth; node.classList.add("enter"); }  // reflow restarts the entrance
+    }
+    slotEl("related").querySelectorAll("li").forEach((li, i) => {
+      const on = i + 1 === state.selected;
+      li.classList.toggle("sel", on);
+      on ? li.setAttribute("aria-current", "true") : li.removeAttribute("aria-current");
+    });
+    // A long deck is set smaller, but only beside a headline.
+    slotEl("context").classList.toggle("long", typeof state.answer === "string" && typeof state.context === "string" && state.context.length > 170);
+    stage.classList.toggle("solo-status", view.classList.toggle("solo", state.compare === null && state.related === null));
+    main.style.setProperty("--rows", main.children.length - 1);  // every left-column section but the facts
+    view.classList.toggle("nosrc", state.sources === null);
+    view.classList.toggle("nofacts", state.facts === null);
+    view.classList.toggle("nochart", state.compare === null);
+    fitText();
+  },
+};
+
+// ---- Fit by measuring, so the wider Noto faces on the TV host still fit. Runs again when the fonts load.
+let hidden = [];  // numbers of the related questions that did not fit
+const pen = document.createElement("canvas").getContext("2d");  // measures one letter; nothing is drawn
+const floorOf = box => box.offsetTop + box.clientHeight - parseFloat(getComputedStyle(box).paddingBottom) + 1;
+function fitText() {
+  const solo = view.classList.contains("solo");
+  // Fact numerals share one size: the largest at which the widest value fits its column.
+  const facts = slotEl("facts").querySelector(".facts:not(.ghost)");
+  if (facts) {
+    const vals = [...facts.querySelectorAll(".val")];
+    const fits = size => { facts.style.setProperty("--fs", size + "px"); return vals.every(v => v.scrollWidth <= v.clientWidth); };
+    facts.classList.remove("wrap");
+    let size = solo ? 112 : 96;
+    while (size > 64 && !fits(size)) size -= 4;
+    if (!fits(size)) { facts.classList.add("wrap"); size = 96; while (size > 44 && !fits(size)) size -= 4; }
+  }
+  // The headline takes the largest size that leaves every left-column section above the Sources line: a word or two
+  // as a poster line, a sentence in up to three lines, or four when long. A pending headline shrinks its shapes too.
+  const a = slotEl("answer"), floor = floorOf(main);
+  const inside = () => [...main.children].every(n => n.offsetTop + n.offsetHeight <= floor);
+  a.style.fontSize = a.style.textIndent = "";
+  if (typeof state.answer === "string") {
+    const three = solo ? 196 : state.facts === null ? 152 : 136;
+    const alone = !solo && state.context === null && state.facts === null;  // nothing below it: up to four lines at any size
+    const lines = size => alone ? 4 : size > three * 1.7 ? 1 : size > three ? 2 : size >= 88 ? 3 : 4;
+    const fits = size => { a.style.fontSize = size + "px";
+      return Math.round(a.offsetHeight / (size * .98)) <= lines(size) && a.scrollWidth <= a.clientWidth + 1 && inside(); };
+    // An italic first letter leans away from the margin. Hang it, so its ink starts on the margin.
+    if (a.firstChild.nodeName === "EM") {
+      const css = getComputedStyle(a.firstChild);
+      pen.font = `italic ${css.fontWeight} 100px ${css.fontFamily}`;
+      a.style.textIndent = pen.measureText(a.textContent[0]).actualBoundingBoxLeft / 100 + "em";
+    }
+    // One to three words stop short of poster size beside a right field.
+    let size = solo ? 520 : state.answer.split(" ").length > 3 ? 340 : 220;
+    while (size > 60 && !fits(size)) size -= 4;
+  } else if (state.answer === undefined) {
+    for (let size = parseFloat(getComputedStyle(a).fontSize); size > 32 && !inside(); ) a.style.fontSize = (size -= 4) + "px";
+  }
+  // Sources: whole domain names, then a count of the rest.
+  const src = slotEl("sources").querySelector(".list"), all = state.sources || [];
+  if (src) for (let n = all.length; n; n--) {
+    src.textContent = all.slice(0, n).concat(n < all.length ? "+" + (all.length - n) : []).join("  ·  ");
+    if (src.scrollWidth <= src.clientWidth) break;
+  }
+  // Right field: .dense, then .tight, then hide related questions (or pending rows) from the end, never the selected one.
+  const cmp = slotEl("compare"), rel = slotEl("related"), rows = [...rel.querySelectorAll(".rel li")];
+  rail.classList.remove("dense", "tight", "roomy");
+  rows.forEach(li => li.classList.remove("off"));
+  fitChart();
+  const over = () => { const last = [...rail.children].filter(n => n.offsetHeight).pop();
+    return last && last.offsetTop + last.offsetHeight > floorOf(rail); };
+  for (const cls of ["dense", "tight"]) if (over()) { rail.classList.add(cls); fitChart(); }
+  for (let i = rows.length; i-- && over(); ) if (i + 1 !== state.selected) rows[i].classList.add("off");
+  hidden = state.related ? rows.flatMap((li, i) => li.classList.contains("off") ? [i + 1] : []) : [];
+  // A short chart with room below it is drawn larger.
+  if (state.compare && !rail.classList.contains("dense") && (rel.offsetHeight ? rel.offsetTop : floorOf(rail)) - cmp.offsetTop - cmp.offsetHeight > 200) {
+    rail.classList.add("roomy"); fitChart();
+    if (over()) { rail.classList.remove("roomy"); fitChart(); }
+  }
+}
+// Bars: a label column as wide as the longest label (or labels above the bars past 230 px), and room for each value.
+// Table: text from 32 down to 28 px, then the widest header or column wraps, then the next, until it fits.
+// Both are measured with every row bold (.m), so moving the highlight moves no column and no axis.
+function fitChart() {
+  const box = slotEl("compare"), bars = box.querySelector(".bars:not(.ghost)"), table = box.querySelector("table");
+  if (bars) {
+    bars.classList.remove("stack");
+    bars.classList.add("m");
+    bars.style.setProperty("--lw", "max-content");
+    const lw = Math.max(...[...bars.querySelectorAll(".l")].map(l => l.scrollWidth));
+    bars.classList.toggle("stack", lw > 230);
+    bars.style.setProperty("--lw", lw > 230 ? "1fr" : lw + 2 + "px");
+    bars.style.setProperty("--vw", Math.max(...[...bars.querySelectorAll(".v")].map(v => v.offsetWidth)) + 20 + "px");
+    bars.classList.remove("m");
+  }
+  if (table) {
+    const wide = () => table.offsetWidth > box.clientWidth + 16, heads = [...table.rows[0].cells];
+    table.className = "m";
+    table.querySelectorAll(".w").forEach(c => c.classList.remove("w"));
+    heads.forEach(h => h.style.width = "");
+    let size = 32;
+    do table.style.setProperty("--ts", size + "px"); while (wide() && (size -= 2) >= 28);
+    if (wide()) {
+      table.classList.add("wrap");
+      const width = cells => Math.max(...cells.map(c => c.firstChild.offsetWidth));
+      const parts = heads.flatMap((head, j) => {
+        const body = [...table.tBodies[0].rows].map(r => r.cells[j]);
+        head.style.setProperty("--cw", width(body) + "px");
+        return [{ cells: [head], w: width([head]) }, { cells: body, w: width(body), head }];
+      }).sort((x, y) => y.w - x.w);
+      for (const part of parts) if (wide()) {
+        part.cells.forEach(c => c.classList.add("w"));
+        if (part.head) part.head.style.setProperty("--cw", 0);  // a wrapped column no longer holds its header wide
       }
-      slotEl("related").querySelectorAll("li").forEach((li, i) => {
-        li.classList.toggle("sel", i + 1 === state.selected);
-        i + 1 === state.selected ? li.setAttribute("aria-current", "true") : li.removeAttribute("aria-current");
-      });
-      // A long deck is set smaller, but only beside a headline.
-      slotEl("context").classList.toggle("long", typeof state.answer === "string" && typeof state.context === "string" && state.context.length > 170);
-      stage.classList.toggle("solo-status", view.classList.toggle("solo", state.compare === null && state.related === null));
-      main.style.setProperty("--rows", main.children.length - 1);  // every left-column section but the facts
-      view.classList.toggle("nosrc", state.sources === null);
-      view.classList.toggle("nofacts", state.facts === null);
-      fitText();
-    },
+    }
+    heads.map(h => h.offsetWidth).forEach((w, j) => heads[j].style.width = w + "px");  // pin the columns
+    table.classList.remove("m");
+  }
+}
+
+// ---- Patch handlers, run in this order. Each checks its value and changes state only.
+const PATCH = {
+  clear(v) {
+    if (v !== true) fail("clear must be true.");
+    for (const name of SLOTS) state[name] = undefined;
+    state.selected = state.working = null;
+  },
+  demo(v) {
+    if (v !== true && v !== "table") fail('demo must be true or "table".');
+    const sample = SAMPLE[v === true ? "bars" : "table"];
+    for (const key in sample) PATCH[key](sample[key]);
+    state.selected = state.working = null;
+  },
+  question(v) { state.question = v === null ? null : text("question", v, 140); },
+  answer(v) {
+    const s = v === null ? null : text("answer", v, 120), plain = s && s.replace(/\*/g, "");
+    if (plain && plain.length > 110) fail(`answer must be at most 110 characters (got ${plain.length}). Put the detail in context.`);
+    if (plain && plain.split(" ").length > 16) fail("answer must be at most 16 words (about 12 is best). Put the detail in context.");
+    if (s && ![0, 2].includes(s.split("*").length - 1)) fail('answer takes one phrase between two stars, like "Mars is about *225 million* km away."');
+    state.answer = s;
+  },
+  context(v) {
+    const s = v === null ? null : text("context", v, 240);
+    if (s && s.split(" ").length > 40) fail("context must be one sentence of at most 40 words.");
+    state.context = s;
+  },
+  facts(v) {
+    state.facts = v === null ? null : list("facts", v, 3, '[{"value":"12.5 min","label":"Light travel time"}]').map((f, i) =>
+      isObj(f) ? { value: text(`facts[${i}].value`, f.value, 16), label: text(`facts[${i}].label`, f.label, 40) }
+        : fail(`facts[${i}] must be like {"value":"12.5 min","label":"Light travel time"}.`));
+  },
+  compare(v) {
+    if (v === null) { if (state.compare?.kind !== "table") state.compare = null; return; }  // removes a chart, not a table
+    const items = list("compare.items", v?.items, 5, '[{"label":"Venus","value":118}]').map((it, i) => {
+      if (!isObj(it) || !(it.value >= 0) || !Number.isFinite(it.value))
+        fail(`compare.items[${i}] must be like {"label":"Mars","value":225}: a number of 0 or more, with the unit in compare.unit.`);
+      return { label: text(`compare.items[${i}].label`, it.label, 32), value: it.value, note: optional(`compare.items[${i}].note`, it.note, 32) };
+    });
+    if (items.filter(it => it.note).length > 1) fail("compare takes a note on one item only.");
+    state.compare = { kind: "bars", title: optional("compare.title", v.title, 40), unit: optional("compare.unit", v.unit, 24), items,
+      highlight: v.items.flatMap((it, i) => it.highlight === true ? [i + 1] : []) };
+  },
+  table(v) {
+    if (v === null) { if (state.compare?.kind !== "bars") state.compare = null; return; }  // removes a table, not a chart
+    const ex = '{"columns":["Laptop","Weight"],"rows":[["Model A","1.4 kg"]]}';
+    const columns = list("table.columns", v?.columns, 4, ex, 2).map((c, i) => text(`table.columns[${i}]`, c, 18));
+    const rows = list("table.rows", v.rows, 4, ex).map((r, i) => Array.isArray(r) && r.length === columns.length
+      ? r.map((c, j) => text(`table.rows[${i}][${j}]`, c, 18)) : fail(`table.rows[${i}] must be a list of ${columns.length} cells.`));
+    if (v.highlight != null && !(Number.isInteger(v.highlight) && v.highlight >= 1 && v.highlight <= rows.length))
+      fail(`table.highlight must be a row number from 1 to ${rows.length}, or left out.`);
+    state.compare = { kind: "table", title: optional("table.title", v.title, 40), columns, rows, highlight: v.highlight ? [v.highlight] : [] };
+  },
+  highlight(v) {
+    const c = state.compare || fail("highlight needs a chart or table. Send compare or table first.");
+    const labels = c.kind === "bars" ? c.items.map(it => it.label) : c.rows.map(r => r[0]);
+    const n = typeof v === "number" ? v : labels.findIndex(l => l.toLowerCase() === String(v).trim().toLowerCase()) + 1;
+    if (v !== null && !(Number.isInteger(n) && n >= 1 && n <= labels.length))
+      fail(`highlight must be one of ${labels.map(l => JSON.stringify(l)).join(", ")}, a number from 1 to ${labels.length}, or null.`);
+    c.highlight = v === null ? [] : [n];
+  },
+  related(v) {
+    const next = v === null ? null : list("related", v, 4, '["How long would a trip take?"]').map((s, i) => text(`related[${i}]`, s, 60));
+    if (JSON.stringify(next) !== JSON.stringify(state.related)) state.selected = null;
+    state.related = next;
+  },
+  selected(v) {
+    const count = state.related ? state.related.length : 0;
+    if (v !== null && !(Number.isInteger(v) && v >= 1 && v <= count))
+      fail(count ? `selected must be a related question number from 1 to ${count}, or null.`
+        : 'selected needs related questions first. Send {"related":["First question?","Second question?"]} before it or in the same patch.');
+    state.selected = v;
+  },
+  sources(v) {
+    state.sources = v === null ? null : list("sources", v, 5, '["example.org"]').map((s, i) => {
+      const domain = text(`sources[${i}]`, s, 200).replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/^www\./i, "").split(/[/?#\s]/)[0].toLowerCase();
+      return domain && domain.length <= 64 ? domain : fail(`sources[${i}] must be a domain name like "example.org".`);
+    });
+  },
+  working(v) {
+    if (v !== null && v !== false && !(typeof v === "string" && v.trim())) fail('working must be a short status like "Checking sources", or null.');
+    state.working = v ? v.trim() : null;
+  },
+};
+
+// Runs every handler or none: a bad value throws and leaves the screen as it was.
+function apply(patch) {
+  if (!isObj(patch)) fail('apply takes one JSON object, like {"question":"How far is Mars right now?"}.');
+  if (patch.compare && patch.table) fail("Send compare or table, not both. They share one place on screen.");
+  const before = structuredClone(state);
+  try { for (const key in PATCH) if (Object.hasOwn(patch, key)) PATCH[key](patch[key]); }
+  catch (error) { Object.assign(state, before); throw error; }
+  VIEWS.answer();
+  // Touch the status line only when asked, so a direct tv.working() call survives later patches.
+  if (Object.hasOwn(patch, "working") || patch.clear || patch.demo) state.working ? tv.working(state.working) : tv.done();
+  return report(Object.keys(patch).filter(key => !Object.hasOwn(PATCH, key)));
+}
+
+// app.state() shows each filled section as short text: its text, or the text in its list or object, clipped.
+// A section whose value reads badly that way gets a SUMMARY entry.
+const clip = s => s.length > 60 ? s.slice(0, 59) + "…" : s;
+const brief = v => clip(typeof v === "string" ? v : Object.values(v).filter(x => typeof x === "string" && x).join(" · "));
+const SUMMARY = {
+  facts: fs => brief(fs.map(f => f.value)),
+  compare: c => brief(`${c.kind === "bars" ? "chart" : "table"}: ${c.title || "untitled"}`),
+  related: rs => `${rs.length} questions, listed in related`,
+};
+function report(ignored = []) {
+  const c = state.compare, n = c && c.highlight[0];
+  return {
+    view: "answer",
+    shown: Object.fromEntries(SLOTS.filter(s => state[s] != null).map(s => [s, (SUMMARY[s] || brief)(state[s])])),
+    pending: SLOTS.filter(s => state[s] === undefined), removed: SLOTS.filter(s => state[s] === null),
+    highlight: n ? (c.kind === "bars" ? c.items[n - 1].label : c.rows[n - 1][0]) : null,
+    related: (state.related || []).map((text, i) => ({ n: i + 1, text, ...(hidden.includes(i + 1) ? { hidden: true } : {}) })),
+    selected: state.selected,
+    working: tv.state().working,
+    ...(ignored.length ? { ignored } : {}),
   };
+}
 
-  // ---- Fit by measuring, so the wider Noto faces on the TV host still fit. Runs again when the fonts load.
-  let hidden = [];  // numbers of the related questions that did not fit
-  const pen = document.createElement("canvas").getContext("2d");  // measures one letter; nothing is drawn
-  const floorOf = box => box.offsetTop + box.clientHeight - parseFloat(getComputedStyle(box).paddingBottom) + 1;
-  function fitText() {
-    const solo = view.classList.contains("solo");
-    // Fact numerals share one size: the largest at which the widest value fits its column.
-    const facts = slotEl("facts").querySelector(".facts:not(.ghost)");
-    if (facts) {
-      const vals = [...facts.querySelectorAll(".val")];
-      const fits = size => { facts.style.setProperty("--fs", size + "px"); return vals.every(v => v.scrollWidth <= v.clientWidth); };
-      facts.classList.remove("wrap");
-      let size = solo ? 112 : 96;
-      while (size > 64 && !fits(size)) size -= 4;
-      if (!fits(size)) { facts.classList.add("wrap"); size = 96; while (size > 44 && !fits(size)) size -= 4; }
-    }
-    // The headline takes the largest size that leaves the facts their room. A word or two is set as a poster line;
-    // a sentence gets up to three lines, or four when it is long. A pending headline shrinks its grey shapes the same
-    // way, so every left-column section, pending or not, ends above the Sources line.
-    const a = slotEl("answer"), floor = floorOf(main);
-    const inside = () => [...main.children].every(n => n.offsetTop + n.offsetHeight <= floor);
-    a.style.fontSize = a.style.textIndent = "";
-    if (typeof state.answer === "string") {
-      const three = solo ? 196 : state.facts === null ? 152 : 136;
-      const alone = !solo && state.context === null && state.facts === null;  // nothing below it: up to four lines at any size
-      const lines = size => alone ? 4 : size > three * 1.7 ? 1 : size > three ? 2 : size >= 88 ? 3 : 4;
-      const fits = size => { a.style.fontSize = size + "px";
-        return Math.round(a.offsetHeight / (size * .98)) <= lines(size) && a.scrollWidth <= a.clientWidth + 1 && inside(); };
-      // An italic first letter leans away from the margin. Hang it, so its ink starts on the margin.
-      if (a.firstChild.nodeName === "EM") {
-        const css = getComputedStyle(a.firstChild);
-        pen.font = `italic ${css.fontWeight} 100px ${css.fontFamily}`;
-        a.style.textIndent = pen.measureText(a.textContent[0]).actualBoundingBoxLeft / 100 + "em";
-      }
-      // One to three words stop short of poster size beside a right field.
-      let size = solo ? 520 : state.answer.split(" ").length > 3 ? 340 : 220;
-      while (size > 60 && !fits(size)) size -= 4;
-    } else if (state.answer === undefined) {
-      for (let size = parseFloat(getComputedStyle(a).fontSize); size > 32 && !inside(); ) a.style.fontSize = (size -= 4) + "px";
-    }
-    // Sources: whole domain names only. The ones that do not fit become a count, like "+3".
-    const src = slotEl("sources").querySelector(".list"), all = state.sources || [];
-    if (src) for (let n = all.length; n; n--) {
-      src.textContent = all.slice(0, n).concat(n < all.length ? "+" + (all.length - n) : []).join(" \u00a0·\u00a0 ");
-      if (src.scrollWidth <= src.clientWidth) break;
-    }
-    // The right field steps down to .dense, then .tight, until its last section ends above the floor. If it is still
-    // too tall, related questions (or their pending rows) are hidden from the end, but never the selected one.
-    // app.state() marks them hidden.
-    const cmp = slotEl("compare"), rel = slotEl("related"), rows = [...rel.querySelectorAll(".rel li")];
-    rail.classList.remove("dense", "tight", "roomy");
-    rows.forEach(li => li.classList.remove("off"));
-    fitChart();
-    const over = () => { const last = [...rail.children].filter(n => n.offsetHeight).pop();
-      return last && last.offsetTop + last.offsetHeight > floorOf(rail); };
-    for (const cls of ["dense", "tight"]) if (over()) { rail.classList.add(cls); fitChart(); }
-    for (let i = rows.length; i-- && over(); ) if (i + 1 !== state.selected) rows[i].classList.add("off");
-    hidden = state.related ? rows.flatMap((li, i) => li.classList.contains("off") ? [i + 1] : []) : [];
-    // A short chart with room below it is drawn larger.
-    if (state.compare && !rail.classList.contains("dense") && (rel.offsetHeight ? rel.offsetTop : floorOf(rail)) - cmp.offsetTop - cmp.offsetHeight > 200) {
-      rail.classList.add("roomy"); fitChart();
-      if (over()) { rail.classList.remove("roomy"); fitChart(); }
-    }
-  }
-  // Bars: a label column as wide as the longest label (or labels above the bars past 230 px), and room for each value.
-  // Table: one line per cell, text from 32 down to 28 px. If it is still too wide, the widest header or column wraps,
-  // then the next, until it fits. A wrapped header is no wider than its column's cells.
-  // Both are measured with every row bold (.m), so moving the highlight moves no column and no axis.
-  function fitChart() {
-    const box = slotEl("compare"), bars = box.querySelector(".bars:not(.ghost)"), table = box.querySelector("table");
-    if (bars) {
-      bars.classList.remove("stack");
-      bars.classList.add("m");
-      bars.style.setProperty("--lw", "max-content");
-      const lw = Math.max(...[...bars.querySelectorAll(".l")].map(l => l.scrollWidth));
-      bars.classList.toggle("stack", lw > 230);
-      bars.style.setProperty("--lw", lw > 230 ? "1fr" : lw + 2 + "px");
-      bars.style.setProperty("--vw", Math.max(...[...bars.querySelectorAll(".v")].map(v => v.offsetWidth)) + 20 + "px");
-      bars.classList.remove("m");
-    }
-    if (table) {
-      const wide = () => table.offsetWidth > box.clientWidth + 16, heads = [...table.rows[0].cells];
-      table.className = "m";  // every row bold while the columns are measured
-      table.querySelectorAll(".w").forEach(c => c.classList.remove("w"));
-      heads.forEach(h => h.style.width = "");
-      let size = 32;
-      do table.style.setProperty("--ts", size + "px"); while (wide() && (size -= 2) >= 28);
-      if (wide()) {
-        table.classList.add("wrap");
-        const width = cells => Math.max(...cells.map(c => c.firstChild.offsetWidth));
-        const parts = heads.flatMap((head, j) => {
-          const body = [...table.tBodies[0].rows].map(r => r.cells[j]);
-          head.style.setProperty("--cw", width(body) + "px");
-          return [{ cells: [head], w: width([head]) }, { cells: body, w: width(body), head }];
-        }).sort((x, y) => y.w - x.w);
-        for (const part of parts) if (wide()) {
-          part.cells.forEach(c => c.classList.add("w"));
-          if (part.head) part.head.style.setProperty("--cw", 0);  // a wrapped column no longer holds its header wide
-        }
-      }
-      heads.map(h => h.offsetWidth).forEach((w, j) => heads[j].style.width = w + "px");  // pin the columns
-      table.classList.remove("m");
-    }
-  }
-
-  // ---- Patch handlers, run in this order. Each checks its value and changes state only.
-  const PATCH = {
-    clear(v) {
-      if (v !== true) fail("clear must be true.");
-      for (const name of SLOTS) state[name] = undefined;
-      state.selected = state.working = null;
-    },
-    demo(v) {
-      if (v !== true && v !== "table") fail('demo must be true or "table".');
-      const sample = SAMPLE[v === true ? "bars" : "table"];
-      for (const key in sample) PATCH[key](sample[key]);
-      state.selected = state.working = null;
-    },
-    question(v) { state.question = v === null ? null : text("question", v, 140); },
-    answer(v) {
-      const s = v === null ? null : text("answer", v, 120), plain = s && s.replace(/\*/g, "");
-      if (plain && plain.length > 110) fail(`answer must be at most 110 characters (got ${plain.length}). Put the detail in context.`);
-      if (plain && plain.split(" ").length > 16) fail("answer must be at most 16 words (about 12 is best). Put the detail in context.");
-      if (s && ![0, 2].includes(s.split("*").length - 1)) fail('answer takes one phrase between two stars, like "Mars is about *225 million* km away."');
-      state.answer = s;
-    },
-    context(v) {
-      const s = v === null ? null : text("context", v, 240);
-      if (s && s.split(" ").length > 40) fail("context must be one sentence of at most 40 words.");
-      state.context = s;
-    },
-    facts(v) {
-      state.facts = v === null ? null : list("facts", v, 3, '[{"value":"12.5 min","label":"Light travel time"}]').map((f, i) =>
-        isObj(f) ? { value: text(`facts[${i}].value`, f.value, 16), label: text(`facts[${i}].label`, f.label, 40) }
-          : fail(`facts[${i}] must be like {"value":"12.5 min","label":"Light travel time"}.`));
-    },
-    compare(v) {
-      if (v === null) { if (state.compare?.kind !== "table") state.compare = null; return; }  // removes a chart, not a table
-      const items = list("compare.items", v?.items, 5, '[{"label":"Venus","value":118}]').map((it, i) => {
-        if (!isObj(it) || !(it.value >= 0) || !Number.isFinite(it.value))
-          fail(`compare.items[${i}] must be like {"label":"Mars","value":225}: a number of 0 or more, with the unit in compare.unit.`);
-        const note = it.note == null ? "" : text(`compare.items[${i}].note`, it.note, 32);
-        return { label: text(`compare.items[${i}].label`, it.label, 32), value: it.value, note };
-      });
-      if (items.filter(it => it.note).length > 1) fail("compare takes a note on one item only.");
-      state.compare = { kind: "bars", title: v.title == null ? "" : text("compare.title", v.title, 40),
-        unit: v.unit == null ? "" : text("compare.unit", v.unit, 24), items,
-        highlight: v.items.flatMap((it, i) => it.highlight === true ? [i + 1] : []) };
-    },
-    table(v) {
-      if (v === null) { if (state.compare?.kind !== "bars") state.compare = null; return; }  // removes a table, not a chart
-      const ex = '{"columns":["Laptop","Weight"],"rows":[["Model A","1.4 kg"]]}';
-      const columns = list("table.columns", v?.columns, 4, ex, 2).map((c, i) => text(`table.columns[${i}]`, c, 18));
-      const rows = list("table.rows", v.rows, 4, ex).map((r, i) => Array.isArray(r) && r.length === columns.length
-        ? r.map((c, j) => text(`table.rows[${i}][${j}]`, c, 18)) : fail(`table.rows[${i}] must be a list of ${columns.length} cells.`));
-      if (v.highlight != null && !(Number.isInteger(v.highlight) && v.highlight >= 1 && v.highlight <= rows.length))
-        fail(`table.highlight must be a row number from 1 to ${rows.length}, or left out.`);
-      state.compare = { kind: "table", title: v.title == null ? "" : text("table.title", v.title, 40), columns, rows,
-        highlight: v.highlight ? [v.highlight] : [] };
-    },
-    highlight(v) {
-      const c = state.compare || fail("highlight needs a chart or table. Send compare or table first.");
-      const labels = c.kind === "bars" ? c.items.map(it => it.label) : c.rows.map(r => r[0]);
-      const n = typeof v === "number" ? v : labels.findIndex(l => l.toLowerCase() === String(v).trim().toLowerCase()) + 1;
-      if (v !== null && !(Number.isInteger(n) && n >= 1 && n <= labels.length))
-        fail(`highlight must be one of ${labels.map(l => JSON.stringify(l)).join(", ")}, a number from 1 to ${labels.length}, or null.`);
-      c.highlight = v === null ? [] : [n];
-    },
-    related(v) {
-      const next = v === null ? null : list("related", v, 4, '["How long would a trip take?"]').map((s, i) => text(`related[${i}]`, s, 60));
-      if (JSON.stringify(next) !== JSON.stringify(state.related)) state.selected = null;
-      state.related = next;
-    },
-    selected(v) {
-      const count = state.related ? state.related.length : 0;
-      if (v !== null && !(Number.isInteger(v) && v >= 1 && v <= count))
-        fail(count ? `selected must be a related question number from 1 to ${count}, or null.`
-          : 'selected needs related questions first. Send {"related":["First question?","Second question?"]} before it or in the same patch.');
-      state.selected = v;
-    },
-    sources(v) {
-      state.sources = v === null ? null : list("sources", v, 5, '["example.org"]').map((s, i) => {
-        const domain = text(`sources[${i}]`, s, 200).replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/^www\./i, "").split(/[/?#\s]/)[0].toLowerCase();
-        return domain && domain.length <= 64 ? domain : fail(`sources[${i}] must be a domain name like "example.org".`);
-      });
-    },
-    working(v) {
-      if (v !== null && v !== false && !(typeof v === "string" && v.trim())) fail('working must be a short status like "Checking sources", or null.');
-      state.working = v ? v.trim() : null;
-    },
-  };
-
-  // Runs every handler or none: a bad value throws and leaves the screen as it was.
-  function apply(patch) {
-    if (!isObj(patch)) fail('apply takes one JSON object, like {"question":"How far is Mars right now?"}.');
-    if (patch.compare && patch.table) fail("Send compare or table, not both. They share one place on screen.");
-    const before = structuredClone(state);
-    try { for (const key in PATCH) if (Object.hasOwn(patch, key)) PATCH[key](patch[key]); }
-    catch (error) { Object.assign(state, before); throw error; }
-    VIEWS.answer();
-    // Touch the status line only when asked, so a direct tv.working() call survives later patches.
-    if (Object.hasOwn(patch, "working") || patch.clear || patch.demo) state.working ? tv.working(state.working) : tv.done();
-    return report(Object.keys(patch).filter(key => !Object.hasOwn(PATCH, key)));
-  }
-
-  // app.state() shows each filled section as short text: its text, or the text in its list or object, clipped.
-  // A section whose value reads badly that way gets a SUMMARY entry.
-  const clip = s => s.length > 60 ? s.slice(0, 59) + "…" : s;
-  const brief = v => clip(typeof v === "string" ? v : Object.values(v).filter(x => typeof x === "string" && x).join(" · "));
-  const SUMMARY = {
-    facts: fs => brief(fs.map(f => f.value)),
-    compare: c => brief(`${c.kind === "bars" ? "chart" : "table"}: ${c.title || "untitled"}`),
-    related: rs => `${rs.length} questions, listed in related`,
-  };
-  function report(ignored = []) {
-    const c = state.compare, n = c && c.highlight[0];
-    return {
-      view: "answer",
-      shown: Object.fromEntries(SLOTS.filter(s => state[s] != null).map(s => [s, (SUMMARY[s] || brief)(state[s])])),
-      pending: SLOTS.filter(s => state[s] === undefined), removed: SLOTS.filter(s => state[s] === null),
-      highlight: n ? (c.kind === "bars" ? c.items[n - 1].label : c.rows[n - 1][0]) : null,
-      related: (state.related || []).map((text, i) => ({ n: i + 1, text, ...(hidden.includes(i + 1) ? { hidden: true } : {}) })),
-      selected: state.selected,
-      working: tv.state().working,
-      ...(ignored.length ? { ignored } : {}),
-    };
-  }
-
-  window.app = { apply, state: () => report() };
-  apply(new URLSearchParams(location.search).has("demo") ? { demo: true } : {});
-  if (document.fonts) { document.fonts.ready.then(fitText); document.fonts.addEventListener("loadingdone", fitText); }
+window.app = { apply, state: () => report() };
+apply(new URLSearchParams(location.search).has("demo") ? { demo: true } : {});
+document.fonts.ready.then(fitText);
+document.fonts.addEventListener("loadingdone", fitText);
 })();
 </script>
 </body>
