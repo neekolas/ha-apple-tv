@@ -9,13 +9,19 @@ Use the bridge on Home Assistant OS with an Apple TV 4K running tvOS 27 or later
 
 ## Start here
 
-1. Install the app and integration, pair the TV, then connect to `/api/atv_bridge/mcp` using Streamable HTTP and an HA administrator's Bearer token. See [Install and connect](connect.md).
+1. Install the app and integration, pair the TV, then connect to `/api/atv_bridge/mcp` using Streamable HTTP and an HA administrator's Bearer token. Use a local connection when this machine is on the home network. See [Choose local or remote](connect.md#choose-local-or-remote).
 2. Call `tv_status {}` or read `tv://tvs`. Use the target room's stable ID if names collide. Every tool takes optional `tv`. If several TVs are paired, include it on every call for a particular room.
 3. Check `tv_status {"tv":"<room>"}` for reachability, pairings and capabilities. If someone may be watching, use a text-only `tv_look` before changing their screen.
 
 Use MCP discovery for tool choices, arguments and examples. For repetitive remote work, plan a `tv_sequence` using labels from the target TV. Put a checkpoint immediately before an action that depends on focus, app or row value. `tv_remote` sends keys in one fast burst and checks the screen once at the end; add `"check_each":true` only when each press must be confirmed. See [Drive native apps](apps.md).
 
 After a media or deep-link launch returns, make text-only `tv_look` on the same TV your next call, even if the launch reports success. Check accessibility for an Open prompt before sending another launch or remote key. Confirm a visible Open prompt for the intended app, then verify where the TV lands. See [Profiles and dialogs](apps.md#profiles-and-dialogs). Ask before purchases, rentals or upgrades.
+
+## Choose local or remote
+
+Use a local connection when the agent runs on the home network. It reaches HA at `homeassistant.local` without Tailscale and is the fastest path. Use a remote connection through Tailscale only when the agent runs outside the home. Both use the same HA token.
+
+If you run on a machine at home and the MCP server is registered with a tailnet URL, check for a local connection with the probe in [Choose local or remote](connect.md#choose-local-or-remote). If HA answers, tell the user once and offer to register the local URL.
 
 ## Guides
 

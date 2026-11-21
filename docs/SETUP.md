@@ -93,8 +93,27 @@ Set these in **Settings → Apps → Apple TV Agent Bridge → Configuration**. 
 
 ## Connect an agent
 
+### Choose local or remote
+
+An agent reaches the bridge at `/api/atv_bridge/mcp` on your Home Assistant origin. The origin depends on where the agent runs. One token works for both connections.
+
+- **Local connection (recommended).** Claude Code, Codex, Grok Bot or another agent runs on a machine on the home network. It connects to `http://homeassistant.local:<port>` or HA's LAN IP address, with no Tailscale. From a Mac on the home network, `tv_status` returned in about 0.07 seconds and a text-only `tv_look` in about 0.6 seconds.
+- **Remote connection.** The agent runs outside the home, such as in a cloud sandbox. It connects to HA's tailnet hostname through Tailscale. Each call also waits for the trip between the agent and the home. See [Tailscale for remote agents](#tailscale-for-remote-agents).
+
+The fastest setup is an agent on an always-on machine at home, such as a desktop or a home server. On the home network, always use the local connection. Use the remote connection only for agents outside the home.
+
+Before you set `HA_URL`, check for a local connection from the agent machine. Set `HA_PORT` to HA's web port: 8123 by default, but some installs use 80. The check needs no token.
+
+```sh
+curl -sS -m 2 -o /dev/null -w '%{http_code}\n' "http://homeassistant.local:${HA_PORT:-8123}/api/"
+```
+
+`200` or `401` means HA answered, so use the local connection. A timeout, a refused connection or a name error means it did not. Some containers and Linux hosts cannot resolve `.local` names. On a machine at home, try HA's LAN IP address in that case.
+
+### Register the client
+
 1. Sign in to Home Assistant as an administrator. Open your profile → **Security → Long-lived access tokens → Create token**. Copy the token when it appears. Create a separate token for each agent so you can revoke its access independently. [Home Assistant authentication](https://contributors.home-assistant.io/core/internals/auth-api/)
-2. Set `HA_URL` to the scheme, host and port you use for HA, without a trailing slash. The standard local origin is `http://homeassistant.local:8123`. Use HTTPS or a trusted network when sending an admin token. Set `HA_TOKEN` from your secret store or paste it at a hidden prompt. For Bash:
+2. Set `HA_URL` to the scheme, host and port for the connection you chose, without a trailing slash. The standard local origin is `http://homeassistant.local:8123`. A remote connection uses HA's tailnet hostname and web port instead. Use HTTPS, a trusted home network or Tailscale when sending an admin token. Set `HA_TOKEN` from your secret store or paste it at a hidden prompt. For Bash:
 
    ```bash
    HA_URL='http://homeassistant.local:8123'
@@ -108,6 +127,14 @@ Set these in **Settings → Apps → Apple TV Agent Bridge → Configuration**. 
    claude mcp add --transport http apple-tv "$HA_URL/api/atv_bridge/mcp" \
      --header "Authorization: Bearer $HA_TOKEN"
    ```
+
+   For Codex, export `HA_TOKEN` in the shell that starts Codex, then run:
+
+   ```sh
+   codex mcp add apple-tv --url "$HA_URL/api/atv_bridge/mcp" --bearer-token-env-var HA_TOKEN
+   ```
+
+   Other clients take the same URL and header in their own MCP configuration.
 
 4. For Home Assistant Assist, expose each intended bridge media player under **Settings → Voice assistants → Expose**. The integration supplies `atv_bridge__show`, `atv_bridge__play`, `atv_bridge__open`, `atv_bridge__power`, `atv_bridge__pair` and `atv_bridge__status`. The administrative Home Assistant LLM API gets these tools when the entry is loaded.
 
@@ -147,9 +174,19 @@ curl -fsS -H "Authorization: Bearer $HA_TOKEN" -H 'Content-Type: application/zip
 
 Pass the returned string to `tv_show {"tv":"<TV name>","bundle":"<returned bundle>"}`. For app control, read `tv://apps/<TV ID>`, then use `tv_open`, `tv_look` and `tv_navigate`. [Tool examples](../README.md#operate-a-tv)
 
-## Tailscale for remote agents and live pages
+## Show a live page
 
-Tailscale is optional. A live page must be reachable **from the HA host**, where Chromium runs. Public and tailnet URLs work by default. For a trusted LAN dashboard, set `page_network_allow: ["dashboard.example:8443"]`, restart the app, then pass its URL to `tv_show`. A port limits the grant to that service. Keep using relative URLs for assets and links inside an uploaded bundle.
+A live page must be reachable **from the HA host**, where Chromium runs.
+
+- Uploaded `html`, `files` and bundles need no network access. Keep using relative URLs for assets and links inside a bundle.
+- Public URLs and tailnet URLs work by default.
+- An agent on the home network can show a server on its own machine without Tailscale. Add that machine's LAN IP address and port to `page_network_allow`, such as `["192.168.1.20:3000"]`, and restart the app. Use the IP address, because the bridge never loads `.local` names. A DHCP reservation keeps the address stable.
+- That server must listen on the LAN interface, such as `0.0.0.0`, not only on `localhost`. The machine's firewall must allow the port from HA. Many dev servers listen only on `localhost` by default.
+- For a trusted LAN dashboard, set `page_network_allow: ["dashboard.example:8443"]`, restart the app, then pass its URL to `tv_show`. A port limits the grant to that service.
+
+## Tailscale for remote agents
+
+Tailscale is optional. An agent on the home network does not need it. Set it up for an agent outside the home, or to share a page from a tailnet machine.
 
 1. Install the **Tailscale** community app on HA and sign it in to the same tailnet as the agent. Set `userspace_networking: false` for outbound access from HA. Enable MagicDNS and HTTPS certificates in the Tailscale admin console if you want to share a local web app with HTTPS. [HA Tailscale app](https://github.com/hassio-addons/app-tailscale/blob/main/tailscale/DOCS.md)
 2. Allow the agent to reach the HA web port in your tailnet policy. Set the agent’s `HA_URL` to HA’s tailnet hostname and web port. To show an agent-hosted page, also allow HA to reach the serving port on the agent. If you prefer HA’s LAN address, advertise the LAN subnet with the HA Tailscale app’s `advertise_routes` option and approve that route in the Tailscale admin console. On a Linux agent, accept subnet routes with `tailscale set --accept-routes`. Permit the HA LAN address and web port in the tailnet policy. [Tailscale subnet routers](https://tailscale.com/kb/1019/subnets)

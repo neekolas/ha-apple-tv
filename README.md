@@ -58,7 +58,7 @@ tv-use targets **Apple TV 4K on tvOS 27 or later**, the recommended and tested b
 
 1. Put Home Assistant and the TVs on the same LAN. Install the local app **Apple TV Agent Bridge** and copy the custom integration into Home Assistant. The setup guide covers both a manual install and a workstation deploy. [Setup guide](docs/SETUP.md) · [Workstation deploy](docs/deploy.md)
 2. Restart Home Assistant Core. If the TV already has a built-in Apple TV integration entry, disable that entry before pairing. Accept the bridge discovery in **Settings → Devices & services**. Choose the TV if prompted. Enter its AirPlay PIN. For screen reading, open **Settings → Remotes and Devices → Remote App and Devices** on the TV before requesting the screen PIN. Use **Add Apple TV** on the same integration entry for another TV.
-3. Create a long-lived access token in a Home Assistant administrator’s profile. Give your MCP client the Streamable HTTP endpoint at `/api/atv_bridge/mcp` on your Home Assistant URL and the header `Authorization: Bearer <token>`. For Claude Code, set `HA_TOKEN` to the token in your shell and use your own HA origin in this example. [Client setup](docs/SETUP.md#connect-an-agent)
+3. Create a long-lived access token in a Home Assistant administrator’s profile. Give your MCP client the Streamable HTTP endpoint at `/api/atv_bridge/mcp` on your Home Assistant URL and the header `Authorization: Bearer <token>`. If the agent runs on your home network, use the local origin, such as `http://homeassistant.local:8123`. If it runs outside the home, use HA’s tailnet hostname. The same token works for both. For Claude Code, set `HA_TOKEN` to the token in your shell and use your own HA origin in this example. [Client setup](docs/SETUP.md#connect-an-agent)
 
    ```sh
    HA_URL='http://homeassistant.local:8123'
@@ -67,6 +67,10 @@ tv-use targets **Apple TV 4K on tvOS 27 or later**, the recommended and tested b
    ```
 
 4. Call `tv_status {}`. With one paired TV, check `data.tv.reachable`, `data.pairings` and `data.problems`. With several paired TVs, check each row in `data.tvs`, or call `tv_status {"tv":"<TV name>"}` for one TV.
+
+### Fastest setup: an agent in the house
+
+Run Claude Code, Codex or Grok Bot on a machine on the same network as Home Assistant, such as a desktop or a home server. It reaches HA directly at `homeassistant.local`, with no Tailscale. Each call skips the trip between a remote agent and the home. From a Mac on the home network, `tv_status` returned in about 0.07 seconds and a text-only `tv_look` in about 0.6 seconds. Use Tailscale only for agents that run outside the house. [Choose local or remote](docs/SETUP.md#choose-local-or-remote)
 
 ## Operate a TV
 

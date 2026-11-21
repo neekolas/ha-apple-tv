@@ -34,7 +34,9 @@ Then call `tv_show {"bundle": "<id>"}`. An invalid ZIP within the request size l
 ## Live URLs
 
 - Chromium on the HA host loads live HTTP and HTTPS URLs. Scripts, fetch, WebSockets and live reload work. Use a public site or a reachable tailnet URL. LAN dashboards require an operator grant in `page_network_allow`.
-- To show a server on your own machine, share it on the tailnet:
+- If the content does not need your server, send `html`, `files` or a `bundle` instead. They need no network access.
+- On the home network, a server on your own machine needs an operator grant. Ask the user to add your machine's LAN IP address and port to `page_network_allow`, then pass `http://<LAN IP>:<port>/` to `tv_show`. Use the IP address, not a `.local` name. The server must listen on the LAN interface, such as `0.0.0.0`, not only on `localhost`.
+- Outside the home, or without a grant, share the server on the tailnet:
 
   ```sh
   tailscale serve --bg --https=8443 http://127.0.0.1:5173

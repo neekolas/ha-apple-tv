@@ -39,14 +39,41 @@ For manual installation and optional Tailscale setup, see the [setup guide](../.
 
 ## Connect an MCP client
 
-Set the transport to **Streamable HTTP**. Append `/api/atv_bridge/mcp` to your HA origin. Send `Authorization: Bearer <HA admin token>` as a header. Use the public HA endpoint for all receivers. If using Tailscale, the origin can use your HA node's tailnet hostname or an address reached through an approved subnet route.
+Set the transport to **Streamable HTTP**. Append `/api/atv_bridge/mcp` to your HA origin. Send `Authorization: Bearer <HA admin token>` as a header. One endpoint serves all receivers.
 
-For Claude Code, using the token file above:
+### Choose local or remote
+
+Choose the connection by where the agent runs. The same token works for both.
+
+| Agent runs | Origin | Notes |
+|---|---|---|
+| **Local connection:** on the home network, such as a desktop, a home server or a laptop at home | `http://homeassistant.local:<port>`, or HA's LAN IP address | Recommended. The fastest path, with no Tailscale. |
+| **Remote connection:** outside the home, such as a cloud sandbox | HA's tailnet hostname, such as `http://homeassistant.<tailnet>.ts.net:<port>`, or a LAN address through an approved subnet route | Needs Tailscale on HA and on the agent machine. See the [setup guide](../../docs/SETUP.md#tailscale-for-remote-agents). |
+
+Use HA's web port in both. It is 8123 by default, but some installs serve HA on 80. On the home network, always use the local connection. To check for it, set `HA_PORT` to HA's web port and run this. It needs no token.
+
+```sh
+curl -sS -m 2 -o /dev/null -w '%{http_code}\n' "http://homeassistant.local:${HA_PORT:-8123}/api/"
+```
+
+`200` or `401` means HA answered, so the local connection works. A timeout, a refused connection or a name error means it does not. Some containers and Linux hosts cannot resolve `.local` names. On a machine at home, try HA's LAN IP address in that case.
+
+On the home network the token travels over plain HTTP. Keep it on a trusted network. Tailscale encrypts the remote connection.
+
+### Register the server
+
+Set `HA_URL` to the origin you chose. For Claude Code, using the token file above:
 
 ```sh
 export HA_TOKEN="$(cat ~/.config/atv-bridge/ha_token)"
 claude mcp add --transport http apple-tv "$HA_URL/api/atv_bridge/mcp" \
   --header "Authorization: Bearer $HA_TOKEN"
+```
+
+For Codex, export `HA_TOKEN` in the shell that starts Codex. Codex reads the token from that variable on each start.
+
+```sh
+codex mcp add apple-tv --url "$HA_URL/api/atv_bridge/mcp" --bearer-token-env-var HA_TOKEN
 ```
 
 For a client that accepts an `mcpServers` JSON object, replace the sample origin and token using that client's secret configuration.
