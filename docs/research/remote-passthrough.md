@@ -24,11 +24,9 @@ Outcome against the pass bar below:
 
 Limits:
 
-- **Only `tv_remote` presses are verified.** The line says `source:externalAccessory (MediaRemote)`, the injected path. The physical Siri Remote has not been tested.
-- **Arrows on a 1st-gen Siri Remote may not produce this line.** That remote has a touch surface, not arrow buttons.
-- **One TV, one tvOS version.** Apple TV 4K 1st gen on tvOS 26.6.1. The bridge supports tvOS 27 or later, which is untested. Log text can change between tvOS versions.
-
-**One-minute physical check.** Show a page with `remote:"keys"`. Press each arrow and Select on the physical Siri Remote. Read the press counter. If it fails, only the matcher needs to change.
+- **Physical remotes behave differently from `tv_remote`, and both are now covered.** `tv_remote` (Companion) logs arrows on the generic desktop page (0x1/0x8A–0x8D) with `source:externalAccessory (MediaRemote)`. A physical clickpad Siri Remote on tvOS 27.2 logs arrows on the consumer page (`Left page:0xC usage:0x44`, Right 0x45, Up 0x42, Down 0x43) with `source:verifiedExternalAccessory`. Select is 0xC/0x80 on both. The matcher accepts both pages. See [Physical remotes](#physical-remotes).
+- **A 1st-gen touch-surface Siri Remote has no directional click.** Every click, at the center or an edge, logs the same Select line. Swipes log no Button line. They appear only as DEBUG `TouchEvents` digitizer lines with a normalized finger position about every 15 ms. The bridge turns those into arrows with its own swipe recognizer.
+- **Two TVs, two tvOS versions.** Apple TV 4K 1st gen on tvOS 26.6.1 and Apple TV 4K 2nd gen on tvOS 27.2. Log text can change between tvOS versions.
 
 ## Pass bar
 
@@ -184,6 +182,20 @@ Effect on each path:
 `tv_remote` ends with one screen read (`docs/ARCHITECTURE.md:51`), so the probe ran `tv_look` alone as a control. During the mirror, `backboardd` sends each press to `TVAirPlay`, which drops it (`firstResponder (null)`). Back ends the mirror.
 
 The physical Siri Remote is the open check. Run the one-minute physical check in the Verdict.
+
+## Physical remotes
+
+These runs used a person pressing the real remote on November 20, 2026.
+
+| TV and remote | Action | Log line | Result in the page |
+| --- | --- | --- | --- |
+| Living Room, tvOS 27.2, clickpad | Ring clicks | `Left page:0xC usage:0x44 downEvent:1 source:verifiedExternalAccessory …` (Right 0x45, Up 0x42, Down 0x43) | Rejected by the first matcher. Matched after commit "Match physical clickpad arrows on the consumer page". |
+| Living Room, tvOS 27.2, clickpad | Center click | `Select page:0xC usage:0x80 …` | Enter, verified end to end. |
+| Bedroom, tvOS 26.6.1, 1st-gen touch | Clicks at center and four edges | The same `Select page:0xC usage:0x80` line each time | 5 trusted Enter presses, about 165 ms from the first backboardd line to the page keydown. |
+| Bedroom, tvOS 26.6.1, 1st-gen touch | Swipes and a slow drag | No Button line. DEBUG `TouchEvents` lines: `touchpad Digitizer token: …; down|move|up; … {x, y}`, x and y from 0 to 1, y down | Arrows only through the swipe recognizer. Verified by replaying the capture, not yet by a live swipe. |
+| Both | Menu | `Menu page:0x1 usage:0x86 …` to the system | Not forwarded. Menu ends the mirror. |
+
+The stream needs the DEBUG flag (PAYLOAD|DEBUG, 0x24) for the touch lines. With the backboardd pid filter it carried about 65 lines per second while a finger touched the pad and almost nothing otherwise.
 
 ## Hardware results
 
