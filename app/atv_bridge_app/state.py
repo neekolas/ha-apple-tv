@@ -113,11 +113,19 @@ def success(state, evidence=(), **fields):
     return {"ok": True, "state": state, "evidence": list(evidence), **fields}
 
 
+# Standalone mode replaces remediation text that names Home Assistant steps.
+REWORDING = {}
+
+
+def reworded(text):
+    return REWORDING.get(text, text)
+
+
 class Fault(Exception):
     def __init__(self, code, message, remediation, retryable=False, **fields):
         super().__init__(message)
         self.code = code
-        self.remediation = remediation
+        self.remediation = reworded(remediation)
         self.retryable = retryable
         self.fields = fields
 

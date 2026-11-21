@@ -16,7 +16,7 @@ async function keepAwake(enabled) {
   } catch {}
 }
 function connect() {
-  const ws = new WebSocket("ws://" + location.host + "/stage/ws");
+  const ws = new WebSocket("ws://" + location.host + "/stage/ws" + location.search);
   const reply = event => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(event)); };
   ws.onmessage = ({ data }) => {
     const msg = JSON.parse(data);

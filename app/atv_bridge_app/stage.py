@@ -1,6 +1,7 @@
 import base64
 import binascii
 import asyncio
+import hmac
 import io
 import os
 import shutil
@@ -147,6 +148,8 @@ class ContentStore:
 class Stage:
     def __init__(self, root, store=None):
         self.origin = "http://127.0.0.1:8766"
+        # Standalone mode sets a per-process secret that the stage page and its socket require.
+        self.key = None
         self.stage_ports = set()
         self.page_network = PageNetworkPolicy(stage_ports=self.stage_ports)
         self.store = store or ContentStore(root / "content")
@@ -188,9 +191,16 @@ class Stage:
         if self.ws:
             await self.ws.close()
 
-    @staticmethod
-    def local(request):
+    @property
+    def url(self):
+        """The stage page that the bridge's browser loads."""
+        return self.origin + "/stage" + (f"?key={self.key}" if self.key else "")
+
+    def local(self, request):
         if request.remote not in ("127.0.0.1", "::1"):
+            raise web.HTTPForbidden()
+        # Loopback is not private when a container shares the host's network.
+        if self.key and not hmac.compare_digest(request.query.get("key", "").encode(), self.key.encode()):
             raise web.HTTPForbidden()
 
     async def websocket(self, request):
@@ -223,7 +233,12 @@ class Stage:
     def app(self, media_stage=None):
         async def index(request):
             self.local(request)
-            return web.FileResponse(Path(__file__).parent / "data" / "stage.html")
+            # Keep other pages from framing the stage, and keep the key out of the Referer
+            # header that the stage's own pages would otherwise read.
+            headers = {"Content-Security-Policy": "frame-ancestors 'none'", "Referrer-Policy": "no-referrer"}
+            return web.FileResponse(
+                Path(__file__).parent / "data" / "stage.html", headers=headers if self.key else None
+            )
 
         async def content(request):
             path = self.store.file(request.match_info["page_id"], request.match_info["file"])

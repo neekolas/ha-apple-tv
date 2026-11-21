@@ -3,6 +3,7 @@
 import asyncio
 import ipaddress
 import json
+import logging
 import re
 import shutil
 import tempfile
@@ -21,6 +22,8 @@ from .stage import ContentStore
 from .state import Fault, State, write_private
 from .tools.contract import ROUTED_SCHEMAS, TEXT, schema
 from .tools.public import UNKNOWN, outcome
+
+_LOG = logging.getLogger(__name__)
 
 
 def record_id(value):
@@ -102,10 +105,14 @@ def migrate(controller, legacy_host, legacy_id):
 
 
 class Fleet:
-    def __init__(self, root, options, factory=TVRuntime, *, stage_port=8766, stage_host="0.0.0.0"):
+    def __init__(self, root, options, factory=TVRuntime, *, stage_port=8766, stage_host="0.0.0.0",
+                 stage_key=None, keep_unlisted=False):
+        """`keep_unlisted` keeps the records of TVs that leave the configured list, instead of
+        deleting them, until a listed TV matches one again. Standalone mode sets it."""
         self.controller = State(root)
         self.stage_port = stage_port
         self.stage_host = stage_host
+        self.stage_key = stage_key
         self.stage_ports = set()
         self.page_network = PageNetworkPolicy(options.get("page_network_allow", []), self.stage_ports)
         self.options = options
@@ -126,13 +133,24 @@ class Fleet:
             "receiver-options.json", lambda: {"configured": {}, "removed": []}
         )
         removed = set(self.registry["removed"])
-        for metadata in sorted((self.controller.root / "tvs").glob("*/receiver.json")):
-            if metadata.parent.name not in removed:
-                self._build(json.loads(metadata.read_text()))
         self.entries = list(options.get("apple_tvs") or [])
         if old_id or old_host:
             self.entries.append({"host": old_host, "id": old_id})
         previous = self.registry["configured"]
+        # Kept records stay out of service. A listed TV that matches one reattaches it in register.
+        self.kept = None
+
+        def stored(keys):
+            return {key for key in keys if (self.controller.root / "tvs" / key / "receiver.json").is_file()}
+
+        if keep_unlisted:
+            listed = {self.option_key(entry) for entry in self.entries}
+            self.kept = stored(set(self.registry.get("kept", [])) | set(previous.values())) - {
+                key for option, key in previous.items() if option in listed
+            }
+        for metadata in sorted((self.controller.root / "tvs").glob("*/receiver.json")):
+            if metadata.parent.name not in removed | (self.kept or set()):
+                self._build(json.loads(metadata.read_text()))
         configured = {}
         for entry in self.entries:
             option = self.option_key(entry)
@@ -140,7 +158,20 @@ class Fleet:
             if key not in removed:
                 key = self.register(entry).metadata["id"]
             configured[option] = key
-        removed.update(set(previous.values()) - set(configured.values()))
+        unlisted = set(previous.values()) - set(configured.values())
+        if self.kept is None:
+            removed.update(unlisted)
+        else:
+            self.kept = stored(self.kept | unlisted) - set(configured.values())
+            for key in sorted(self.kept):
+                self.runtimes.pop(key, None)
+                meta = json.loads((self.controller.root / "tvs" / key / "receiver.json").read_text())
+                _LOG.warning(
+                    "Kept the records of TV %s (ID %s), which the TV list no longer names. "
+                    "Add the TV to the list again to use its pairings.",
+                    meta.get("name") or meta.get("host") or meta.get("identifier") or key, key,
+                )
+            self.registry["kept"] = sorted(self.kept)
         self.registry.update(configured=configured, removed=sorted(removed))
         self.save_registry()
         for key in removed:
@@ -257,17 +288,9 @@ class Fleet:
                 or (host and host in (info["host"], rt.metadata.get("host")))
                 or (not host and not identifier and info["name"].casefold() == name.casefold())
             ):
-                if identifier and info["identifiers"] and identifier.casefold() not in ids:
-                    raise ValueError("Address belongs to another registered receiver")
-                resolver = rt.engine.adapter.resolver
-                if host:
-                    rt.metadata["host"] = resolver.configured_host = host
-                if identifier and identifier != info["id"]:
-                    rt.metadata["identifier"] = resolver.configured_id = identifier
-                if name:
-                    rt.metadata["name"] = name
-                write_private(rt.state.root / "receiver.json", json.dumps(rt.metadata))
-                return rt
+                return self.update(rt, host, identifier, name)
+        if rt := self.reattach(host, identifier, name):
+            return self.update(rt, host, identifier, name)
         rt = self._build(
             {
                 "id": registry_id or record_id(identifier or host or name),
@@ -279,6 +302,45 @@ class Fleet:
         if name and not host and not identifier:
             rt.state.save_pairings(tv={"name": name})
         return rt
+
+    def update(self, rt, host, identifier, name):
+        info = self.info(rt)
+        ids = {x.casefold() for x in [info["id"], *info["identifiers"]]}
+        if identifier and info["identifiers"] and identifier.casefold() not in ids:
+            raise ValueError("Address belongs to another registered receiver")
+        resolver = rt.engine.adapter.resolver
+        if host:
+            rt.metadata["host"] = resolver.configured_host = host
+        if identifier and identifier != info["id"]:
+            rt.metadata["identifier"] = resolver.configured_id = identifier
+        if name:
+            rt.metadata["name"] = name
+        write_private(rt.state.root / "receiver.json", json.dumps(rt.metadata))
+        return rt
+
+    def reattach(self, host, identifier, name):
+        """Return to service the one kept record that matches by stored identifier, else by name,
+        else by address. An identifier rules out records that store other identifiers."""
+        records = {}
+        for key in self.kept or ():
+            directory = self.controller.root / "tvs" / key
+            meta = json.loads((directory / "receiver.json").read_text())
+            target = State(directory, controller=self.controller).pairings.get("tv") or {}
+            ids = {x.casefold() for x in [meta.get("identifier"), *target.get("identifiers", [])] if x}
+            if identifier and ids and identifier.casefold() not in ids:
+                continue
+            stored_name = (meta.get("name") or target.get("name") or "").casefold()
+            records[key] = meta, ids, stored_name, {meta.get("host"), target.get("last_known_host")}
+        for found in (
+            [key for key, (_, ids, _, _) in records.items() if identifier and identifier.casefold() in ids],
+            [key for key, (_, _, stored, _) in records.items() if name and stored == name.casefold()],
+            [key for key, (_, _, _, hosts) in records.items() if host and host in hosts],
+        ):
+            if len(found) == 1:
+                self.kept.discard(found[0])
+                _LOG.info("Reattached the kept records of TV %s", found[0])
+                return self._build(records[found[0]][0])
+        return None
 
     async def candidates(self):
         return [describe(c) for c in await self.primary.engine.adapter.resolver.scan()]
@@ -504,7 +566,8 @@ class Fleet:
         if rt in self.runtimes.values():
             rt.stage.media_origin = self.primary.stage.origin
             rt.stage.media_prefix = rt.metadata["id"]
-        rt.operations.live_mirror.stage_url = rt.stage.origin + "/stage"
+        rt.stage.key = self.stage_key
+        rt.operations.live_mirror.stage_url = rt.stage.url
         self.runners[rt] = runner
         if rt in self.runtimes.values():
             rt.engine.start()

@@ -181,7 +181,8 @@ class TVRuntime:
 
     def app(self, fleet=None, authorize=None):
         """Build the API. `authorize(request)` returns None to accept a request or a Fault to
-        reject it. The default accepts only the internal token. Standalone mode supplies its own."""
+        reject it, with HTTP status 401 unless the Fault has a `status`. The default accepts only
+        the internal token. Standalone mode supplies its own."""
         mcp = fleet.mcp if fleet else self.mcp
 
         def internal_token(request):
@@ -216,7 +217,7 @@ class TVRuntime:
         @web.middleware
         async def auth(request, handler):
             if fault := authorize(request):
-                return web.json_response(fault.result(), status=401)
+                return web.json_response(fault.result(), status=getattr(fault, "status", 401))
             try:
                 return await handler(request)
             except web.HTTPException as exc:

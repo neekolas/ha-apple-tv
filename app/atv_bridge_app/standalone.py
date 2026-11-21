@@ -3,16 +3,19 @@
 Home Assistant mode reads Supervisor's /data/options.json. Standalone mode builds the
 same options from TV_USE_* environment variables and command flags. A flag wins over
 its environment variable. Standalone mode serves MCP and the REST routes on one port
-behind a bearer token that the operator supplies.
+behind a bearer token that the operator supplies, and refuses requests from web pages
+on other sites.
 """
 
 import argparse
 import hmac
 import ipaddress
-from dataclasses import dataclass
+import secrets
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .live import TAILNET_DNS_FIX
 from .page_network import PageNetworkPolicy
 from .state import Fault
 
@@ -122,8 +125,9 @@ class Option:
 
 OPTIONS = [
     Option("apple_tvs", "--tv", "TVS", tv,
-           "A TV as host=IP,id=ID,name=NAME (any subset) or a bare IPv4 address. Repeat the flag "
-           "for more TVs. In the variable, separate TVs with semicolons.", "list", ";"),
+           "A TV as host=IP,id=ID,name=NAME (any subset) or a bare IPv4 address. A name cannot "
+           "contain a comma, or a semicolon in the variable. Repeat the flag for more TVs. In the "
+           "variable, separate TVs with semicolons.", "list", ";"),
     Option("presentation_mode", "--presentation-mode", "PRESENTATION_MODE",
            choice("mirror", "play_url", "auto"), "mirror, play_url or auto. Default mirror."),
     Option("mirror_size", "--mirror-size", "MIRROR_SIZE", choice("1280x720", "1920x1080"),
@@ -152,14 +156,18 @@ OPTIONS = [
     Option("listen", "--listen", "LISTEN", address,
            "Address for MCP and REST. Default 0.0.0.0, or 127.0.0.1 with --insecure-local."),
     Option("port", "--port", "PORT", integer(1, 65535), "Port for MCP and REST. Default 8765."),
-    Option("stage_listen", "--stage-listen", "STAGE_LISTEN", address,
-           "Address for the stage on port 8766. Default 127.0.0.1. Use 0.0.0.0 for play_url or "
-           "auto on a Linux host, where the TV fetches MP4 files from the stage."),
+    Option("stage_listen", "--stage-listen", "STAGE_LISTEN", choice("127.0.0.1", "0.0.0.0"),
+           "Address for the stage on port 8766: 127.0.0.1 (default) or 0.0.0.0. Use 0.0.0.0 for "
+           "play_url or auto on a Linux host, where the TV fetches MP4 files from the stage."),
     Option("token", "--token", "TOKEN", text, "Bearer token that clients must send."),
     Option("token_file", "--token-file", "TOKEN_FILE", text, "File that holds the bearer token."),
     Option("insecure_local", "--insecure-local", "INSECURE_LOCAL", boolean,
            "Accept requests without a token. Listens on loopback only.", "flag"),
+    Option("discover", "--discover", "DISCOVER", boolean,
+           "Start without a TV list and add TVs that Bonjour discovery finds. Discovery does not "
+           "work on a Mac.", "flag"),
 ]
+KNOWN = {PREFIX + option.env for option in OPTIONS} | {PREFIX + "MODE"}
 
 
 def parser():
@@ -187,15 +195,60 @@ def parser():
 
 
 def mode(argv, environ, root, supervisor):
-    """Return "standalone" or "ha". Home Assistant mode is the default whenever Supervisor is present."""
+    """Return "standalone" or "ha" and the reason. Home Assistant mode is the default whenever
+    Supervisor is present. Without Supervisor, a TV_USE_* variable selects standalone mode."""
     explicit = environ.get(PREFIX + "MODE", "").strip().lower()
     if explicit not in ("", "ha", "standalone"):
         raise SystemExit(f"{PREFIX}MODE must be standalone or ha, not {explicit!r}.")
-    if "--standalone" in argv or explicit == "standalone":
-        return "standalone"
-    if explicit == "ha" or supervisor or (Path(root) / "options.json").exists():
-        return "ha"
-    return "standalone"
+    if "--standalone" in argv:
+        return "standalone", "the --standalone flag"
+    if explicit:
+        return explicit, f"{PREFIX}MODE={explicit}"
+    if supervisor:
+        return "ha", "Supervisor supplied a token"
+    variables = sorted(name for name in environ if name.startswith(PREFIX) and name != PREFIX + "MODE")
+    if variables:
+        return "standalone", f"{variables[0]} is set and Supervisor supplied no token"
+    if (Path(root) / "options.json").exists():
+        return "ha", "options.json exists"
+    return "standalone", "Supervisor supplied no token and options.json does not exist"
+
+
+CONTROL_FIX = 'Run tv_pair with kind "control" for this TV.'
+# Remediation text that names Home Assistant steps, and the standalone steps that replace it.
+REMEDIATION = {
+    "Pair AirPlay in Home Assistant.": CONTROL_FIX,
+    "Pair this Apple TV in Home Assistant.": CONTROL_FIX,
+    "Complete Companion pairing in Home Assistant.":
+        'Pair Companion: POST {"protocol":"companion"} to /api/tvs/<TV ID>/pair/start, then the '
+        "code to /api/tvs/<TV ID>/pair/finish.",
+    "Finish that exchange in Home Assistant.":
+        "Finish that exchange through /api/tvs/<TV ID>/pair/finish, or wait 180 seconds for it to expire.",
+    "Check Remote Pairing in Home Assistant.":
+        'Check screen pairing with tv_status, and run tv_pair with kind "screen" if it is not ok.',
+    "Wake the TV and check that it shares the bridge's network. Check apple_tv_host if set, or "
+    "select the TV again in Home Assistant.":
+        "Wake the TV and check that it shares the bridge's network. Check the TV's address in TV_USE_TVS.",
+    'Run tv_pair with kind "screen" for this TV, or choose Configure → Re-pair screen in Home Assistant.':
+        'Run tv_pair with kind "screen" for this TV.',
+    TAILNET_DNS_FIX:
+        "Ignore this unless pages use tailnet names. To load them, give the container a DNS server "
+        "that resolves them.",
+    "Check the hostname and the HA DNS resolver.": "Check the hostname and the container's DNS resolver.",
+    "Check the server and the network route from Home Assistant.":
+        "Check the server and the network route from the bridge's computer.",
+}
+
+
+class Refusal(Fault):
+    """A refused request and its HTTP status."""
+
+    def __init__(self, status, code, message, remediation):
+        super().__init__(code, message, remediation)
+        self.status = status
+
+
+LOOPBACK_NAMES = ("127.0.0.1", "localhost", "::1")
 
 
 def bearer(token):
@@ -216,13 +269,60 @@ def bearer(token):
 
 def loopback(request):
     # A loopback Host header keeps a web page from reaching the open server through DNS rebinding.
-    if urlsplit("//" + request.host).hostname not in ("127.0.0.1", "localhost", "::1"):
+    if urlsplit("//" + request.host).hostname not in LOOPBACK_NAMES:
         return Fault(
             "unauthorized",
             "This server accepts only loopback host names.",
             "Connect to http://127.0.0.1 or http://localhost, or run with a token.",
         )
     return None
+
+
+def trusted_origin(origin, host):
+    """Accept the server's own origin and loopback origins. Refuse other sites and the
+    opaque origin "null" that sandboxed pages send."""
+    try:
+        parts = urlsplit(origin)
+        name = parts.hostname
+    except ValueError:
+        return False
+    return parts.scheme in ("http", "https") and (
+        name in LOOPBACK_NAMES or parts.netloc.casefold() == host.casefold()
+    )
+
+
+def guard(identify):
+    """Add the checks that keep web pages on other sites out to an identity check.
+
+    A browser sends Origin with every cross-site POST and WebSocket. A cross-site page can
+    send a body without a preflight only as text/plain, form data or no type, so a JSON or
+    ZIP body type also proves that the sender is not such a page."""
+
+    def authorize(request):
+        if fault := identify(request):
+            return fault
+        origin = request.headers.get("Origin")
+        if origin is not None and not trusted_origin(origin, request.host):
+            return Refusal(
+                403,
+                "forbidden_origin",
+                "This server refuses requests from web pages on other sites.",
+                "Call the API from a program, or from a page on this server's own origin or loopback.",
+            )
+        if request.method == "POST":
+            expected = "application/zip" if request.path == "/api/bundle" else "application/json"
+            # Read the header itself. aiohttp reports a missing type as application/octet-stream.
+            supplied = request.headers.get("Content-Type", "").partition(";")[0].strip().lower()
+            if supplied != expected:
+                return Refusal(
+                    415,
+                    "unsupported_media_type",
+                    f"This route accepts only {expected} bodies.",
+                    f"Send the header Content-Type: {expected}.",
+                )
+        return None
+
+    return authorize
 
 
 @dataclass(frozen=True)
@@ -232,15 +332,20 @@ class Settings:
     port: int
     stage_listen: str
     token: str | None
+    # Warnings to log once logging is configured.
+    warnings: tuple = ()
+    # One secret per process. The bridge's browser loads the stage with it, and the stage
+    # refuses every other client.
+    stage_key: str = field(default_factory=lambda: secrets.token_hex(16), repr=False)
 
     @property
     def authorize(self):
-        return bearer(self.token) if self.token else loopback
+        return guard(bearer(self.token) if self.token else loopback)
 
     @property
     def fleet(self):
-        """Keyword arguments for Fleet."""
-        return {"stage_host": self.stage_listen}
+        """Keyword arguments for Fleet. Standalone mode keeps the records of TVs that leave the list."""
+        return {"stage_host": self.stage_listen, "stage_key": self.stage_key, "keep_unlisted": True}
 
     def listeners(self, service):
         return [(service.app(authorize=self.authorize), self.listen, self.port)]
@@ -257,6 +362,7 @@ def settings(argv, environ):
     """Build standalone Settings from flags and TV_USE_* variables. Exits with a message on bad input."""
     cli = parser()
     flags = vars(cli.parse_args(argv))
+    unknown = sorted(name for name in environ if name.startswith(PREFIX) and name not in KNOWN)
     values = {}
     for option in OPTIONS:
         value = flags[option.key]
@@ -302,14 +408,22 @@ def settings(argv, environ):
     port = values["port"] or 8765
     if port == STAGE_PORT:
         cli.error(f"Port {STAGE_PORT} is the stage port. Choose another port.")
-    return Settings(options, listen, port, values["stage_listen"] or "127.0.0.1", token or None)
+    if not options["apple_tvs"] and not values["discover"]:
+        # An empty list most often means a misspelled variable. Never start without the TVs.
+        hint = f" These variables are not settings: {', '.join(unknown)}." if unknown else ""
+        cli.error(f"No TVs are configured. Set {PREFIX}TVS or pass --tv. To start without a list "
+                  f"and add TVs by discovery, set {PREFIX}DISCOVER=true or pass --discover.{hint}")
+    warnings = tuple(f"{name} is not a tv-use setting and is ignored. Check its spelling. "
+                     "--help lists the settings." for name in unknown)
+    return Settings(options, listen, port, values["stage_listen"] or "127.0.0.1", token or None, warnings)
 
 
 def configure(argv, environ, root, supervisor):
-    """Return Settings in standalone mode, or None in Home Assistant mode."""
-    if mode(argv, environ, root, supervisor) == "ha":
+    """Return Settings in standalone mode, or None in Home Assistant mode, and the reason for the mode."""
+    chosen, reason = mode(argv, environ, root, supervisor)
+    if chosen == "ha":
         if argv:
             raise SystemExit("Command flags apply only in standalone mode. "
                              f"Pass --standalone or set {PREFIX}MODE=standalone.")
-        return None
-    return settings(argv, environ)
+        return None, reason
+    return settings(argv, environ), reason

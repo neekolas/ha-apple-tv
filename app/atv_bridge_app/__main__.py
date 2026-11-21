@@ -8,10 +8,11 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .processes import isolate_supervisor_token, supervisor_token
+from .processes import forget_supervisor_token, isolate_supervisor_token, supervisor_token
 from .fleet import Fleet
 from .ingress import panel
-from .standalone import configure
+from .standalone import REMEDIATION, configure
+from .state import REWORDING
 
 LAG_LIMIT = 1.0
 
@@ -32,9 +33,21 @@ async def main(argv=None):
     isolate_supervisor_token()
     root = Path(os.environ.get("ATV_BRIDGE_DATA", "/data")).resolve()
     # Standalone settings, or None when Home Assistant's Supervisor supplies options.json.
-    plan = configure(sys.argv[1:] if argv is None else argv, os.environ, root, supervisor_token())
+    stray = supervisor_token()
+    plan, reason = configure(sys.argv[1:] if argv is None else argv, os.environ, root, stray)
+    # Playwright's driver and other children inherit os.environ. Settings hold the token now.
+    os.environ.pop("TV_USE_TOKEN", None)
+    if plan:
+        forget_supervisor_token()
+        REWORDING.update(REMEDIATION)
     options = plan.options if plan else json.loads((root / "options.json").read_text())
     logging.basicConfig(level=options.get("log_level", "info").upper())
+    log = logging.getLogger(__name__)
+    log.info("Starting in %s mode because %s", "standalone" if plan else "Home Assistant", reason)
+    if plan and stray:
+        log.warning("Ignoring SUPERVISOR_TOKEN. Standalone mode never contacts Supervisor.")
+    for warning in plan.warnings if plan else ():
+        log.warning("%s", warning)
     # pyatv's wire-level debug logs include keys, PINs and keyboard contents.
     logging.getLogger("pyatv").setLevel(logging.WARNING)
     # Status-only AirPlay traces omit credentials, headers, URLs and payloads.

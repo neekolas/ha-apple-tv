@@ -13,7 +13,7 @@ from ..live import TAILNET_DNS_FIX
 from ..present.interaction import PageInteraction
 from ..present.media import MediaPlayback
 from ..present.remote_input import RemoteInput
-from ..state import Fault, classify
+from ..state import Fault, classify, reworded
 from . import link_info, playback_identity
 from .contract import NO_SCREEN, RUN_HELP, SCHEMAS, UNKNOWN, checked, outcome, public_error, schema
 from ..history import report
@@ -349,7 +349,7 @@ class PublicTools:
             problems.append(
                 {
                     "code": "page_unreachable",
-                    "fix": TAILNET_DNS_FIX,
+                    "fix": reworded(TAILNET_DNS_FIX),
                 }
             )
         return outcome(

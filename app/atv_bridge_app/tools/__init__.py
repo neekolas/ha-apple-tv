@@ -9,7 +9,7 @@ import yaml
 
 from ..live import TAILNET_DNS_FIX, probe, resolve_tailnet, tailnet_dns
 from ..present.browsers import browser_status
-from ..state import Fault, classify, now, success
+from ..state import Fault, classify, now, reworded, success
 
 LINKS = yaml.safe_load((Path(__file__).parents[1] / "data/deeplinks.yaml").read_text())
 SYSTEM_APP_NAMES = {
@@ -123,7 +123,7 @@ class Tools:
         result["problems"] = (
             []
             if result["tailnet_dns"]["ok"]
-            else [{"code": "tailnet_dns_missing", "fix": TAILNET_DNS_FIX}]
+            else [{"code": "tailnet_dns_missing", "fix": reworded(TAILNET_DNS_FIX)}]
         )
         invalid = getattr(self.observer, "invalid", False) is True
         if result["pairings"]["remote_pairing"] and not self.engine.pairing and (
@@ -137,7 +137,9 @@ class Tools:
         if invalid and result["pairings"]["remote_pairing"]:
             result["problems"].append({
                 "code": "screen_pairing_invalid",
-                "fix": "Run tv_pair with kind \"screen\" for this TV, or choose Configure → Re-pair screen in Home Assistant.",
+                "fix": reworded(
+                    "Run tv_pair with kind \"screen\" for this TV, or choose Configure → Re-pair screen in Home Assistant."
+                ),
             })
             if "remote_pairing" not in result["pairing_needed"]:
                 result["pairing_needed"].append("remote_pairing")
@@ -456,7 +458,7 @@ class Tools:
                 try:
                     # Even pages that advertise a framing restriction first go
                     # through the stage. Switch the actual browser on refusal.
-                    await sender.start(self.stage.origin + "/stage")
+                    await sender.start(self.stage.url)
                     if not embedded:
                         raise TimeoutError
                 except TimeoutError:

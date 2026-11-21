@@ -20,7 +20,7 @@ from aiohttp import (
 
 from .page_network import BlockedAddress
 from .processes import supervisor_token
-from .state import Fault
+from .state import Fault, reworded
 
 ORIGIN = "http://127.0.0.1:8766"
 
@@ -157,7 +157,7 @@ async def probe(stage, url):
     except (TimeoutError, ClientError, OSError) as exc:
         host = getattr(exc, "host", None) or host
         fault = page_failure(host, exc)
-        if fault.remediation == TAILNET_DNS_FIX:
+        if fault.remediation == reworded(TAILNET_DNS_FIX):
             stage.dns_status = {"hostname": host, "resolved": False}
         raise fault from exc
 

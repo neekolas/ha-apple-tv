@@ -28,12 +28,23 @@ def isolate_supervisor_token():
         _supervisor_token = os.environ.pop("SUPERVISOR_TOKEN")
 
 
+def forget_supervisor_token():
+    """Standalone mode never talks to Supervisor, even when a stray token is present."""
+    global _supervisor_token
+    _supervisor_token = None
+    os.environ.pop("SUPERVISOR_TOKEN", None)
+
+
 def supervisor_token():
     return _supervisor_token or os.getenv("SUPERVISOR_TOKEN")
 
 
+# Child processes never inherit these secrets.
+SECRETS = ("SUPERVISOR_TOKEN", "TV_USE_TOKEN")
+
+
 def child_env(**values):
-    return {key: value for key, value in os.environ.items() if key != "SUPERVISOR_TOKEN"} | values
+    return {key: value for key, value in os.environ.items() if key not in SECRETS} | values
 
 
 async def reap(proc, *, group=False, sweep=None):
