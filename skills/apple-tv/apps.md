@@ -12,7 +12,11 @@ To visit several rows on one menu, use `for_each` and `{"to":"$item"}`. A checkp
 
 Before an action, the bridge may press Menu to dismiss a screen saver. For a recognized tvOS picker it tries the configured `default_profile`, then the focused profile. For app pickers, the preferred name is `app_profile`, the last observed system profile, or `default_profile`, in that order. If it cannot match the preferred name it may choose the focused profile or the first eligible candidate. It excludes Kids profiles when another eligible profile is visible. Read the chosen label in `evidence`.
 
-With screen pairing, recognized privacy prompts can be dismissed by selecting a visible decline option. If the bridge cannot identify a choice, follow the returned fix. For a recognized custom scheme, the bridge checks for an Open confirmation. It can take one screenshot per launch to recognize the centered English dialog and can send Select when the named app and focused Open button match. A relaunch after a profile choice can repeat the check.
+With screen pairing, recognized privacy prompts can be dismissed by selecting a visible decline option. If the bridge cannot identify a choice, follow the returned fix.
+
+After a media or deep-link launch returns, immediately call text-only `tv_look {"tv":"<same TV>","image":false}`, even if the launch reports success. Check the accessibility items for the dialog text, named app and focused action, such as **Open in YouTube?** with **Open** focused. The bridge may already have handled the confirmation. Check the current screen before sending a remote key or launching the same URL again.
+
+If the dialog names the intended app and **Open** is focused, send `tv_remote {"keys":["select"]}` once to that TV. If focus is elsewhere, move it to **Open** and verify focus before selecting. Use a screenshot only if accessibility leaves the dialog or focus unclear. After selecting, use text-only `tv_look` again to check the app and, for playback, the title and playing state. An acknowledged key confirms delivery only. If the TV already reached the intended app or video, continue from there.
 
 ## Power and paid actions
 

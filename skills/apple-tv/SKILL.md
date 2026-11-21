@@ -15,7 +15,7 @@ Use the bridge on Home Assistant OS with an Apple TV 4K running tvOS 27 or later
 
 Use MCP discovery for tool choices, arguments and examples. For repetitive remote work, plan a `tv_sequence` using labels from the target TV. Put a checkpoint immediately before an action that depends on focus, app or row value. `tv_remote` sends keys in one fast burst and checks the screen once at the end; add `"check_each":true` only when each press must be confirmed. See [Drive native apps](apps.md).
 
-On uncertain delivery, inspect the current screen before resuming. Ask before purchases, rentals or upgrades.
+After a media or deep-link launch returns, make text-only `tv_look` on the same TV your next call, even if the launch reports success. Check accessibility for an Open prompt before sending another launch or remote key. Confirm a visible Open prompt for the intended app, then verify where the TV lands. See [Profiles and dialogs](apps.md#profiles-and-dialogs). Ask before purchases, rentals or upgrades.
 
 ## Guides
 
