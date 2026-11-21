@@ -57,7 +57,7 @@ The workflow pushes these images to GitHub Container Registry:
 
 Each push to `main` adds the tags `sha-<7-character commit>`, `latest` and the `version` from `app/config.yaml`. A manual run from another branch adds only the `sha-` tag. The version tag moves to the newest build on every push to `main`, so it does not identify one build until the version changes. Each image carries the OCI labels `org.opencontainers.image.source`, `revision` and `version`.
 
-The workflow uses `GITHUB_TOKEN` and requests `packages: write`. A new package is private by default. Make each package public in its package settings before any host pulls it without credentials.
+The workflow uses `GITHUB_TOKEN` and requests `packages: write`. The packages are linked to this public repository and inherit its public visibility, so hosts pull them without credentials. Check each package's visibility in its settings before a switch to image pulls.
 
 ### Image drift
 
