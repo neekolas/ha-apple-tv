@@ -89,6 +89,7 @@ Every app works with the Siri Remote as well as by voice. Show it with `tv_show 
 - Menu ends the mirror, so put an on-screen Back button wherever a view has a way back.
 - Route each remote action through the same `PATCH` handler a voice patch uses, so voice and remote stay in step. Then call `tv.input(action, detail)`, such as `tv.input("pick", {item: 3})`, so the agent sees what the person did.
 - After each render, keep focus on a sensible item: the current step's Next button, the focused card, the first answer.
+- Pages mostly for reading or glancing (an answer, a dashboard) show no focus ring until the first remote press. Pages built for choosing may focus their first control at once.
 - List the remote actions in the header: which control does what, and what `tv.input` reports.
 
 ## Code layout

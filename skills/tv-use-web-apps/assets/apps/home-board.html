@@ -67,8 +67,17 @@
        "The garage is open"            -> {"set_status":{"label":"Garage","value":"Open","alert":true}}
        "It's late, dim the board"      -> {"dim":true}           "Brighten it"  -> {"dim":false}
 
+     Remote: show the board with "remote":"tvos". At rest nothing has focus and the board looks as it does without a
+     remote. The first arrow press focuses the first note, or else the alert. Up and Down move through the notes;
+     Down from the notes, or Right along the home row, reaches Dim. 30 s after the last press, focus leaves again.
+     Each action runs the patch below and keeps the section's age, then calls tv.input. Read it with tv.state().input.
+       A note          Select crosses it off, then removes it: {"notes": the list without it}  -> tv.input("done", {note})
+       The amber alert Select acknowledges it: {"set_status": the item with "alert":false}     -> tv.input("ack", {label})
+                       Act on it if you can, like closing the garage. Keep its alert false until its value changes.
+       Dim / Brighten  shown only while the remote is in use. Select toggles {"dim": ...}      -> tv.input("dim", {dim})
+
      Script order: SAMPLE, state, helpers, chart(), SECTION (the HTML for each data-slot), VIEWS.board,
-     value checks (str, num, bool, list, obj), PATCH, apply, window.app. To add a patch key, for example "key":
+     value checks (str, num, bool, list, obj), PATCH, apply, window.app, REMOTE. To add a patch key, for example "key":
        1. A key line above with an example and what null does, and a voice turn.
        2. state.key = null in state (null while unknown), and a value in SAMPLE: demo runs PATCH[k](SAMPLE[k]) for each.
        3. A PATCH handler named after the key. It checks the value with str(), num() or bool() and changes state only:
@@ -86,9 +95,9 @@
   :root { --bg: #0a0d10; --ink: #0f1419; --hi: #dfe3e3; --text: #b8bfc2; --soft: #9da6ab; --rule: #242d34; --accent: #e0a96c;
     --sans: "Inter", "Noto Sans", system-ui; --serif: "Fraunces", Georgia, "Noto Serif", system-ui; }
 
-  /* Layout */
+  /* Layout. #stage clips, so the burn-in shift cannot make the page scroll when the remote moves focus. */
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
-  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0;
+  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: clip;
     color: var(--text); font: 500 34px/1.3 var(--sans);
     background: radial-gradient(1500px 950px at 20% 24%, #18212a, rgba(24, 33, 42, 0) 72%),
       radial-gradient(1000px 520px at 22% 104%, rgba(224, 169, 108, .075), rgba(224, 169, 108, 0) 70%),
@@ -196,8 +205,11 @@
   #notes .label { padding-left: 184px; justify-content: space-between; }
   #notes [data-slot] { margin-top: 8px; }
   .nt { list-style: none; margin: 0; padding: 0 0 0 184px; display: grid; gap: 10px; }
-  .nt li { position: relative; font-size: 38px; line-height: 46px; }
-  .nt li::before { content: "\2013"; position: absolute; left: -52px; width: 44px; text-align: center; color: #6f7b81; }
+  /* Each note is a remote target. Its padding takes in the dash and gives the focus ring room; the margin takes it
+     back, so nothing moves */
+  .nt li { position: relative; margin: -4px -18px -4px -58px; padding: 4px 18px 4px 58px; border-radius: 14px; font-size: 38px; line-height: 46px; }
+  .nt li::before { content: "\2013"; position: absolute; left: 6px; width: 44px; text-align: center; color: #6f7b81; }
+  .nt li.done { color: var(--soft); text-decoration: line-through 3px; }
   #notes .empty { margin: 0 0 0 184px; font-size: 38px; line-height: 46px; color: var(--soft); }
 
   /* Home status: one quiet row of glyphs and words. It gives way to the status line while the agent works */
@@ -209,14 +221,21 @@
   #board.busy #home { opacity: 0; }
   .hm { list-style: none; margin: 0; padding: 0; height: 76px; display: flex; align-items: center; gap: 60px; }
   .hm li { position: relative; flex: none; display: flex; align-items: center; gap: 18px; max-width: 420px; }
-  .hm .ic { flex: none; width: 48px; height: 48px; color: var(--soft); fill: none; stroke: currentColor; stroke-width: 3.5;
+  #home .ic { flex: none; width: 48px; height: 48px; color: var(--soft); fill: none; stroke: currentColor; stroke-width: 3.5;
     stroke-linecap: round; stroke-linejoin: round; }
   .hm .cx { min-width: 0; }
   .hm .cv { line-height: 42px; }
   .hm .cl { font-size: 28px; line-height: 34px; color: var(--soft); }
+  /* The alert is a remote target, with room for the ring like a note */
+  .hm li.alert { margin: -14px -18px -8px; padding: 14px 18px 8px; border-radius: 16px; }
   .hm li.alert .cv { color: var(--accent); font-weight: 600; }
-  .hm li.alert::before { content: ""; position: absolute; left: 66px; top: -8px; width: 48px; height: 4px; background: var(--accent); }
+  .hm li.alert::before { content: ""; position: absolute; left: 84px; top: 6px; width: 48px; height: 4px; background: var(--accent); }
   #home .empty { margin: 0; font-size: 36px; line-height: 76px; color: var(--soft); }
+  /* Dim / Brighten: hidden at rest, so it takes no room. While the remote is in use it shows, and the row makes room */
+  #dim { position: absolute; right: -18px; top: 6px; display: flex; align-items: center; gap: 18px; padding: 8px 18px; border: 0;
+    border-radius: 16px; background: none; color: var(--soft); font: inherit; opacity: 0; transition: opacity 250ms; }
+  #board:focus-within #dim { opacity: 1; }
+  #board:focus-within #home { padding-right: 300px; }
 
   /* Pending: each place keeps its shape, with one quiet phrase. --m1 and --m2 draw the marks */
   #board [data-slot].tv-pending { --m1: #46525a; --m2: #333e46; box-sizing: border-box; font: italic 500 36px/44px var(--serif); color: #8a9499; }
@@ -254,13 +273,14 @@
       <div id="ag-top"><h2 id="ag-h" class="it"></h2><span class="x" id="x-agenda"></span></div>
       <div data-slot="agenda"></div>
     </section>
-    <section id="notes" aria-label="Notes">
+    <section id="notes" aria-label="Notes" data-tv-group>
       <p class="label"><span>Notes</span><span class="x" id="x-notes"></span></p>
       <div data-slot="notes"></div>
     </section>
-    <section id="home" aria-label="Home status">
+    <section id="home" aria-label="Home status" data-tv-group>
       <div data-slot="status"></div>
       <span class="x" id="x-status"></span>
+      <button id="dim" data-do="dim"></button>
     </section>
   </section>
 </div>
@@ -420,6 +440,8 @@ const ICONS = [
   [/power|energy|battery|solar|charg/, '<path d="M27 5 12 27h11l-3 16 16-23H25z"/>'],
   [/$/, '<circle cx="24" cy="24" r="13"/><circle cx="24" cy="24" r="4" fill="currentColor" stroke="none"/>']];
 const homeIcon = c => ICONS.find(([re]) => re.test(`${c.label} ${c.value}`.toLowerCase()))[1];
+const DIM = { Dim: '<path d="M42 25.6A18 18 0 1 1 22.4 6a14 14 0 0 0 19.6 19.6z"/>', Brighten: '<circle cx="24" cy="24" r="7.5"/>' +
+  '<path d="M24 6v5M24 37v5M6 24h5M37 24h5M11.3 11.3l3.5 3.5M33.2 33.2l3.5 3.5M11.3 36.7l3.5-3.5M33.2 14.8l3.5-3.5"/>' };
 
 // The weather curve: even steps, monotone so it never overshoots a label
 const chart = (w, W) => {
@@ -481,6 +503,13 @@ const agendaShown = () => { const a = state.agenda, start = Math.max(0, a.findIn
 // The first alert goes first. Only it is drawn as an alert.
 const statusOrder = () => { const s = state.status, a = s.findIndex(c => c.alert);
   return a > 0 ? [s[a], ...s.slice(0, a), ...s.slice(a + 1)] : s; };
+// Status items keep their natural width. Drop from the end until the row fits. Runs again when Dim shows or hides.
+const fitStatus = () => {
+  const row = document.querySelector(".hm"), items = row ? [...row.children] : [];
+  for (const li of items) li.hidden = false;
+  statusShown = items.length;
+  while (statusShown > 1 && row.scrollWidth > row.clientWidth + 1) items[--statusShown].hidden = true;
+};
 const SECTION = {
   weather() {
     const w = state.weather, n = w.now, has = n.temp != null, t = deg(n.temp), W = has ? 750 : 1000, curve = chart(w, W);
@@ -505,12 +534,12 @@ const SECTION = {
   notes() {
     const n = state.notes, lines = n.length > 2 ? 2 : n.length === 2 ? 3 : 5;
     if (!n.length) return `<p class="empty it">Nothing to remember</p>`;
-    return `<ul class="nt it">${n.slice(0, SHOW.notes).map(t => `<li><span data-lines="${lines}">${esc(t)}</span></li>`).join("")}</ul>`;
+    return `<ul class="nt it">${n.slice(0, SHOW.notes).map(t => `<li tabindex="0" data-do="done" data-key="${esc(t)}"><span data-lines="${lines}">${esc(t)}</span></li>`).join("")}</ul>`;
   },
   status() {
     const s = statusOrder().slice(0, SHOW.status);
     if (!s.length) return `<p class="empty it">All quiet at home</p>`;
-    return `<ul class="hm">${s.map((c, i) => `<li${i === 0 && c.alert ? ' class="alert"' : ""}><svg class="ic" viewBox="0 0 48 48" aria-hidden="true">${homeIcon(c)}</svg>` +
+    return `<ul class="hm">${s.map((c, i) => `<li${i === 0 && c.alert ? ` class="alert" tabindex="0" data-do="ack" data-key="${esc(c.label)}"` : ""}><svg class="ic" viewBox="0 0 48 48" aria-hidden="true">${homeIcon(c)}</svg>` +
       `<span class="cx"><span class="cv" data-lines="1">${esc(c.value)}</span><span class="cl" data-lines="1">${esc(c.label)}</span></span></li>`).join("")}</ul>`;
   },
 };
@@ -518,6 +547,9 @@ const SECTION = {
 // Views
 const VIEWS = {
   board() {
+    // Remote focus outlives a render: the same item again, else the one in its place, else Dim. No focus stays none.
+    const was = document.activeElement, group = was?.closest("[data-tv-group]"),
+      at = group ? [...group.querySelectorAll("[tabindex]")].indexOf(was) : -1;
     const c = clock(), title = state.title ?? `Good ${dayPart()}`, hour = hourNow(), time = $("time"), now = new Date();
     $("hm").innerHTML = `${esc(c.h)}<b></b>${esc(c.m)}`;
     $("ampm").textContent = c.ampm;
@@ -541,15 +573,20 @@ const VIEWS = {
       if (state[k]) show(el, SECTION[k]()); else { delete el.dataset.html; tv.pending(k, PENDING[k]); }
     }
 
-    // Status items keep their natural width. Drop from the end until the row fits.
-    const row = document.querySelector(".hm"), items = row ? [...row.children] : [];
-    statusShown = items.length;
-    while (statusShown > 1 && row.scrollWidth > row.clientWidth + 1) items[--statusShown].hidden = true;
+    fitStatus();
+    const word = state.dim ? "Brighten" : "Dim";
+    $("dim").innerHTML = `<svg class="ic" viewBox="0 0 48 48" aria-hidden="true">${DIM[word]}</svg>${word}`;
 
     // Burn-in care: move the whole board a few pixels every ten minutes, without animation.
     const [x, y] = [[0, 0], [3, 2], [-2, 3], [-3, -2], [2, -3]][Math.floor(Date.now() / 600000) % 5];
     $("board").style.transform = x ? `translate(${x}px, ${y}px)` : "";
     $("board").classList.toggle("dim", state.dim);
+    if (group && !was.isConnected) {
+      const items = [...group.querySelectorAll("[tabindex]")];
+      const el = items.find(e => e.dataset.key === was.dataset.key) || items[Math.min(at, items.length - 1)] || $("dim");
+      // Skip the lift transition, so the focused item does not pulse at each minute's render.
+      el.style.transition = "none"; el.focus({ preventScroll: true }); getComputedStyle(el).scale; el.style.transition = "";
+    }
   },
 };
 
@@ -690,9 +727,34 @@ window.app = {
   },
 };
 
+// Remote input (see the header). Each action runs the patch a voice turn would, then tells the agent with tv.input.
+// updated_at keeps the section's age: crossing off a note or acknowledging an alert is not a fresh read.
+const REMOTE = {
+  done(el, t) {
+    el.classList.add("done");
+    setTimeout(() => {
+      if (!state.notes?.includes(t)) return;
+      apply({ notes: state.notes.filter(x => x !== t), updated_at: state.at.notes });
+      tv.input("done", { note: t });
+    }, 900);
+  },
+  ack(el, label) {
+    apply({ set_status: { ...state.status.find(c => c.label === label), alert: false }, updated_at: state.at.status });
+    tv.input("ack", { label });
+  },
+  dim() { apply({ dim: !state.dim }); tv.input("dim", { dim: state.dim }); },
+};
+$("board").addEventListener("click", e => { const el = e.target.closest("[data-do]:not(.done)"); if (el) REMOTE[el.dataset.do](el, el.dataset.key); });
+for (const type of ["focusin", "focusout"]) $("board").addEventListener(type, fitStatus);
+// The board goes back to rest 30 s after the last press: no focus, and Dim hides.
+let rest = 0;
+addEventListener("keydown", () => { clearTimeout(rest); rest = setTimeout(() => document.activeElement.blur(), 30000); });
+
 // The bottom band holds one line: the home status row, or the status line while the agent works.
+// The hidden row is inert, so the remote cannot focus or press an item no one can see.
 const line = $("tv-status");
-new MutationObserver(() => $("board").classList.toggle("busy", !line.hidden)).observe(line, { attributes: true, attributeFilter: ["hidden"] });
+new MutationObserver(() => { $("board").classList.toggle("busy", !line.hidden); $("home").inert = !line.hidden; })
+  .observe(line, { attributes: true, attributeFilter: ["hidden"] });
 // Text was fitted with the fallback font. Fit it again when the real fonts arrive.
 document.fonts.addEventListener("loadingdone", VIEWS.board);
 const tick = () => { VIEWS.board(); setTimeout(tick, 60000 - Date.now() % 60000 + 40); };

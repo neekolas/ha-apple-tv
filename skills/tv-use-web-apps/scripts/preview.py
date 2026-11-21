@@ -26,7 +26,7 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HARNESS = """<!doctype html><meta charset="utf-8">
-<style>html,body{margin:0;height:100%;background:#000}iframe{border:0;width:100%;height:100%}</style>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#000}iframe{display:block;border:0;width:100%;height:100%}</style>
 <iframe id="app" sandbox="allow-scripts allow-forms" src="/app/index.html"></iframe>"""
 
 

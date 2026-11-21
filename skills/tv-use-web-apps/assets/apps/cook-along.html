@@ -45,6 +45,16 @@
        "Make it for 8 people instead of 4"    {"servings":8}
        "We're done, thanks"                   {"view":"done"}
 
+     Remote ("remote":"tvos"). Each control is a button that runs its patch (data-patch) through app.apply, as a
+     voice turn would, then calls tv.input(key, patch): input.last is e.g. {action:"check", detail:{"check":["garlic"]}}.
+       overview     Start cooking {"step":1}
+       step         Ingredients {"view":"ingredients"}, Back {"back":true}, Next {"next":true}. For the step's timer,
+                    Start timer {"timer":{"id":…}}, then +1 min {"add_time":{"id":…,"minutes":1}} and Cancel {"cancel_timer":…}.
+       ingredients  a row {"check":[id]}, or {"uncheck":[id]} when ticked; ‹ › {"back":true} {"next":true} between
+                    pages; Back to step {"view":"step"}.
+       done         Start over {"view":"overview"}
+     A new view, step or page focuses its first control (Next on a step); otherwise focus stays put.
+
      State: {view, loaded, title, servings, step, steps, ingredients, checked, timers:[{id,label,left,done}]};
        on a step also uses:[{id,name,amount}], step_timer:{id,label,seconds,started}, and coming_up (same shape as
        uses) when the step needs nothing and the screen lists the next step's ingredients instead;
@@ -59,7 +69,8 @@
        4. Report it in summary() on the step view, and add a line above.
 
      Design: a cookbook spread by lamplight. Fraunces for titles and the instruction, Inter for labels
-     and numbers, warm charcoal ground, cream type, one saffron accent. It still holds with Noto only. -->
+     and numbers, warm charcoal ground, cream type, one saffron accent. Controls are ruled buttons along the foot;
+     the focused one fills with saffron. It still holds with Noto only. -->
 <style>
   @font-face { font-family: Fraunces; src: url(fonts/fraunces.woff2); font-weight: 100 900; }
   @font-face { font-family: Fraunces; src: url(fonts/fraunces-italic.woff2); font-weight: 100 900; font-style: italic; }
@@ -71,7 +82,8 @@
 
   /* Layout */
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
-  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden;
+  /* clip: the remote helper's scrollIntoView must not scroll the stage */
+  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: clip;
     --trk: 0em; color: var(--ink); font: 500 32px/1.3 var(--sans);
     background: radial-gradient(1500px 1100px at 22% 18%, #221911, transparent 72%), var(--bg); }
   #stage.nf { --trk: .015em; } /* fallback faces are wider: loosen the display tracking */
@@ -87,6 +99,19 @@
   .field { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: linear-gradient(180deg, #261c13, #1d160f); }
   .enter { animation: enter 280ms cubic-bezier(.2, .7, .2, 1); }
   @keyframes enter { from { opacity: 0; transform: translateY(16px); } }
+
+  /* Controls (see the header). Focus shows once a remote key arrives (.remote); the bridge's tvos helper adds
+     a 6% lift, a ring and a shadow, so each has room and no parent clips it. */
+  button { font: inherit; color: inherit; text-align: inherit; background: none; border: 0; padding: 0; outline: none; }
+  .btn { flex: none; box-sizing: border-box; height: 76px; padding: 0 30px; display: flex; align-items: center; justify-content: center;
+    gap: 16px; border: 3px solid var(--rule); border-radius: 14px; font: 600 30px/1 var(--sans); color: var(--ink-2); }
+  .btn:disabled { border-color: var(--ghost-2); color: var(--dim); }
+  .remote :is(.btn, #ing-list button):focus { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+  .prev::before, .fwd::after { content: ""; width: 12px; height: 12px; border: solid; border-width: 0 0 4px 4px; rotate: 45deg; margin-left: 6px; }
+  .fwd::after { rotate: -135deg; margin: 0 6px 0 0; }
+  nav { position: absolute; bottom: 60px; display: flex; gap: 24px; }
+  nav > :nth-child(2) { margin-left: auto; } /* the first control at the left, the rest at the right */
+  .ov-field .btn { position: absolute; right: 80px; bottom: 60px; }
 
   /* Running head: the recipe name on the left, running timers on the right */
   #head { position: absolute; left: 80px; right: 80px; top: 60px; height: 44px; display: flex; align-items: center; gap: 48px; }
@@ -147,16 +172,17 @@
   #done-h { margin: auto 0 40px -8px; font: italic 300 256px/.8 var(--serif); letter-spacing: calc(-.04em + var(--trk)); }
 
   /* step */
-  #st-num { position: absolute; left: 70px; top: 180px; height: 700px; display: flex; align-items: center;
+  #st-num { position: absolute; left: 70px; top: 160px; height: 630px; display: flex; align-items: center;
     font: 400 560px/.8 var(--serif); letter-spacing: -.04em; color: var(--ghost); white-space: nowrap; }
   #st-kicker { position: absolute; right: 660px; top: 60px; height: 44px; display: flex; align-items: center; white-space: nowrap; }
   #progress { position: absolute; left: 80px; top: 124px; width: 1180px; height: 16px; display: flex; align-items: center; gap: 10px; }
   #progress i { flex: 1; height: 8px; background: var(--rule); }
   #progress i.done { background: var(--dim); }
   #progress i.now { height: 16px; background: var(--accent); }
-  #st-body { position: absolute; left: 400px; top: 190px; width: 860px; height: 700px; display: flex; flex-direction: column; justify-content: center; }
+  #st-body { position: absolute; left: 400px; top: 180px; width: 860px; height: 610px; display: flex; flex-direction: column; justify-content: center; }
   #st-instr { font: 400 88px/1.12 var(--serif); font-variation-settings: "opsz" 72; letter-spacing: calc(-.018em + var(--trk)); text-wrap: pretty; }
-  #st-next { position: absolute; left: 400px; bottom: 60px; width: 860px; display: grid; grid-template-columns: auto minmax(0, 1fr);
+  #st-nav { left: 80px; right: 660px; }
+  #st-next { position: absolute; left: 400px; bottom: 176px; width: 860px; display: grid; grid-template-columns: auto minmax(0, 1fr);
     column-gap: 28px; align-items: baseline; transition: opacity 250ms; }
   #st-next i { font: 500 30px/1.3 var(--serif); color: var(--ink-2); }
   .st-field { right: 0; width: 580px; padding: 60px 80px; display: flex; flex-direction: column; }
@@ -198,6 +224,9 @@
   .hero.ready b { color: var(--ink-2); }
   .hero.done b { font-size: 104px; }
   .hero em { font: italic 500 36px/1 var(--serif); color: var(--ink-3); }
+  /* The step's timer controls, under that timer: the rail's last row, or the big dial with the rail above it. */
+  #st-tc { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 20px; padding-top: 28px; }
+  .st-field:has(#st-hero:not([hidden])) #rail { order: -1; padding: 0 0 36px; }
 
   /* ingredients */
   .ing-field { left: 0; width: 540px; }
@@ -211,9 +240,11 @@
   #ing-list { position: absolute; left: 620px; right: 80px; top: 150px; display: grid; --fs: 44px;
     grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: column; column-gap: 64px; }
   #ing-list.one { right: 500px; grid-template-columns: minmax(0, 1fr); }
-  #ing-list li { display: grid; grid-template-columns: 60px minmax(0, 1fr) 32px; align-items: baseline; align-content: end;
-    column-gap: 16px; padding-bottom: 17px;
-    background: linear-gradient(var(--rule), var(--rule)) 0 100% / calc(100% - 48px) 3px no-repeat; }
+  /* A row is a toggle, 20 px wider than its text to frame the focus fill. */
+  #ing-list li { display: contents; }
+  #ing-list button { display: grid; grid-template-columns: 60px minmax(0, 1fr) 32px; align-items: baseline; align-self: end;
+    column-gap: 16px; margin: 0 -20px; padding: 12px 20px 17px; border-radius: 14px;
+    background: linear-gradient(var(--rule), var(--rule)) 20px 100% / calc(100% - 88px) 3px no-repeat; }
   #ing-list .i { font: 600 28px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink-3); }
   /* The amount sits at the right of the name's last line. The name ends in a hidden copy of the amount, so the
      text keeps clear of it: a long name wraps to a second line, or the amount drops to a line of its own. */
@@ -225,11 +256,14 @@
   #ing-list .amt { position: absolute; right: 0; bottom: 0; }
   #ing-list .amt::before { content: "\200B"; font: 500 var(--fs)/1.14 var(--serif); } /* a strut: the name's own line box */
   #ing-list .tick { align-self: end; width: 32px; height: 32px; margin-bottom: calc(var(--fs) * .2 - 7px); color: var(--accent); }
-  #ing-list .on .name, #ing-list .on .amt { color: var(--ink-3); }
+  #ing-list [aria-pressed=true] :is(.name, .amt) { color: var(--ink-3); }
+  .remote #ing-list button:focus :is(.i, .name, .amt, .tick) { color: var(--on-accent); }
   #ing-empty { position: absolute; left: 620px; top: 370px; right: 80px; }
   #ing-empty p { font: italic 300 120px/1 var(--serif); letter-spacing: calc(-.03em + var(--trk)); }
   #ing-empty .caps { margin-top: 52px; padding-top: 36px; border-top: 4px solid var(--rule); }
-  #ing-pager { position: absolute; right: 80px; bottom: 60px; height: 44px; display: flex; align-items: center; gap: 28px; }
+  #ing-nav { left: 620px; right: 80px; }
+  #ing-nav .ico { width: 76px; padding: 0; }
+  #ing-pager { display: flex; align-items: center; gap: 28px; }
   #ing-pager .dots { display: flex; align-items: center; gap: 10px; }
   #ing-pager .dots i { width: 56px; height: 8px; background: var(--rule); }
   #ing-pager .dots i.on { height: 16px; background: var(--accent); }
@@ -238,6 +272,11 @@
   #stage #tv-status { padding: 0; background: none; height: 44px; }
   #stage #tv-status, #stage [data-slot].tv-pending { font: 600 28px/1.2 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
   #stage:has(#tv-status:not([hidden])) #st-next { opacity: 0; }
+  /* Clear of the controls: on a step it takes the Next line's place; on ingredients it keeps to the field. */
+  [data-view="step"]:not([hidden]) ~ #tv-status { left: 400px; bottom: 176px; }
+  [data-view="ingredients"]:not([hidden]) ~ #tv-status { max-width: 460px; }
+  #stage #tv-status span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #stage #tv-status i { flex: none; }
   #stage [data-slot].tv-pending::after { display: none; }
   /* The pending title is muted text, not a ghost: it must read on a TV as "not loaded yet". */
   #stage #ov-title.tv-pending { font: italic 400 168px/.96 var(--serif); font-variation-settings: "opsz" 72;
@@ -252,7 +291,8 @@
 <body>
 <div id="stage">
   <section data-view="overview">
-    <aside class="field ov-field"><div class="dial" id="ov-dial"></div><div id="ov-legend" data-slot="legend"></div></aside>
+    <aside class="field ov-field"><div class="dial" id="ov-dial"></div><div id="ov-legend" data-slot="legend"></div>
+      <button class="btn fwd" id="ov-start" data-home data-patch='{"step":1}'>Start cooking</button></aside>
     <div class="ov-main" id="ov-main">
       <div class="caps" id="ov-kicker"></div>
       <h1 id="ov-title" data-slot="title"></h1>
@@ -260,22 +300,28 @@
     </div>
   </section>
   <section data-view="step" hidden>
-    <aside class="field st-field"><div id="st-uses"></div><div id="st-hero"></div><div id="rail"></div></aside>
+    <aside class="field st-field"><div id="st-uses"></div><div id="st-hero"></div><div id="rail"></div>
+      <div id="st-tc" data-tv-group><button class="btn">Start timer</button><button class="btn">+1 min</button><button class="btn">Cancel</button></div></aside>
     <div id="st-num" aria-hidden="true"></div>
     <div class="caps" id="st-kicker"></div>
     <div id="progress"></div>
     <div id="st-body"><h1 id="st-instr"></h1></div>
     <p id="st-next"></p>
+    <nav id="st-nav" data-tv-group><button class="btn" data-patch='{"view":"ingredients"}'>Ingredients</button>
+      <button class="btn prev" data-patch='{"back":true}'>Back</button><button class="btn fwd" data-home data-patch='{"next":true}'>Next</button></nav>
   </section>
   <section data-view="ingredients" hidden>
     <div class="field ing-field"></div>
     <div class="ing-side"><div class="caps" id="ing-kicker"></div><h1>Ingredients</h1><div id="ing-count"></div></div>
     <ol id="ing-list"></ol>
     <div id="ing-empty"><p>Nothing to gather.</p><div class="caps" id="ing-facts"></div></div>
-    <div id="ing-pager"></div>
+    <nav id="ing-nav" data-tv-group><button class="btn prev" data-home data-patch='{"view":"step"}'>Back to step</button>
+      <button class="btn prev ico" id="ing-prev" aria-label="Page before" data-patch='{"back":true}'></button><div id="ing-pager"></div>
+      <button class="btn fwd ico" id="ing-next" aria-label="Next page" data-patch='{"next":true}'></button></nav>
   </section>
   <section data-view="done" hidden>
-    <aside class="field ov-field"><div class="dial" id="done-dial"></div></aside>
+    <aside class="field ov-field"><div class="dial" id="done-dial"></div>
+      <button class="btn" data-home data-patch='{"view":"overview"}'>Start over</button></aside>
     <div class="ov-main">
       <p id="done-title" class="cut"></p>
       <h1 id="done-h">Time<br>to <em>eat.</em></h1>
@@ -592,7 +638,8 @@ function mise() {
   return { ahead, ids: ahead ? n.uses : s.uses };
 }
 
-// Timers: the rail on a step, the running head elsewhere. The step's own timer first, then the soonest to end.
+// Timers: the rail on a step, the running head elsewhere. The soonest to end first; the step's own timer last,
+// above its controls.
 function drawTimers() {
   const byEnd = [...state.timers].sort((a, b) => a.end - b.end), minis = $("minis");
   minis.hidden = state.view === "step";
@@ -600,11 +647,11 @@ function drawTimers() {
     const s = state.data.steps[state.step - 1], hero = heroMode(s), rail = $("rail");
     $("st-hero").hidden = !hero;
     if (hero) $("st-hero").innerHTML = heroDial(s.timer);
-    const rest = byEnd.filter(t => t.id !== s.timer?.id), rows = rest.map(railRow);
-    if (!hero && s.timer) rows.unshift(railRow(state.timers.find(t => t.id === s.timer.id) || s.timer));
-    const shown = rows.slice(0, 6), k = shown.length;
+    const rest = byEnd.filter(t => t.id !== s.timer?.id), rows = rest.map(railRow), max = s.timer ? 5 : 6; // its controls take a row
+    if (!hero && s.timer) rows.splice(max - 1, 0, railRow(state.timers.find(t => t.id === s.timer.id) || s.timer));
+    const shown = rows.slice(0, max), k = shown.length;
     rail.hidden = !k;
-    rail.innerHTML = `<div class="caps">${hero && rest.every(left) ? "Also running" : rows.length > 6 ? `Timers · ${rows.length - 6} more` : "Timers"}</div>` +
+    rail.innerHTML = `<div class="caps">${hero && rest.every(left) ? "Also running" : rows.length > max ? `Timers · ${rows.length - max} more` : "Timers"}</div>` +
       `<div class="timers${k > 4 ? " compact tight" : k > 3 ? " compact" : ""}">${shown.join("")}</div>`;
   } else { // as many as fit beside the running head, whole; the rest are counted
     const room = state.view === "overview" || state.view === "done" ? 520 : 1000;
@@ -622,6 +669,7 @@ const VIEWS = {
     const d = state.data;
     $("ov-dial").innerHTML = dial(d);
     $("ov-kicker").textContent = d ? `A recipe in ${word(d.steps.length)} ${plural(d.steps.length, "step")}` : "A recipe";
+    $("ov-start").hidden = !d;
     if (!d) return;
     const title = unpend($("ov-title")), words = typo(d.title).split(/\s+/), last = words.pop();
     title.innerHTML = `${esc(words.join(" "))} <em>${esc(last)}</em>`;
@@ -658,11 +706,22 @@ const VIEWS = {
     // The instruction gets the room the other blocks in #st-body leave (offsetHeight, so space them with padding).
     const body = $("st-body"), rest = [...body.children].reduce((h, el) => el === ins ? h : h + el.offsetHeight, 0);
     shrink(ins, 88, 48, 4, () => ins.offsetHeight > body.clientHeight - rest);
-    // You'll need (see mise). Rows are cut to the room the timers leave.
+    // The step's timer controls: Start timer, or once it runs, +1 min and Cancel.
+    const t = s.timer, run = state.timers.some(x => x.id === t?.id), tc = $("st-tc"), [go, add, stop] = tc.children;
+    tc.hidden = !t;
+    go.hidden = run;
+    go.disabled = state.timers.length >= 8; // the timer patch's limit
+    add.hidden = stop.hidden = !run;
+    if (t) {
+      go.dataset.patch = JSON.stringify({ timer: { id: t.id } });
+      add.dataset.patch = JSON.stringify({ add_time: { id: t.id, minutes: 1 } });
+      stop.dataset.patch = JSON.stringify({ cancel_timer: t.id });
+    }
+    // You'll need (see mise). Rows are cut to the room the timers and their controls leave.
     const uses = $("st-uses"), m = mise();
     uses.hidden = !m;
     if (m) {
-      const { ahead, ids } = m, room = 960 - ($("rail").hidden ? 0 : $("rail").offsetHeight);
+      const { ahead, ids } = m, room = 960 - $("rail").offsetHeight - tc.offsetHeight;
       for (let k = Math.min(ids.length, 10); ; k--) {
         uses.innerHTML = `<div class="caps">${ahead ? "Coming up" : "You’ll need"}</div>` + (ids.length ? `<ul class="mise">` +
           ids.slice(0, k).map(id => { const g = ingredient(id);
@@ -695,8 +754,9 @@ const VIEWS = {
     el.style.setProperty("--fs", (one ? 60 : rows <= 4 ? 54 : rows === 5 ? 48 : 44) + "px");
     el.style.gridTemplateRows = `repeat(${rows}, ${Math.min(170, Math.floor(756 / rows))}px)`;
     el.innerHTML = items.map(([num, g]) => { const on = state.checked.has(g.id), amt = esc(amount(g));
-      return `<li class="${on ? "on" : ""}"><span class="i">${two(num)}</span><span class="cell"><span class="name"><span></span>` +
-        `<i class="cut" aria-hidden="true">${amt}</i></span><span class="amt cut">${amt}</span></span>${on ? tick("tick") : ""}</li>`;
+      return `<li><button aria-pressed="${on}" data-patch="${esc(JSON.stringify({ [on ? "uncheck" : "check"]: [g.id] }))}">` +
+        `<span class="i">${two(num)}</span><span class="cell"><span class="name"><span></span>` +
+        `<i class="cut" aria-hidden="true">${amt}</i></span><span class="amt cut">${amt}</span></span>${on ? tick("tick") : ""}</button></li>`;
     }).join("");
     // A name takes two lines at most, the amount's place included, and is cut at a word.
     el.querySelectorAll(".name").forEach((name, i) => {
@@ -705,6 +765,9 @@ const VIEWS = {
     });
     $("ing-pager").innerHTML = p > 1 ? `<span class="caps">Page <b>${state.page}</b> of ${p}</span><span class="dots">` +
       Array.from({ length: p }, (_, i) => `<i class="${i + 1 === state.page ? "on" : ""}"></i>`).join("") + `</span>` : "";
+    $("ing-prev").hidden = $("ing-next").hidden = p < 2;
+    $("ing-prev").disabled = state.page < 2; // at the ends, back and next would leave the list
+    $("ing-next").disabled = state.page >= p;
   },
 
   // The done page is a colophon: the cover again, with the dial drawn complete.
@@ -792,6 +855,8 @@ const PATCH = {
 let shown = "";
 function render() {
   const d = state.data, v = state.view, crumb = $("crumb"), plain = v === "overview";
+  // The focused control and its index, so an ingredient row drawn anew keeps the focus.
+  const was = document.activeElement, at = [...stage.querySelectorAll("[data-patch]")].indexOf(was);
   stage.classList.toggle("nf", !document.fonts.check('1em "Fraunces"'));
   for (const el of document.querySelectorAll("[data-view]")) el.hidden = el.dataset.view !== v;
   crumb.className = plain ? "cut caps" : "cut";
@@ -803,15 +868,28 @@ function render() {
   crumb.style.maxWidth = v === "step" ? 1140 - $("st-kicker").offsetWidth + "px" : "";
   clip(crumb, plain ? "Cook-along" : typo(d.title));
   // Fade in what changed: the whole view, or only the instruction between steps.
-  const key = [v, state.step, state.page, d?.title].join("|");
-  if (key !== shown) {
+  const key = [v, state.step, state.page, d?.title].join("|"), fresh = key !== shown;
+  if (fresh) {
     const el = v === "step" && shown.startsWith("step|") ? $("st-body") : document.querySelector(`[data-view="${v}"]`);
     el.classList.remove("enter");
     void el.offsetWidth;
     el.classList.add("enter");
     shown = key;
   }
+  aim(was?.isConnected ? was : stage.querySelectorAll("[data-patch]")[at], fresh);
 }
+
+// Remote focus: a new view, step or page starts at its first choice (Next on a step). Otherwise the focused
+// control keeps it, or a control beside it when it goes (Start timer hands it to +1 min).
+const ok = el => el?.matches("[data-patch]:enabled") && el.checkVisibility();
+function aim(f, fresh) {
+  if (!ok(f)) f = [...f?.parentNode?.children || []].find(ok);
+  if (fresh || !ok(f)) f = document.querySelector(`[data-view="${state.view}"] :is(#ing-list button, [data-home])`);
+  f?.focus({ preventScroll: true });
+}
+// The bridge focuses this frame before the first press, which leaves nothing focused: focus again.
+addEventListener("focus", () => aim(document.activeElement));
+addEventListener("keydown", () => stage.classList.add("remote"), { once: true });
 
 let ticker = 0;
 function schedule() {
@@ -855,6 +933,15 @@ function summary() {
 }
 
 window.app = { apply, state: summary };
+
+// The remote: a control runs its patch as a voice turn would, then reports it (see the header).
+stage.addEventListener("click", e => {
+  const b = e.target.closest("[data-patch]");
+  if (!b) return;
+  const patch = JSON.parse(b.dataset.patch);
+  apply(patch);
+  tv.input(Object.keys(patch)[0], patch);
+});
 
 // The pending cover is a blank cover: a muted title, facts with no numbers yet, and ruled lines for the legend.
 tv.pending("title", "Tonight’s recipe");

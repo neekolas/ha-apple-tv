@@ -21,15 +21,16 @@
        {picks:{mia:2,leo:3}}       each player's answer to this question; null clears one
        {scores:{mia:1,leo:0}}      points each player won on this question; sending a player again replaces theirs
        {double:true}               this question's points count double (the app doubles them); false undoes it
+       {answering:"leo"}           who picks next with the remote; null goes back to the first player without a pick
        {countdown:20}              starts the clock on the question; 0 stops it. Leaving the question stops it too
 
      Text limits, in characters. Every text value must be a string: send "88", not 88.
        data.title 40   players[].id 24   players[].name 20 (and addPlayer)   questions[].category 24
        questions[].text 200   questions[].answers[] 60
 
-     app.state() returns {view, pending, question, of, double, reveal, countdown, timeUp, picks, waiting, correctAnswer,
-       right, players:[{id, name, score}], leader, lastRound, ignored}. question is the number on screen. of is the number
-       of questions, so the last question is the one where question === of.
+     app.state() returns {view, pending, question, of, double, reveal, countdown, timeUp, picks, waiting, answering,
+       correctAnswer, right, players:[{id, name, score}], leader, lastRound, ignored}. question is the number on screen.
+       of is the number of questions, so the last question is the one where question === of.
 
      Voice turns ("state" is what the last apply() returned)
        "Let's play"                       -> {reset:true, data:{title:"Friday Quiz Night",
@@ -46,6 +47,22 @@
        "Next question"                    -> {question:N}, where N = state.question + 1, up to state.of
        "This last one is double points"   -> {question:N, double:true}, where N = state.of
 
+     Remote (tv_show {..., "remote":"tvos"}). Each control applies the patch shown, like a voice turn, then calls
+     tv.input(action, detail). Read what the person did with tv.state().input.
+       Lobby       Start            {view:"question"}                          -> "start" {question}
+       Question    player token     {answering:"leo"}                          -> "answering" {player}
+                   answer tile      {picks:{leo:2}, answering:null}            -> "pick" {player, answer}
+                   Reveal           {reveal:true, scores:{each: 1 or 0}}       -> "reveal" {question, right:[ids], scored}
+                   Next question    {question:N+1}                             -> "next" {question}
+                   Scores           {view:"scoreboard"}                        -> "scores" {question}
+       Scoreboard  Next question    {question:N+1}, or N if it is not revealed -> "next" {question}
+                   Play again       {reset:true}, after the last question      -> "again" null
+     Next question shows before the last question, and Scores after the reveal or on the last question. A remote
+     reveal scores the question in the same apply: 1 point per right pick, else 0, doubled on double points. After a
+     "reveal" with scored:true, do not send {scores}: the app already scored. The voice {reveal:true} does not score.
+     Focus goes to the first answer on a new question and stays on the tile after a pick. When everyone has picked, it
+     moves to Reveal. There is no Back button: the quiz only moves forward.
+
      To add a patch key
        1. Add its line above and one PATCH handler named after it. Check the value and throw an Error that says what to
           send; pass text through text(value, max, name) and add its limit above. A key that acts on the current question
@@ -57,7 +74,8 @@
        3. Report its value in snapshot(), so app.state() shows it.
 
      Design: Bricolage Grotesque on an electric-violet ground. Sunflower is the one accent: the countdown,
-     the category, the right answer, the leader and the status dot. Players are colored shapes with an initial. -->
+     the category, the right answer, the leader, the status dot, the focused control and the player who picks next.
+     Players are colored shapes with an initial. -->
 <style>
   @font-face { font-family: "Bricolage"; src: url(fonts/bricolage.woff2) format("woff2"); font-weight: 200 800; font-display: swap; }
   :root { --bg: #2a0c8c; --lift: #4a22d6; --ghost: #6a48ee; --ink: #17063f; --text: #fff6e4; --dim: #d9ccff;
@@ -105,6 +123,14 @@
   .tok.wait { color: var(--ghost); }
   .tok.wait b { color: var(--dim); }
 
+  /* Remote controls. The bridge's tvos helper lifts the focused one 6% with a white ring, and it turns sunflower */
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: inherit; }
+  .btn { display: inline-flex; align-items: center; height: 80px; padding: 0 38px; border-radius: 40px;
+    background: var(--text); color: var(--ink); font-size: 34px; font-weight: 800; white-space: nowrap; }
+  .btn[hidden] { display: none; }
+  .btn:focus { background: var(--accent); }
+  #l-start, #b-next { position: absolute; right: 0; bottom: -80px; }
+
   /* Lobby: the show's title card */
   #v-lobby { grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr) 500px; column-gap: 60px; }
   #v-lobby .disc { left: 1180px; top: -150px; width: 720px; height: 720px; background: var(--accent); color: var(--ink);
@@ -135,7 +161,8 @@
   .players.many li { flex-direction: row; align-items: center; gap: 12px; }
   .players.many .tok { --s: 68px; }
   .many .who span { font-size: 28px; }
-  .cats { margin-top: 18px; font-size: 38px; font-weight: 700; line-height: 1.28; letter-spacing: -.01em; max-height: 196px;
+  /* Three lines at most, which leaves room for the Start button below */
+  .cats { margin-top: 18px; font-size: 38px; font-weight: 700; line-height: 1.28; letter-spacing: -.01em; max-height: 146px;
     overflow: hidden; }
   .cats i { font-style: normal; color: var(--accent); font-weight: 800; padding: 0 .08em; }
   #l-players.tv-pending::after, #l-cats.tv-pending::after { width: 100%; height: 118px; margin-top: 26px; border-radius: 0;
@@ -144,7 +171,7 @@
 
   /* Question, and its reveal. Grid rows are positional: .meta, #q-text, #q-answers, #q-strip (the rest is absolute).
      Add a row here when you add a line, in the same place as its element in the markup. */
-  #v-question { inset: 60px 80px 60px; grid-template: 48px minmax(0, 1fr) auto 100px / minmax(0, 1fr); }
+  #v-question { inset: 60px 80px 60px; grid-template: 48px minmax(0, 1fr) auto 120px / minmax(0, 1fr); }
   #clock { left: 1290px; top: -150px; width: 600px; height: 600px; padding: 120px 30px 0 0; }
   #clock.run { background: conic-gradient(var(--accent) 0 var(--a), #e0a416 calc(var(--a) + .4deg)); }
   #clock.low { background: conic-gradient(var(--coral) 0 var(--a), #dc4a34 calc(var(--a) + .4deg)); }
@@ -168,12 +195,19 @@
   #q-double b { color: inherit; font-size: 1.3em; line-height: 1; letter-spacing: .02em; }
   #q-text { align-self: center; width: 1216px; max-height: 320px; overflow: hidden; font-size: 104px; font-weight: 700;
     line-height: 1.03; letter-spacing: -.016em; text-wrap: balance; padding-bottom: .06em; }
-  .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-  .answers .art { width: 866px; height: 52px; }
-  /* Under answer 3 the confetti is where the status line shows, so it makes way for it */
-  #stage:has(#tv-status:not([hidden])) .art.a3 { visibility: hidden; }
+  /* The column gap leaves room for a focused tile to lift */
+  .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 56px; }
+  .answers .art { width: 852px; height: 52px; }
+  /* The status line shows where answer 3's confetti and a long locked-in count sit, and the host buttons where
+     answer 4's confetti would, so these make way */
+  #stage:has(#tv-status:not([hidden])) :is(.art.a3, #q-locked), .art.a4 { visibility: hidden; }
   .ans { position: relative; z-index: 1; display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; align-items: center;
-    height: 168px; border-radius: 30px; background: var(--lift); }
+    width: 100%; height: 168px; border-radius: 30px; background: var(--lift); }
+  /* Focused, a tile lights up and wears the token of the player who picks next as a sticker on its corner */
+  .ans:focus { z-index: 3; background: var(--ghost); }
+  .ans:focus .num { background: var(--accent); }
+  .ans .me { position: absolute; top: -14px; right: -14px; visibility: hidden; }
+  .ans:focus .me { visibility: visible; }
   .ans .num { align-self: stretch; display: grid; place-items: center; border-radius: 30px 0 0 30px; background: var(--text);
     color: var(--ink); font-size: 112px; font-weight: 800; line-height: 1; letter-spacing: -.04em; }
   .ans .body { display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 0; height: 100%; padding: 0 34px; }
@@ -191,8 +225,16 @@
   .picks .tok { --s: 60px; }
   .pick { display: flex; align-items: center; gap: 14px; font-size: 34px; font-weight: 750; white-space: nowrap; min-width: 0; }
   .pick span { overflow: hidden; text-overflow: ellipsis; }
-  .strip { align-self: end; justify-self: end; display: flex; align-items: center; gap: 20px; height: 64px; }
+  /* The strip: locked-in count, player tokens (sunflower behind the one who picks next), then the host buttons */
+  .strip { align-self: end; justify-self: end; display: flex; align-items: center; gap: 20px; height: 80px; }
   .strip .caps { margin-right: 12px; }
+  .seats, .host { display: flex; gap: 12px; }
+  .seats button { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 50%; }
+  .seats .cur { background: var(--accent); }
+  .seats .cur .tok { --s: 54px; }
+  .cur .tok.wait, .cur .tok.wait b { color: var(--ink); }
+  .host { gap: 28px; margin-left: 28px; }
+  .host :not([hidden]) ~ .btn:not(:focus) { background: var(--lift); color: var(--text); }
 
   /* Scoreboard: a bar race */
   #v-scoreboard { grid-template-columns: minmax(0, 1fr); align-content: start; }
@@ -250,6 +292,7 @@
     <h1 id="l-title" data-slot="title"></h1>
     <div id="l-players" data-slot="players"></div>
     <div id="l-cats" data-slot="categories"></div>
+    <button id="l-start" class="btn" hidden>Start</button>
   </section>
   <section data-view="question" id="v-question" aria-label="Question" hidden>
     <div id="q-rays" class="rays" hidden></div>
@@ -257,8 +300,16 @@
     <div class="meta"><span id="q-num" class="caps"></span><span id="q-pips" class="pips"></span><span id="q-cat" class="caps"></span></div>
     <p id="q-double" class="caps" hidden><b>2x</b> Double points</p>
     <h1 id="q-text"></h1>
-    <ol id="q-answers" class="answers"></ol>
-    <div id="q-strip" class="strip"></div>
+    <ol id="q-answers" class="answers" data-tv-group></ol>
+    <div id="q-strip" class="strip">
+      <span id="q-locked" class="caps"></span>
+      <div id="q-players" class="seats" data-tv-group></div>
+      <div class="host" data-tv-group>
+        <button id="q-reveal" class="btn">Reveal</button>
+        <button id="q-next" class="btn">Next question</button>
+        <button id="q-scores" class="btn">Scores</button>
+      </div>
+    </div>
   </section>
   <section data-view="scoreboard" id="v-scoreboard" aria-label="Scoreboard" hidden>
     <div class="rays" style="--x:1700px;--y:100px"></div>
@@ -268,6 +319,7 @@
     <h1 id="b-title"></h1>
     <div id="b-cols" class="cols caps"></div>
     <ol id="b-rows" class="rows" data-slot="standings"></ol>
+    <button id="b-next" class="btn"></button>
   </section>
 </div>
 <script>
@@ -351,7 +403,7 @@ const SAMPLE = {
 };
 
 // The per-question state: each is a map keyed by question number, like double: {8: true}. Add a new one here.
-const PER_QUESTION = ["picks", "scores", "double"];
+const PER_QUESTION = ["picks", "scores", "double", "answering"];
 const newGame = () => ({ view: "lobby", question: 1, reveal: false, ...Object.fromEntries(PER_QUESTION.map(k => [k, {}])),
   last: 0,                      // the question that last got scores; the scoreboard shows its points
   clock: { seconds: 0, ends: 0 } });  // ends is the Date.now() when time is up; 0 means no clock
@@ -361,12 +413,14 @@ const state = { title: "", players: [], questions: [], ...newGame() };
 const $ = id => document.getElementById(id);
 const fail = msg => { throw new Error(msg); };
 const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
-// h("li", {class: "x"}, ...children) builds an element. Text children are escaped; {svg: "..."} sets a constant icon.
+// h("li", {class: "x"}, ...children) builds an element. Text children are escaped; {svg: "..."} sets a constant icon,
+// a function sets a handler like onclick, and null or false leaves a prop out.
 const h = (tag, props, ...kids) => {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
     if (k === "class") e.className = v; else if (k === "style") e.style.cssText = v;
-    else if (k === "svg") e.innerHTML = v ?? ""; else e.setAttribute(k, v);
+    else if (k === "svg") e.innerHTML = v; else if (typeof v === "function") e[k] = v; else e.setAttribute(k, v);
   }
   e.append(...kids.flat().filter(c => c != null && c !== false));
   return e;
@@ -391,6 +445,13 @@ const leaders = () => {
   return top > 0 ? state.players.filter(p => total(p.id) === top).map(p => p.id) : [];
 };
 const secondsLeft = () => Math.max(0, Math.ceil((state.clock.ends - Date.now()) / 1000));
+// Who picks next with the remote: the player chosen for this question, else the first without a pick, else null.
+const answering = () => {
+  const n = state.question, picks = state.picks[n] || {}, ids = state.players.map(p => p.id);
+  return ids.includes(state.answering[n]) ? state.answering[n] : ids.find(id => !(id in picks)) ?? null;
+};
+// The question the scoreboard's Next goes to: the next one after a reveal, else the current one.
+const upcoming = () => state.question + (state.reveal ? 1 : 0);
 
 // ---------- art ----------
 const INK = "#17063f";
@@ -448,10 +509,12 @@ function token(id, waiting, small) {
     svg: `<svg viewBox="0 0 100 100" stroke-linejoin="round" aria-hidden="true">${art}</svg>` }, h("b", {}, letters));
 }
 
-// ---------- views: each reads state and redraws its section. fresh is true when the screen changed ----------
+// ---------- views: each reads state and redraws its section. fresh is true when the screen changed. Each returns
+// the control that gets the remote's focus when the screen changes ----------
 const VIEWS = {
   lobby() {
     const m = state.questions.length, n = state.players.length;
+    $("l-start").hidden = !m;
     $("l-sub").textContent = m || n ? [m && plural(m, "question"), n && plural(n, "player")].filter(Boolean).join("  ·  ")
       : "Tonight’s game";
     if (!m && !n && !state.title) tv.pending("title", "Quiz Night");
@@ -478,7 +541,7 @@ const VIEWS = {
     }
     // The title takes the height that the players leave.
     fitText($("l-title"), 230, 84, Math.min(470, 720 - $("l-players").offsetHeight));
-    if (!m) return tv.pending("categories", "Categories");
+    if (!m) return void tv.pending("categories", "Categories");
     const cats = [...new Set(state.questions.map(q => q.category).filter(Boolean))], list = h("p", { class: "cats" });
     fill($("l-cats"), h("p", { class: "caps" }, cats.length ? "Categories" : "On the card"), list);
     if (!cats.length) list.textContent = `${plural(m, "question")}, any subject`;
@@ -488,11 +551,12 @@ const VIEWS = {
         cats.length > k ? h("i", {}, ` +${cats.length - k}`) : "");
       if (list.scrollHeight <= list.clientHeight + 2) break;
     }
+    return $("l-start");
   },
 
   question(fresh) {
     const n = state.question, q = state.questions[n - 1], m = state.questions.length, reveal = state.reveal;
-    const picks = state.picks[n] || {}, c = q.correct - 1;
+    const picks = state.picks[n] || {}, c = q.correct - 1, cur = !reveal && answering();
     $("q-num").replaceChildren("Question ", h("b", {}, n), ` / ${m}`);
     $("q-pips").replaceChildren(...(m <= 16 ? state.questions.map((_, i) => h("i", { class: i + 1 === n ? "now" : i + 1 < n ? "done" : "" })) : []));
     $("q-cat").textContent = q.category;
@@ -501,24 +565,29 @@ const VIEWS = {
     $("q-text").textContent = q.text;
     $("q-answers").replaceChildren(...q.answers.map((a, i) => {
       const who = state.players.filter(p => picks[p.id] === i + 1), ok = i === c, many = who.length > 2;
-      return h("li", { class: "ans" + (!reveal ? "" : ok ? " ok" + (fresh ? " pop" : "") : " no"), id: `answer-${i + 1}` },
+      return h("li", {}, h("button", { class: "ans" + (!reveal ? "" : ok ? " ok" + (fresh ? " pop" : "") : " no"),
+          id: `answer-${i + 1}`, disabled: !cur, onclick: () => pick(i + 1) },
         h("span", { class: "num" }, i + 1),
-        h("div", { class: "body" }, h("span", { class: "txt" }, a),
-          reveal && who.length > 0 && h("div", { class: "picks" + (many ? " compact" : "") },
+        h("span", { class: "body" }, h("span", { class: "txt" }, a),
+          reveal && who.length > 0 && h("span", { class: "picks" + (many ? " compact" : "") },
             who.map(p => many ? token(p.id, 0, 1) : h("span", { class: "pick" }, token(p.id, 0, 1), h("span", {}, p.name))))),
-        reveal && ok && h("span", { class: "tick", svg: CHECK, "aria-label": "Correct" }));
+        reveal && ok && h("span", { class: "tick", svg: CHECK, "aria-label": "Correct" }),
+        cur && h("span", { class: "me", "aria-hidden": "true" }, token(cur, 0, 1))));
     }));
     // On the reveal, rays burst from the right answer and a row of confetti sits on its open side: above the top
     // row, below the bottom row. It stays clear of the card and the question, and inside the safe area.
     if (reveal) $("q-answers").prepend(h("li", { class: `art a${c + 1}` + (fresh ? " go" : ""), "aria-hidden": "true",
-      style: `left:${c % 2 ? 894 : 0}px;top:${c > 1 ? 388 : -62}px;transform:scale(${c % 2 ? -1 : 1},${c > 1 ? -1 : 1})`,
-      svg: confetti(866, 52, ART.answer) }));
+      style: `left:${c % 2 ? 908 : 0}px;top:${c > 1 ? 388 : -62}px;transform:scale(${c % 2 ? -1 : 1},${c > 1 ? -1 : 1})`,
+      svg: confetti(852, 52, ART.answer) }));
     $("q-rays").hidden = !reveal;
     $("q-rays").style.cssText = `--x:${c % 2 ? 1400 : 520}px;--y:${c > 1 ? 896 : 696}px`;
     const locked = state.players.filter(p => picks[p.id]).length;
-    $("q-strip").replaceChildren(...(reveal || !state.players.length ? [] : [
-      h("span", { class: "caps" }, h("b", {}, locked), ` of ${state.players.length} locked in`),
-      ...state.players.map(p => token(p.id, !picks[p.id], 1))]));
+    $("q-locked").hidden = reveal || !state.players.length;
+    $("q-locked").replaceChildren(h("b", {}, locked), ` of ${state.players.length} locked in`);
+    $("q-players").replaceChildren(...(reveal ? [] : state.players.map(p => h("button", { id: `player-${p.id}`,
+      class: p.id === cur && "cur", "aria-label": p.name, onclick: () => choose(p.id) }, token(p.id, !picks[p.id], 1)))));
+    const host = { "q-reveal": !reveal, "q-next": n < m, "q-scores": reveal || n === m };
+    for (const id in host) $(id).hidden = !host[id];
     fitText($("q-text"), q.text.length > 45 ? 104 : 128, 50, 320);
     // If a name does not fit beside its token, that answer shows tokens alone.
     for (const row of $("q-answers").querySelectorAll(".picks")) {
@@ -530,11 +599,14 @@ const VIEWS = {
       t.style.maxHeight = room + "px";
       fitText(t, 54, 32, room);
     }
+    return $("q-answers").querySelector(":enabled") || $("q-strip").querySelector(".btn:not([hidden])");
   },
 
   scoreboard(fresh) {
     const m = state.questions.length, n = state.players.length, last = state.last, final = m > 0 && last === m;
     const lead = leaders(), tie = lead.length > 1;
+    $("b-next").hidden = !m;
+    $("b-next").textContent = upcoming() > m ? "Play again" : "Next question";
     $("b-sub").textContent = state.title || "Quiz Night";
     $("b-disc").className = "disc" + (final ? " final" : m ? "" : " ghost");
     if (final) $("b-big").innerHTML = CROWN; else $("b-big").textContent = m ? last : "?";
@@ -543,10 +615,11 @@ const VIEWS = {
     $("b-art").innerHTML = final && n ? confetti(420, 290, ART.final) : "";
     $("b-art").className = "art" + (fresh ? " go" : "");
     const rows = $("b-rows");
-    if (!n) { $("b-cols").replaceChildren(); rows.className = "rows"; return tv.pending("standings", "Waiting for players"); }
+    if (!n) { $("b-cols").replaceChildren(); rows.className = "rows"; tv.pending("standings", "Waiting for players"); return $("b-next"); }
     const ranked = state.players.map((p, i) => ({ p, i, score: total(p.id) })).sort((a, b) => b.score - a.score || a.i - b.i);
     const top = Math.max(0, ranked[0].score), zero = !ranked.some(r => r.score);
-    const rowH = Math.min(133, Math.floor((580 - (n - 1) * 16) / n)), tight = rowH < 92;
+    // The rows share 548 px, which leaves room below them for the Next button.
+    const rowH = Math.min(133, Math.floor((548 - (n - 1) * 16) / n)), tight = rowH < 92;
     rows.className = "rows" + (tight ? " tight" : "") + (zero ? " zero" : "") + (fresh ? " grow" : "");
     rows.style.setProperty("--row", rowH + "px");
     $("b-cols").replaceChildren(zero ? h("span", {}, "No points yet") : last ? h("span", {}, `Question ${last}`) : "");
@@ -569,6 +642,7 @@ const VIEWS = {
     rows.style.removeProperty("--ns");
     for (let ns = tight ? 40 : 52; ns > 32 && widest() > 644;) rows.style.setProperty("--ns", (ns -= 2) + "px");
     rows.style.setProperty("--nw", Math.min(660, widest() + 16) + "px");
+    return $("b-next");
   },
 };
 
@@ -703,6 +777,14 @@ const PATCH = {
     if (v) state.double[state.question] = true; else delete state.double[state.question];
   },
 
+  answering(id) {
+    needQuestions("answering");
+    const ids = state.players.map(p => p.id);
+    if (id === null) delete state.answering[state.question];
+    else if (ids.includes(id)) state.answering[state.question] = id;
+    else fail(`answering must be a player id or null. Player ids are: ${ids.join(", ") || "none yet"}`);
+  },
+
   countdown(s) {
     if (s !== null && !(Number.isInteger(s) && s >= 0 && s <= 600)) fail("countdown must be whole seconds from 1 to 600, or 0 to stop it");
     if (s && (state.view !== "question" || state.reveal)) fail('countdown runs on a question before its reveal. Send {"question":1,"countdown":20}');
@@ -727,12 +809,33 @@ let shown = "";
 function render() {
   const key = [state.view, state.question, state.reveal, state.questions.length].join(), fresh = key !== shown;
   const section = $("v-" + state.view), entered = section.hidden;
+  // The remote is in use when a control has focus. Focus then stays on that control while the screen is the same,
+  // and moves to the view's first control when the screen changes. Without the remote, nothing gets focus.
+  const was = $("stage").contains(document.activeElement) && document.activeElement.id;
   for (const s of document.querySelectorAll("[data-view]")) s.hidden = s !== section;
   if (entered || (fresh && state.view === "question" && !state.reveal)) restart(section, "enter");
-  VIEWS[state.view](fresh);
+  const first = VIEWS[state.view](fresh), keep = !fresh && was && $(was);
   tick();
   shown = key;
+  if (was) (keep && !keep.disabled && keep.checkVisibility() ? keep : first)?.focus({ preventScroll: true });
 }
+
+// ---------- remote: each control sends the patch a voice turn would, then reports what the person did ----------
+const press = (action, patch, detail = null) => { apply(patch); tv.input(action, detail); };
+const pick = k => { const id = answering(); press("pick", { picks: { [id]: k }, answering: null }, { player: id, answer: k }); };
+const choose = id => press("answering", { answering: id }, { player: id });
+const next = n => press("next", { question: n }, { question: n });
+$("l-start").onclick = () => press("start", { view: "question" }, { question: state.question });
+// A remote reveal also scores the question, in the same apply: 1 point per right pick, else 0. The app doubles them.
+$("q-reveal").onclick = () => {
+  const n = state.question, picks = state.picks[n] || {}, scored = state.players.length > 0;
+  const scores = Object.fromEntries(state.players.map(p => [p.id, +(picks[p.id] === state.questions[n - 1].correct)]));
+  const s = apply(scored ? { reveal: true, scores } : { reveal: true });
+  tv.input("reveal", { question: n, right: s.right, scored });
+};
+$("q-next").onclick = () => next(state.question + 1);
+$("q-scores").onclick = () => press("scores", { view: "scoreboard" }, { question: state.question });
+$("b-next").onclick = () => upcoming() > state.questions.length ? press("again", { reset: true }) : next(upcoming());
 
 // What app.state() returns. Every patch key's value shows here; double is the per-question example.
 function snapshot(ignored = []) {
@@ -746,6 +849,7 @@ function snapshot(ignored = []) {
     out.picks = picks;
     out.waiting = ids.filter(id => !(id in picks));
     if (state.reveal) { out.correctAnswer = q.correct; out.right = ids.filter(id => picks[id] === q.correct); }
+    else out.answering = answering();
   }
   out.players = state.players.map(p => ({ id: p.id, name: p.name, score: total(p.id) }));
   out.leader = leaders();
