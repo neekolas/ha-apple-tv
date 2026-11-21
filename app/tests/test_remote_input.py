@@ -1862,6 +1862,28 @@ async def test_tvos_left_and_right_stay_in_the_row_at_its_end(tvos):
     assert await tvos.press("down", start="t07") == "t13"
 
 
+# A menu at the left, outside every row, and two rows of tiles that scroll sideways. The rows lie lower than the menu.
+MENU_CONTENT = """<style>body{margin:0;background:#111} button{border:0;background:#333}
+#menu{position:absolute;left:20px;top:20px;width:200px} #menu button{display:block;width:200px;height:60px;margin-bottom:20px}
+#content{position:absolute;left:300px;top:0;width:900px} .row{display:flex;gap:20px;overflow-x:auto;padding:30px 0}
+.row button{flex:none;width:300px;height:160px}</style>
+<div id=menu><button id=m0></button><button id=m1></button><button id=m2></button></div>
+<div id=content><div style='height:330px'></div>""" + "".join(
+    f"<div class=row id=row{row}>" + "".join(f"<button id=t{row}{column}></button>" for column in range(6)) + "</div>"
+    for row in range(2)) + "</div>"
+
+
+@pytest.mark.parametrize("browser_frame", [MENU_CONTENT], indirect=True)
+async def test_tvos_left_and_right_go_between_a_menu_and_the_rows(tvos):
+    """Review finding: Left from the first tile and Right from the menu did nothing, because only one of them is in a row."""
+    assert await tvos.press("left", start="t00") == "m2"
+    assert await tvos.press("right") == "t00"
+    assert await tvos.press("right", start="m0") == "t00"
+    # At the end of a row, Right still does not go to the other row.
+    await tvos.scroll(row0=9999)
+    assert await tvos.press("right", start="t05") == "t05"
+
+
 # A page area that scrolls up and down, with one item outside it.
 SCROLLER_CONTENT = """<style>body{margin:0;background:#111} button{position:absolute;width:200px;height:100px}
 #main{position:relative;height:600px;overflow-y:auto}</style>

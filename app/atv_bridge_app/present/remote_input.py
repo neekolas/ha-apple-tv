@@ -295,10 +295,12 @@ TVOS_HELPER = r"""() => {
         next.push({el, r, gap: Math.max(0, start), end});
         continue;
       }
-      // Used only when nothing qualifies above. Left and right stay in their row: at the end of
-      // a row, a tile of another row that is scrolled differently is not "right".
+      // Used only when nothing qualifies above. Left and right do not go to another row: at the end
+      // of a row, a tile of another row that is scrolled differently is not "right". They can go
+      // between a row and an item outside every row, such as a menu beside the rows.
       const cross = Math.max(0, -overlap);
-      if (along > cross && along + cross * 4 < bestScore && (!dir[0] || rowOf(el) === row)) {
+      const other = dir[0] && row && rowOf(el);
+      if (along > cross && along + cross * 4 < bestScore && !(other && other !== row)) {
         [best, bestScore] = [el, along + cross * 4];
       }
     }
