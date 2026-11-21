@@ -1,49 +1,57 @@
 ---
-name: apple-tv
-description: Controls an Apple TV through the tv-use MCP server (Apple TV Agent Bridge) on Home Assistant. Use for presenting pages, playing media, opening apps, navigating menus or reading the TV screen.
+name: tv-use-connect
+description: Connect to an Apple TV through the tv-use MCP server on Home Assistant and control it. Covers choosing a local or remote connection, registering the server, reading the screen, the remote, opening apps, deep links, playback, power and error recovery. Use when an agent needs to reach or operate the TV, or a tv_* call fails.
 ---
 
-# Apple TV
+# Connect to and control the TV
 
-Use the bridge on Home Assistant OS with an Apple TV 4K running tvOS 27 or later (26.6 also works, less tested). The app holds the control session for each registered receiver. Its browser renders pages on the HA host and sends them to the TV. For a live page, `localhost` refers to the HA host. For AirPlay media playback, the TV fetches the URL.
+tv-use (the **Apple TV Agent Bridge**) runs on Home Assistant. It gives agents one MCP endpoint for every paired Apple TV in the home: `<HA origin>/api/atv_bridge/mcp`, Streamable HTTP, header `Authorization: Bearer <HA admin token>`.
 
-## Start here
+Related skills: **tv-use-setup** installs and pairs the bridge. **tv-use-web-apps** builds pages for the TV. **tv-use-realtime** runs live voice sessions.
 
-1. Install the app and integration, pair the TV, then connect to `/api/atv_bridge/mcp` using Streamable HTTP and an HA administrator's Bearer token. Use a local connection when this machine is on the home network. See [Choose local or remote](connect.md#choose-local-or-remote).
-2. Call `tv_status {}` or read `tv://tvs`. Use the target room's stable ID if names collide. Every tool takes optional `tv`. If several TVs are paired, include it on every call for a particular room.
-3. Check `tv_status {"tv":"<room>"}` for reachability, pairings and capabilities. If someone may be watching, use a text-only `tv_look` before changing their screen.
+## Connect
 
-## Act, don't narrate
+- **Local connection (recommended).** On the home network, connect to `http://homeassistant.local:<port>`, or HA's LAN IP address. No Tailscale. It is the fastest path.
+- **Remote connection.** Outside the home, connect through Tailscale to HA's tailnet hostname.
+- Both use the same token. HA's port is 8123 by default; some installs use 80.
 
-The usual session is a live voice conversation. The user watches the TV, and you rarely speak.
+If the tv-use tools are missing, register the server first. If you run at home but the server uses a tailnet URL, run the local probe, tell the user once if it answers, and offer to switch. See [connect.md](references/connect.md).
 
-- Do the task without announcing it. Do not say what you are about to do or that you did it.
-- Show progress on the TV, not in speech. For a page, show it at once with empty places and a status line, then fill it in. See [Build good TV content](pages.md#show-work-in-progress).
-- Do not read aloud what the screen already shows.
-- Speak only when the screen cannot carry the message, in one short sentence. That includes:
-  - a choice or approval only the user can give: purchases, rentals, upgrades, sign-in, replacing another room's page, or choosing between services
-  - a pairing code request from `data.ask_user`
-  - a failure the screen does not show
-  - an answer to a question that is not on the screen
-  - a step that takes much longer than usual with nothing new on screen
+## First calls
 
-Use MCP discovery for tool choices, arguments and examples. For repetitive remote work, plan a `tv_sequence` using labels from the target TV. Put a checkpoint immediately before an action that depends on focus, app or row value. `tv_remote` sends keys in one fast burst and checks the screen once at the end; add `"check_each":true` only when each press must be confirmed. See [Drive native apps](apps.md).
+1. `tv_status {}` or read `tv://tvs`. Every tool takes an optional `tv`: a name or stable ID. With several paired TVs, pass it on every call.
+2. `tv_status {"tv":"<room>"}` for reachability, pairings and capabilities.
+3. Before changing a screen someone may be watching, read it with a text-only `tv_look {"tv":"<room>","image":false}`.
 
-After a media or deep-link launch returns, make text-only `tv_look` on the same TV your next call, even if the launch reports success. Check accessibility for an Open prompt before sending another launch or remote key. Confirm a visible Open prompt for the intended app, then verify where the TV lands. See [Profiles and dialogs](apps.md#profiles-and-dialogs). Ask before purchases, rentals or upgrades.
+## Pick the tool
 
-## Choose local or remote
+| Goal | Tool |
+|---|---|
+| Read the screen: app, focus, labels, playback | `tv_look` (text by default; `"image":true` for a screenshot, which shows a toast on the TV) |
+| Select a visible item by its label | `tv_navigate {"to":"General","select":true}` |
+| Press keys, swipe or type | `tv_remote` (keys go in one fast burst; add `"check_each":true` only when each press must be confirmed) |
+| Repeat a known route with checks | `tv_sequence` with `expect` checkpoints |
+| Open an app, optionally search or follow a menu path | `tv_open` |
+| Play a YouTube video, media URL or deep link | `tv_play` (the TV fetches media URLs itself, so they must be reachable from the TV) |
+| Wake or sleep | `tv_power` |
+| Show a web page | `tv_show` and `tv_page_run`; see **tv-use-web-apps** |
+| Repair pairing | `tv_pair`; see [troubleshooting.md](references/troubleshooting.md) |
 
-Use a local connection when the agent runs on the home network. It reaches HA at `homeassistant.local` without Tailscale and is the fastest path. Use a remote connection through Tailscale only when the agent runs outside the home. Both use the same HA token.
+Every result has `ok`, `summary`, `verified`, `evidence` and usually `screen`. An acknowledged action can still be `verified: false`. Read the evidence and look before sending more input. A failure has `error.code`, `error.retryable` and `error.fix`. Read the fix first.
 
-If you run on a machine at home and the MCP server is registered with a tailnet URL, check for a local connection with the probe in [Choose local or remote](connect.md#choose-local-or-remote). If HA answers, tell the user once and offer to register the local URL.
+## Rules
 
-## Guides
+- After a media or deep-link launch, make a text-only `tv_look` your next call, even if the launch reports success. Check for an **Open in …?** prompt before sending another key or launch. See [native-apps.md](references/native-apps.md#profiles-and-dialogs).
+- Ask before purchases, rentals, upgrades and sign-in. The bridge has no purchase guard.
+- On `mirror_busy`, ask before using `replace: true`. Another room may be watching.
 
-- [Install, pair and connect](connect.md)
-- [Present files, live URLs and updates](content.md)
-- [Build good TV content](pages.md)
-- [Drive native apps](apps.md)
-- [Choose a service deep link](deeplinks.md)
-- [Follow a worked example](examples.md)
-- [Troubleshoot errors and pairing](troubleshooting.md)
-- [Public API reference](../../docs/mcp-api.md)
+## Load when needed
+
+| File | Load it to |
+|---|---|
+| [connect.md](references/connect.md) | Register the MCP server, probe for a local connection, check rooms, or call tools from scripts over REST |
+| [native-apps.md](references/native-apps.md) | Drive native apps: sequences, profile pickers, Open prompts, power and paid actions |
+| [deeplinks.md](references/deeplinks.md) | Find a deep-link template for a streaming service |
+| [examples.md](references/examples.md) | Follow worked examples: play a podcast, find which app has a show, visit a Settings menu |
+| [troubleshooting.md](references/troubleshooting.md) | Handle an error code, a status problem, an HTTP error or a pairing exchange |
+| [MCP API reference](https://github.com/neekolas/tv-use/blob/main/docs/mcp-api.md) | Check every tool argument and result field |

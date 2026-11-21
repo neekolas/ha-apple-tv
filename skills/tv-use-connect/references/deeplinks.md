@@ -2,11 +2,11 @@
 
 Which URL templates open which services through `tv_play {"link": "..."}`, and how far each got on a real Apple TV.
 
-Trials on November 19, 2026 used tvOS 27.2 (24K122) and US and Canadian catalog examples. Access depends on sign-in, region and entitlements. For the trial results, see [docs/deeplinks.md](../../docs/deeplinks.md) in the bridge repository, and the machine-readable [deeplinks.validated.yaml](../../app/atv_bridge_app/data/deeplinks.validated.yaml).
+Trials on November 19, 2026 used tvOS 27.2 (24K122) and US and Canadian catalog examples. Access depends on sign-in, region and entitlements. For the trial results, see [docs/deeplinks.md](https://github.com/neekolas/tv-use/blob/main/docs/deeplinks.md) in the bridge repository, and the machine-readable [deeplinks.validated.yaml](https://github.com/neekolas/tv-use/blob/main/app/atv_bridge_app/data/deeplinks.validated.yaml).
 
 Levels: **A** the app opened (possibly at a welcome or profile screen), **B** the title page appeared, **C** the title played.
 
-These are observed outcomes for specific titles. Current launches can also answer recognized profile and privacy prompts. See [native app controls](apps.md).
+These are observed outcomes for specific titles. Current launches can also answer recognized profile and privacy prompts. See [native app controls](native-apps.md).
 
 ## Confirmed
 

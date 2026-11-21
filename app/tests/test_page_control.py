@@ -57,7 +57,7 @@ def test_page_control_reference_covers_tools_and_recovery():
     readme = (root / "README.md").read_text()
     architecture = (root / "docs/ARCHITECTURE.md").read_text()
     assert "`tv_page_run`" in readme and "| `tv_page_run` |" in architecture
-    troubleshooting = (root / "skills/apple-tv/troubleshooting.md").read_text()
+    troubleshooting = (root / "skills/tv-use-connect/references/troubleshooting.md").read_text()
     for code in ("stale_view", "target_missing", "script_error", "scripts_disabled", "nothing_showing", "page_not_live"):
         assert f"| `{code}` |" in troubleshooting
 

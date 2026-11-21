@@ -1,6 +1,6 @@
 # tv-use public MCP API
 
-Connect a Streamable HTTP client to `<HA origin>/api/atv_bridge/mcp` with the header `Authorization: Bearer <HA admin token>`. Use tvOS 27 or later (recommended; 26.6 also works, less tested). The bridge supports discovery without a static IP and requires no Apple Developer account. For installation, pairing, token creation and a read-only connection test, see [Install and connect](../skills/apple-tv/connect.md).
+Connect a Streamable HTTP client to `<HA origin>/api/atv_bridge/mcp` with the header `Authorization: Bearer <HA admin token>`. Use tvOS 27 or later (recommended; 26.6 also works, less tested). The bridge supports discovery without a static IP and requires no Apple Developer account. For installation, pairing, token creation and a read-only connection test, see [Install and connect](../skills/tv-use-setup/SKILL.md).
 
 ## Choose a receiver
 
@@ -115,7 +115,7 @@ Optional fields are `title`, `audio` (`play` by default, or `mute`), `keep_awake
 
 The bridge checks the resolved address before connecting, including after redirects. Public sites, reachable tailnet sites and the bridge’s active stage origins work by default. A blocked URL returns `blocked_address` with the address class and a fix. Operators can grant additional LAN destinations with `page_network_allow`.
 
-A show returns `data.page_id`, `data.size` and `data.transport`. A mirror reports the configured size (default `1920x1080`, also `1280x720`). Verification means the sender reported pushing frames. Recorded playback reports `video` at `1920x1080` and checks AirPlay playback. The result can have `verified: false`. Live URLs always use mirroring. Keep their server running. See [Present content](../skills/apple-tv/content.md).
+A show returns `data.page_id`, `data.size` and `data.transport`. A mirror reports the configured size (default `1920x1080`, also `1280x720`). Verification means the sender reported pushing frames. Recorded playback reports `video` at `1920x1080` and checks AirPlay playback. The result can have `verified: false`. Live URLs always use mirroring. Keep their server running. See [Present content](../skills/tv-use-web-apps/references/delivery.md).
 
 #### Remote input
 
@@ -201,7 +201,7 @@ Limits:
 
 ### tv_page_run
 
-Run plain JavaScript in the presented content document. Supply `script` as an expression, function expression or async function body. Select a receiver with the optional `tv`. For a page you authored, call its API directly, for example `{"script":"window.setStep(arg)","arg":2}`. For a known field, read `{"script":"document.querySelector('#note').value"}`. For discovery, scope `querySelectorAll` to the controls you need and return a small array. [Tested DOM recipes](../skills/apple-tv/examples.md#read-and-operate-a-page)
+Run plain JavaScript in the presented content document. Supply `script` as an expression, function expression or async function body. Select a receiver with the optional `tv`. For a page you authored, call its API directly, for example `{"script":"window.setStep(arg)","arg":2}`. For a known field, read `{"script":"document.querySelector('#note').value"}`. For discovery, scope `querySelectorAll` to the controls you need and return a small array. [Tested DOM recipes](../skills/tv-use-web-apps/references/recipes.md#read-and-operate-a-page)
 
 The optional JSON input is available as `arg`. The bridge awaits promises and returns the JSON value in `data.result`. An empty return becomes `null`. If the serialized result exceeds 65,536 UTF-8 bytes, `data.truncated` is true and `data.preview` contains the beginning of the JSON text. `data.bytes` gives the original size.
 
@@ -209,7 +209,7 @@ The optional JSON input is available as `arg`. The bridge awaits promises and re
 
 Click with `document.querySelector('#next').click()`. Submit with `document.querySelector('form').requestSubmit()`. A link or form may replace the document. The next call runs in the new document. A navigation during a script may return `stale_view` after the script has taken effect.
 
-Scripts generate synthetic events. A dispatched key reaches JavaScript handlers but does not insert text or perform a key's default browser action. Chromium allows media autoplay with sound, and the stage iframe delegates autoplay. APIs such as fullscreen and the file picker can still require permissions or transient user activation. Synthetic events do not grant trusted input. Allow 250 ms between scripts. [Interaction recipes](../skills/apple-tv/examples.md)
+Scripts generate synthetic events. A dispatched key reaches JavaScript handlers but does not insert text or perform a key's default browser action. Chromium allows media autoplay with sound, and the stage iframe delegates autoplay. APIs such as fullscreen and the file picker can still require permissions or transient user activation. Synthetic events do not grant trusted input. Allow 250 ms between scripts. [Interaction recipes](../skills/tv-use-web-apps/references/recipes.md)
 
 Page control requires HA administrator access through the bridge endpoint on the private network. The bridge selects the presented content iframe or captured top-level tab and excludes the stage wrapper, browser error pages and bridge listeners. Scripts run with that page's browser privileges. They can read field values, make requests, submit forms and navigate. Every script uses the same destination policy as the page. A blocked fetch rejects with a network error. Bundle-relative requests, links and anchors work on the stage origin. Set the app option `page_scripts: false` to disable the whole tool, including read-only calls. The option applies to caller scripts and leaves normal site JavaScript enabled.
 
@@ -302,7 +302,7 @@ Start an exchange on a registered receiver with `{"tv":"<room>","kind":"control"
 
 At `waiting_for_pairing_screen`, open **Settings → Remotes and Devices → Remote App and Devices** on the target. The bridge retries discovery every two seconds. Poll with the same room, kind and returned ID. At `code_on_screen`, add `"code":"0123"` for a four-digit exchange or the actual six digits for screen pairing. Preserve leading zeros. To cancel, send `"cancel":true` with the same room, kind and ID. Submit or cancel may omit the ID to use the current exchange for that kind. Completion checks the Companion app list or an accessibility read.
 
-Optional `notify: true` requests a reply notification through the phone configured in HA. Use `read_code_from_screen: true` only if the user requests it for control pairing and screen pairing already works. If the code is ambiguous, relay the open prompt. See [Pairing and recovery](../skills/apple-tv/troubleshooting.md).
+Optional `notify: true` requests a reply notification through the phone configured in HA. Use `read_code_from_screen: true` only if the user requests it for control pairing and screen pairing already works. If the code is ambiguous, relay the open prompt. See [Pairing and recovery](../skills/tv-use-connect/references/troubleshooting.md).
 
 ## Failures
 
@@ -335,7 +335,7 @@ A tool failure includes `error.code`, `error.message`, `error.retryable` and `er
 
 ## HTTP and Home Assistant
 
-Scripts can POST JSON arguments to `/api/atv_bridge/tool/<name>` with the same HA admin header. The HTTP result places a requested image in `data.image`. For bundled pages, POST a raw ZIP to `/api/atv_bridge/bundle`. Success returns `{"bundle":"<32 lowercase hex characters>"}`. See [upload limits and commands](../skills/apple-tv/content.md).
+Scripts can POST JSON arguments to `/api/atv_bridge/tool/<name>` with the same HA admin header. The HTTP result places a requested image in `data.image`. For bundled pages, POST a raw ZIP to `/api/atv_bridge/bundle`. Success returns `{"bundle":"<32 lowercase hex characters>"}`. See [upload limits and commands](../skills/tv-use-web-apps/references/delivery.md).
 
 HA's built-in MCP server and Assist expose six text tools through the integration: `atv_bridge__show`, `atv_bridge__play`, `atv_bridge__open`, `atv_bridge__power`, `atv_bridge__pair` and `atv_bridge__status`. Watch history is not among them. Use the bridge endpoint above for full screen reads, navigation, remote input, sequences and mirrored page control.
 

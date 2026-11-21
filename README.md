@@ -17,7 +17,7 @@ Home Assistant does not fix this. Its built-in Apple TV integration is built on 
 | Show its own content | Media URLs only | `tv_show` puts any web page, document, slide deck, photo set or live dashboard on the TV |
 | Open a show in the right app | A few deep-link examples and "try a share link" | A tested deep-link catalog, and a check of where the link landed |
 
-Deep links are the clearest example. How would an agent know that an HBO Max episode opens with `https://play.hbomax.com/video/watch/{id}`? Or that a Netflix title link opens Netflix Home, not the title? tv-use keeps a catalog of links for 47 services, with trial results from a real Apple TV, and gives it to the agent. After each launch, it reads the screen to report where the TV actually landed, and it can answer the profile picker. [Deep links by service](skills/apple-tv/deeplinks.md)
+Deep links are the clearest example. How would an agent know that an HBO Max episode opens with `https://play.hbomax.com/video/watch/{id}`? Or that a Netflix title link opens Netflix Home, not the title? tv-use keeps a catalog of links for 47 services, with trial results from a real Apple TV, and gives it to the agent. After each launch, it reads the screen to report where the TV actually landed, and it can answer the profile picker. [Deep links by service](skills/tv-use-connect/references/deeplinks.md)
 
 ## What tv-use does
 
@@ -48,7 +48,7 @@ The TV becomes a shared screen for whatever you and the agent are working on. So
 - **Find a podcast.** The agent searches YouTube for the episode and plays it.
 - **Fix a setting.** "Turn on subtitles." The agent opens Settings, reads each menu and selects items by label.
 
-[Worked examples](skills/apple-tv/examples.md) · [Page authoring guide](skills/apple-tv/content.md)
+[Page recipes](skills/tv-use-web-apps/references/recipes.md) · [Web apps skill](skills/tv-use-web-apps/SKILL.md)
 
 ## Install and connect
 
@@ -96,7 +96,7 @@ Every tool accepts an optional `tv`. Use the name or stable bridge ID from `tv:/
 
 Tool results include `ok`, `summary`, `verified`, `evidence` and `data`. An acknowledged action can have `verified: false`. Read the evidence and check the screen before sending another key. Failures include `error.code`, `error.message`, `error.retryable` and `error.fix`. Most tools return a compact `screen`. Pairing uses unknown screen values, and status omits the screen.
 
-Scripts can POST the same arguments to `/api/atv_bridge/tool/<name>` with the admin token. The bridge also supplies six text tools to Home Assistant’s LLM APIs. For Assist, expose each intended bridge media player. [Agent skill and examples](skills/apple-tv/SKILL.md) · [MCP API](docs/mcp-api.md)
+Scripts can POST the same arguments to `/api/atv_bridge/tool/<name>` with the admin token. The bridge also supplies six text tools to Home Assistant’s LLM APIs. For Assist, expose each intended bridge media player. [Agent skills](skills/) · [MCP API](docs/mcp-api.md)
 
 ## Using tv-use with Home Assistant
 

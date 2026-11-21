@@ -1,0 +1,48 @@
+<!-- tv-kit:start v1 — copy this block unchanged into every TV app, just before </body>. -->
+<style>
+  #tv-status { position: absolute; left: 80px; bottom: 60px; z-index: 50; display: flex; align-items: center; gap: 18px;
+    padding: 14px 28px 14px 22px; border-radius: 40px; background: rgba(20, 23, 31, .92); color: #c9ccd6;
+    font: 500 32px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; transition: opacity 250ms; }
+  #tv-status[hidden] { display: flex; opacity: 0; }
+  #tv-status i { width: 18px; height: 18px; border-radius: 50%; background: var(--accent, #5b8cff);
+    animation: tv-beat 2s steps(2, jump-none) infinite; }
+  @keyframes tv-beat { from { opacity: 1; } to { opacity: .3; } }
+  [data-slot].tv-pending { color: #8a8e9a; }
+  [data-slot].tv-pending::after { content: ""; display: block; width: min(60%, 900px); height: 28px; margin-top: 14px;
+    border-radius: 14px; background: #262a34; }
+</style>
+<script>
+  (() => {
+    const host = document.getElementById("stage") || document.body;
+    const status = document.createElement("div");
+    status.id = "tv-status";
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    status.innerHTML = "<i></i><span></span>";
+    host.append(status);
+    const slot = name => {
+      let el = document.querySelector(`[data-slot="${CSS.escape(name)}"]`);
+      if (!el) {
+        const list = document.querySelector("[data-slots]");
+        if (!list) throw new Error(`No element has data-slot="${name}". Use one of: ` +
+          [...document.querySelectorAll("[data-slot]")].map(e => e.dataset.slot).join(", "));
+        el = document.createElement("section");
+        el.dataset.slot = name;
+        list.append(el);
+      }
+      return el;
+    };
+    const state = () => ({
+      working: status.hidden ? null : status.lastChild.textContent,
+      pending: [...document.querySelectorAll("[data-slot].tv-pending")].map(el => el.dataset.slot),
+    });
+    window.tv = {
+      working(text) { status.lastChild.textContent = String(text); status.hidden = false; return state(); },
+      pending(name, label = "") { const el = slot(name); el.classList.add("tv-pending"); el.textContent = label; return state(); },
+      fill(name, html) { const el = slot(name); el.classList.remove("tv-pending"); el.innerHTML = html; return state(); },
+      done() { status.hidden = true; return state(); },
+      state,
+    };
+  })();
+</script>
+<!-- tv-kit:end -->

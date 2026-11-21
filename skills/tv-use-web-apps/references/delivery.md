@@ -17,7 +17,7 @@ A ZIP must be at most 50 MiB compressed and 50 MiB unpacked, with at most 8192 e
 
 ## Upload a bundle
 
-Put `index.html` and its assets in a directory named `site`. From its parent directory, create a new archive and send it as the request body. Set `HA_URL` and `HA_TOKEN` as in [Install and connect](connect.md).
+Put `index.html` and its assets in a directory named `site`. From its parent directory, create a new archive and send it as the request body. Set `HA_URL` and `HA_TOKEN` as in the **tv-use-connect** skill. `scripts/upload-bundle.sh` does these steps for you.
 
 ```sh
 (cd site && zip -r ../site.zip .)
@@ -58,7 +58,7 @@ Then call `tv_show {"bundle": "<id>"}`. An invalid ZIP within the request size l
 ## Operate a mirrored page
 
 1. **Your own page.** Expose small functions on `window`. Call them with `tv_page_run {"script":"window.setStep(arg)","arg":2}`. Return the resulting application state or read it in a later script.
-2. **Any other page.** Query the element you need. For discovery, narrow `document.querySelectorAll()` to likely controls or a known container. Use DOM methods to read, fill, click or submit. The next call runs in the current document. [DOM recipes](examples.md#read-and-operate-a-page)
+2. **Any other page.** Query the element you need. For discovery, narrow `document.querySelectorAll()` to likely controls or a known container. Use DOM methods to read, fill, click or submit. The next call runs in the current document. [DOM recipes](recipes.md#read-and-operate-a-page)
 
 The capture browser allows autoplay with sound. Choose `audio: "play"` to send page audio. Synthetic events do not grant user activation for gesture-gated APIs. Check the current document before retrying a timed-out script. A recording can be refreshed with a new `tv_show`.
 

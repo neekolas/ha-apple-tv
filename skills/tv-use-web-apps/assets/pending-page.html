@@ -2,71 +2,85 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
 <title>Working</title>
+<!-- The smallest TV page: a title, pending places and the shared tv kit.
+     Edit the four lines at the end of the last script for the request, then
+     tv_show it at once and fill it with tv_page_run:
+       tv_page_run {"script":"tv.fill('steps', arg); return tv.working('Checking timings')","arg":"<ol><li>Boil water</li></ol>"}
+       tv_page_run {"script":"tv.done()"} -->
 <style>
-  html, body { margin: 0; height: 100%; background: #101114; color: #f2f2f2; font: 36px/1.35 system-ui, sans-serif; }
-  body { box-sizing: border-box; padding: 60px 80px; display: flex; flex-direction: column; gap: 40px; }
-  h1 { margin: 0; font-size: 72px; line-height: 1.1; }
-  main { flex: 1; display: grid; gap: 32px; align-content: start; }
-  [data-slot] { transition: opacity 300ms; }
-  [data-slot].pending { color: #8a8d96; }
-  [data-slot].pending::after { content: ""; display: block; width: 60%; height: 28px; margin-top: 14px; border-radius: 14px; background: #262830; }
-  #status { min-height: 48px; font-size: 32px; color: #b9bcc6; display: flex; align-items: center; gap: 18px; }
-  #status[hidden] { display: none; }
-  #status .dot { width: 18px; height: 18px; border-radius: 50%; background: #5b8cff; animation: beat 2s steps(2, jump-none) infinite; }
-  @keyframes beat { from { opacity: 1; } to { opacity: 0.3; } }
+  :root { --bg: #0d0f14; --text: #f3f4f7; --accent: #5b8cff; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
+  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0;
+    box-sizing: border-box; padding: 60px 80px 160px; display: flex; flex-direction: column; gap: 40px;
+    color: var(--text); font: 500 36px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { margin: 0; font-size: 80px; font-weight: 800; line-height: 1.05; }
+  main { display: grid; gap: 36px; align-content: start; }
+  ol, ul { margin: 0; padding-left: 1.2em; }
 </style>
-<h1 id="title" data-slot="title"></h1>
-<main id="slots"></main>
-<div id="status" role="status" hidden><span class="dot"></span><span id="status-text"></span></div>
+<body>
+<div id="stage">
+  <h1 data-slot="title"></h1>
+  <main data-slots></main>
+</div>
 <script>
-  // Call these with tv_page_run, for example:
-  //   tv_page_run {"script":"tv.working(arg)","arg":"Finding a recipe"}
-  //   tv_page_run {"script":"tv.fill('steps', arg)","arg":"<ol><li>Boil water</li></ol>"}
-  //   tv_page_run {"script":"tv.done()"}
-  const slot = name => {
-    let el = document.querySelector(`[data-slot="${CSS.escape(name)}"]`);
-    if (!el) {
-      el = document.createElement("section");
-      el.dataset.slot = name;
-      document.getElementById("slots").append(el);
-    }
-    return el;
-  };
-  const state = () => ({
-    working: document.getElementById("status").hidden ? null : document.getElementById("status-text").textContent,
-    pending: [...document.querySelectorAll("[data-slot].pending")].map(el => el.dataset.slot),
-  });
-  window.tv = {
-    // Show what you are doing now. Short present-tense text, such as "Finding a recipe".
-    working(text) {
-      document.getElementById("status-text").textContent = text;
-      document.getElementById("status").hidden = false;
-      return state();
-    },
-    // Reserve a place for a result that is still coming. The label says what will appear.
-    pending(name, label = "") {
-      const el = slot(name);
-      el.classList.add("pending");
-      el.textContent = label;
-      return state();
-    },
-    // Put a result in its place. Use html for markup; plain text is fine too.
-    fill(name, html) {
-      const el = slot(name);
-      el.classList.remove("pending");
-      el.innerHTML = html;
-      return state();
-    },
-    // Hide the status line when nothing is in progress.
-    done() {
-      document.getElementById("status").hidden = true;
-      return state();
-    },
-    state,
-  };
-  // Edit these first lines for the request. Show the page at once, then fill it.
+  const stage = document.getElementById("stage");
+  const fit = () => { const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `translate(${(innerWidth - 1920 * s) / 2}px, ${(innerHeight - 1080 * s) / 2}px) scale(${s})`; };
+  new ResizeObserver(fit).observe(document.documentElement);
+</script>
+<!-- tv-kit:start v1 — copy this block unchanged into every TV app, just before </body>. -->
+<style>
+  #tv-status { position: absolute; left: 80px; bottom: 60px; z-index: 50; display: flex; align-items: center; gap: 18px;
+    padding: 14px 28px 14px 22px; border-radius: 40px; background: rgba(20, 23, 31, .92); color: #c9ccd6;
+    font: 500 32px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; transition: opacity 250ms; }
+  #tv-status[hidden] { display: flex; opacity: 0; }
+  #tv-status i { width: 18px; height: 18px; border-radius: 50%; background: var(--accent, #5b8cff);
+    animation: tv-beat 2s steps(2, jump-none) infinite; }
+  @keyframes tv-beat { from { opacity: 1; } to { opacity: .3; } }
+  [data-slot].tv-pending { color: #8a8e9a; }
+  [data-slot].tv-pending::after { content: ""; display: block; width: min(60%, 900px); height: 28px; margin-top: 14px;
+    border-radius: 14px; background: #262a34; }
+</style>
+<script>
+  (() => {
+    const host = document.getElementById("stage") || document.body;
+    const status = document.createElement("div");
+    status.id = "tv-status";
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    status.innerHTML = "<i></i><span></span>";
+    host.append(status);
+    const slot = name => {
+      let el = document.querySelector(`[data-slot="${CSS.escape(name)}"]`);
+      if (!el) {
+        const list = document.querySelector("[data-slots]");
+        if (!list) throw new Error(`No element has data-slot="${name}". Use one of: ` +
+          [...document.querySelectorAll("[data-slot]")].map(e => e.dataset.slot).join(", "));
+        el = document.createElement("section");
+        el.dataset.slot = name;
+        list.append(el);
+      }
+      return el;
+    };
+    const state = () => ({
+      working: status.hidden ? null : status.lastChild.textContent,
+      pending: [...document.querySelectorAll("[data-slot].tv-pending")].map(el => el.dataset.slot),
+    });
+    window.tv = {
+      working(text) { status.lastChild.textContent = String(text); status.hidden = false; return state(); },
+      pending(name, label = "") { const el = slot(name); el.classList.add("tv-pending"); el.textContent = label; return state(); },
+      fill(name, html) { const el = slot(name); el.classList.remove("tv-pending"); el.innerHTML = html; return state(); },
+      done() { status.hidden = true; return state(); },
+      state,
+    };
+  })();
+</script>
+<!-- tv-kit:end -->
+<script>
+  // Edit these lines for the request.
   tv.fill("title", "Pork bulgogi");
   tv.pending("summary", "Recipe summary");
   tv.pending("steps", "Steps");
   tv.working("Finding a recipe");
 </script>
+</body>
