@@ -109,6 +109,33 @@ def tvpipe_credentials(identity, receiver, host, port):
     return text
 
 
+# Descriptive now-playing fields beyond those status() and media_details() name. This is an
+# allowlist: URLs, profile and subscription identifiers and binary blobs are never copied.
+RAW_KEEP = {
+    "subtitle", "albumArtistName", "directorName", "composer", "localizedContentRating",
+    "isExplicitItem", "releaseDate", "albumYear", "trackNumber", "totalTrackCount", "discNumber",
+    "totalDiscCount", "radioStationName", "mediaSubType", "episodeType", "isAlwaysLive",
+    "iTunesStoreArtistIdentifier", "iTunesStoreAlbumIdentifier", "serviceIdentifier", "brandIdentifier",
+}
+
+
+def raw_metadata(metadata):
+    """The allowed extra fields set in the MRP ContentItemMetadata message, as JSON values."""
+    raw = {}
+    for field, value in metadata.ListFields():
+        if field.name not in RAW_KEEP:
+            continue
+        if field.enum_type:
+            raw[field.name] = field.enum_type.values_by_number[value].name
+        elif isinstance(value, str):
+            # An allowed field can still carry a link. Links can hold account tokens.
+            if "://" not in value:
+                raw[field.name] = value[:200]
+        elif not isinstance(value, float) or value == value:
+            raw[field.name] = value
+    return raw
+
+
 class Adapter:
     supports_play_url = hasattr(StreamProtocol, "supports_playback_state")
 
@@ -479,6 +506,29 @@ class Session:
             await keyboard.text_append(text)
         actual = await keyboard.text_get()
         return actual is not None and actual == (previous or "") + text
+
+    async def media_details(self):
+        """Now-playing fields beyond status(). Reads pyatv's cached push state and sends nothing."""
+        details = {}
+        with suppress(exceptions.NotSupportedError):
+            media = await self.facade.metadata.playing()
+            details = {
+                "media_type": media.media_type.name.lower(),
+                "album": media.album,
+                "genre": media.genre,
+                "series_name": media.series_name,
+                "season_number": media.season_number,
+                "episode_number": media.episode_number,
+                "itunes_store_identifier": media.itunes_store_identifier,
+            }
+        mrp = self.facade.metadata.get(Protocol.MRP)
+        player = getattr(getattr(mrp, "psm", None), "playing", None)
+        if player is not None:
+            # Playing.hash falls back to a digest of the title, which changes when a late title arrives.
+            details["item_id"] = player.item_identifier
+            if player.metadata is not None:
+                details["raw"] = raw_metadata(player.metadata)
+        return details
 
     async def status(self):
         if self.api._connection is None or not self.api._connection.connected:

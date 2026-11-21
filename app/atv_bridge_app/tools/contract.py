@@ -190,7 +190,16 @@ SCHEMAS = {
         "cancel": described(BOOL, "Close the pending exchange for this kind.", default=False),
     }, ["kind"]),
     "tv_status": schema(),
+    "tv_history": schema({
+        "since": described(TEXT | {"maxLength": 40}, "Start of the time range. ISO 8601 date or date-time in UTC, or an age such as 24h, 7d or 4w."),
+        "until": described(TEXT | {"maxLength": 40}, "End of the time range, in the same formats as since."),
+        "app": described(TEXT, "Only entries from this app. Matches part of the app name or the whole bundle ID, ignoring case."),
+        "search": described(TEXT, "Only entries whose title, series, artist or album contains this text, ignoring case."),
+        "limit": described(number(0, 500), "Maximum entries to return, newest first. Use 0 for the summary alone.", default=50),
+    }),
 }
+# These tools read bridge state and return no screen.
+NO_SCREEN = ("tv_status", "tv_history")
 # The dispatcher consumes routing fields before invoking the per-TV operation.
 ROUTED_SCHEMAS = {
     name: spec | {"properties": spec["properties"] | {"tv": TV}} for name, spec in SCHEMAS.items()
@@ -207,7 +216,7 @@ ROUTED_SCHEMAS["tv_show"] = ROUTED_SCHEMAS["tv_show"] | {
 INSTRUCTIONS = (
     "Choose a receiver from tv://tvs. Supply its name or ID in tv when there is no default. "
     "Use tv_status for health and pairing, and tv_pair to repair missing access. "
-    "Read tv_look before interrupting someone. Use tv_open to launch or search, tv_navigate for a labeled item, "
+    "Read tv_look before interrupting someone. Use tv_history to learn what people watched and for how long. Use tv_open to launch or search, tv_navigate for a labeled item, "
     "tv_remote for individual keys, text or a swipe, and tv_sequence for repeated work with explicit screen checkpoints. "
     "Use tv_power for wake or sleep, tv_play for media and deep links, and tv_show for web pages. "
     "Use tv_page_run to call app functions or read and operate the mirrored document with DOM APIs. "

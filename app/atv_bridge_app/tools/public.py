@@ -14,7 +14,8 @@ from ..present.interaction import PageInteraction
 from ..present.media import MediaPlayback
 from ..state import Fault, classify
 from . import link_info, playback_identity
-from .contract import RUN_HELP, SCHEMAS, UNKNOWN, checked, outcome, public_error, schema
+from .contract import NO_SCREEN, RUN_HELP, SCHEMAS, UNKNOWN, checked, outcome, public_error, schema
+from ..history import report
 from .sequence import run_sequence
 from .deep_link import confirm_custom_link, link_targets, observed, title_action
 from .pair import exchange
@@ -89,7 +90,7 @@ class PublicTools:
             False,
         )
         result.update(ok=False, error=error)
-        if name != "tv_status":
+        if name not in NO_SCREEN:
             result["screen"] = self.last_screen.copy()
         return result
 
@@ -122,6 +123,14 @@ class PublicTools:
                     "Use tools/list for accepted arguments.",
                 ),
             )
+        if name == "tv_history":
+            # History reads stored entries. It must not wait for the TV lock or read the screen.
+            try:
+                result = await self.tv_history(**args)
+            except Fault as fault:
+                result = self.failure(name, fault)
+            self.ops.state.audit(name, args, result)
+            return result
         waiting = time.monotonic()
         try:
             await asyncio.wait_for(self.lock.acquire(), self.wait_timeout)
@@ -369,6 +378,13 @@ class PublicTools:
                 "problems": problems,
             },
         )
+
+    async def tv_history(self, **filters):
+        """Read what was watched on the TVs, to learn tastes or find a title again. Read-only: it never wakes or changes a TV.
+        data.entries lists items newest first with app, title, series, artist, start, end and watched_s, the seconds actually played.
+        data.summary totals the whole match with top apps, series and artists. data.now lists what is playing. Omit tv for all TVs.
+        The history is private. It is stored only on the Home Assistant host and served only to HA administrators. For example, tv_history {"since":"7d","app":"YouTube"}."""
+        return await report([({}, self.history)], **filters)
 
     async def read_observation(self, *, single_read=False):
         try:

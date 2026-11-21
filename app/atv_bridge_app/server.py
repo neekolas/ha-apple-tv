@@ -11,6 +11,7 @@ from aiohttp import ClientError, ClientSession, ClientTimeout, web
 from .atv import Adapter
 from .atv.discovery import describe
 from .engine import Engine
+from .history import Recorder
 from .mcp_http import MCP
 from .pairing import Pairing
 from .present.play_url import PlayUrlSender
@@ -61,6 +62,10 @@ class TVRuntime:
         default_profile="",
         app_profile="",
         page_scripts=True,
+        watch_history=True,
+        history_interval=300,
+        history_fast_interval=15,
+        history_max_entries=2000,
     ):
         self.state = state
         self.subscribers = set()
@@ -104,6 +109,15 @@ class TVRuntime:
         self.tools.pairing = self.pairing
         self.tools.default_profile = default_profile
         self.tools.app_profile = app_profile
+        self.history = self.tools.history = Recorder(
+            state.root,
+            self.engine,
+            self.stage,
+            enabled=watch_history,
+            interval=history_interval,
+            fast_interval=history_fast_interval,
+            max_entries=history_max_entries,
+        )
 
     @cached_property
     def mcp(self):
@@ -123,6 +137,7 @@ class TVRuntime:
                 self.idle.set()
 
     def publish(self, change):
+        self.history.notice(change)
         for queue in self.subscribers:
             if queue.full():
                 queue.get_nowait()
@@ -154,6 +169,7 @@ class TVRuntime:
     async def close(self):
         await asyncio.gather(*(ws.close() for ws in list(self.sockets)))
         await self.pairing.stop()
+        await self.history.stop()
         await self.tools.media.stop()
         await getattr(self.operations, "presenter", self.sender).stop()
         await self.engine.stop()
@@ -333,6 +349,7 @@ class TVRuntime:
                     await fleet.start()
                 else:
                     self.engine.start()
+                    self.history.start()
                 announce = asyncio.create_task(discover(self.state.token))
                 try:
                     yield

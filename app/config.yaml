@@ -28,6 +28,10 @@ options:
   mirror_fps: 10
   default_profile: ""
   app_profile: ""
+  watch_history: true
+  history_interval: 300
+  history_fast_interval: 15
+  history_max_entries: 2000
   log_level: info
 schema:
   apple_tvs:
@@ -45,6 +49,10 @@ schema:
   mirror_fps: int(1,60)
   default_profile: str?
   app_profile: str?
+  watch_history: bool
+  history_interval: int(30,3600)
+  history_fast_interval: int(5,300)
+  history_max_entries: int(100,20000)
   log_level: list(debug|info|warning|error)
 backup_exclude:
   - content

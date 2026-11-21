@@ -14,7 +14,7 @@ Read `tv://tvs` to get registered receivers. Each tool accepts optional `tv`. Us
 
 MCP returns the result as JSON text and as `structuredContent`. A tool failure sets `isError: true`. The JSON has `ok`, `summary`, `verified`, `evidence` and `data`. Read `verified` and the evidence even when `ok` is true. For example, the TV can acknowledge Select while its visible effect remains unclear.
 
-Single-TV operations other than status include `screen`. On a routed call it has `tv`, `tv_id`, `power` (`on`, `off`, `screensaver` or `unknown`), `keyboard` and four nullable objects:
+Single-TV operations other than `tv_status` and `tv_history` include `screen`. On a routed call it has `tv`, `tv_id`, `power` (`on`, `off`, `screensaver` or `unknown`), `keyboard` and four nullable objects:
 
 | Field | Contents |
 |---|---|
@@ -58,6 +58,39 @@ Arguments below are JSON objects. Add `"tv":"<room>"` to any example. Strings mu
 ### tv_status
 
 `{}` checks bridge health. For a single receiver, inspect `data.tv` (including `id`, `name`, `model`, `tvos`, `address`, `address_source`, `reachable`), `data.pairings.control` and `data.pairings.screen` (`ok`, `missing`, `invalid`). `data.capabilities` reports `show`, `look_text`, `look_image` and `play_media`. Health also includes `browser`, `tailnet_dns` and `problems`. A successful check can report problems. An `address_changed` entry is informational and has no `fix`.
+
+### tv_history
+
+`{}` returns the watch history of every TV, newest first. It is read-only. It does not wake a TV, wait for the tool lock or read the screen, and the result has no `screen`. Add `tv` for one room.
+
+| Argument | Meaning |
+|---|---|
+| `since`, `until` | Time range. An ISO 8601 date or date-time (UTC unless it has an offset), or an age such as `24h`, `7d` or `4w`. An entry matches when it overlaps the range. |
+| `app` | Part of the app name, or the whole bundle ID. Matching ignores case. |
+| `search` | Text in the title, episode title, series, artist or album. Matching ignores case. |
+| `limit` | 0–500 entries, default 50. Use 0 for the summary alone. |
+
+`data.entries` holds one entry per viewing of an item. Fields that the app did not report are absent.
+
+| Field | Contents |
+|---|---|
+| `tv`, `tv_id` | The room and its bridge ID |
+| `start`, `end` | First and last time the item was playing, in UTC |
+| `watched_s` | Seconds actually played. Pauses do not count. |
+| `app`, `app_id` | The app that owned the media |
+| `title`, `artist`, `album`, `genre`, `kind` | As the app reported them. `kind` is `video`, `music` or `tv`. On YouTube the artist is the channel. |
+| `series`, `season`, `episode`, `episode_title` | From the app, or parsed from the title formats of Hulu, Disney+ and HBO Max |
+| `content_id`, `store_id`, `item_id`, `url` | The app's content identifier, the iTunes Store ID, the queue item, and a YouTube link when the identifier is a video ID. A content identifier that is a link is not stored. |
+| `position_s`, `duration_s` | Last position and length. Compare them to see whether the item was finished. |
+| `meta` | Other descriptive fields from a fixed list, such as `subtitle`, `directorName`, `localizedContentRating` or `serviceIdentifier`. Links, profile and subscription identifiers and binary fields are never stored. |
+
+`data.summary` covers every matching entry, not only the returned page: `entries`, `watched_s`, `first`, `last`, and the ten largest `top_apps`, `top_series` and `top_artists` by watched time. `data.now` lists items that are playing or paused at the time of the call. It leaves out the bridge's own pages and clips and TVs that are off. `data.recording` is false when the `watch_history` app option is off. Then the bridge does not read the stored file, and `data.entries` is empty.
+
+The bridge builds the history from now-playing state that the TV pushes. `watched_s` counts only time between two readings that were both playing, measured on a monotonic clock, plus the time up to the moment the engine saw playback stop. It can be a little low. It never counts a pause or a scrub.
+
+An item continues its entry when it plays again within four hours, also after another item played in between. It starts a new entry after four hours, or when it had reached its last tenth and starts again in its first tenth (a rewatch). Playback without a title gets its own entry and takes the title when it arrives. It never extends a titled entry. Untitled playback continues only after a break of at most 15 minutes. Plays shorter than 10 seconds, the bridge's own pages and clips, and system apps are left out. Netflix reports no title, so its entries carry the app and the time only.
+
+The history is private household data. It is stored only on the Home Assistant host, in the app's data, with file mode 0600, up to `history_max_entries` (default 2,000) entries per TV. Home Assistant backups include it. Only this endpoint and the REST tool route serve it, and both require an HA administrator token. The Home Assistant LLM tools and Assist do not expose it. [What each app reports](research/watch-history.md)
 
 ### tv_look
 
@@ -220,7 +253,7 @@ A tool failure includes `error.code`, `error.message`, `error.retryable` and `er
 
 Scripts can POST JSON arguments to `/api/atv_bridge/tool/<name>` with the same HA admin header. The HTTP result places a requested image in `data.image`. For bundled pages, POST a raw ZIP to `/api/atv_bridge/bundle`. Success returns `{"bundle":"<32 lowercase hex characters>"}`. See [upload limits and commands](../skills/apple-tv/content.md).
 
-HA's built-in MCP server and Assist expose six text tools through the integration: `atv_bridge__show`, `atv_bridge__play`, `atv_bridge__open`, `atv_bridge__power`, `atv_bridge__pair` and `atv_bridge__status`. Use the bridge endpoint above for full screen reads, navigation, remote input, sequences and mirrored page control.
+HA's built-in MCP server and Assist expose six text tools through the integration: `atv_bridge__show`, `atv_bridge__play`, `atv_bridge__open`, `atv_bridge__power`, `atv_bridge__pair` and `atv_bridge__status`. Watch history is not among them. Use the bridge endpoint above for full screen reads, navigation, remote input, sequences and mirrored page control.
 
 
 The integration uses a separate internal API on loopback port 8765 with the app token from Supervisor discovery. It lists registered receivers with `GET /api/tvs`, discovers candidates with `GET /api/discover`, and registers a candidate with `POST /api/tvs` and `{"id":"<advertised identifier>"}`. Under `/api/tvs/<bridge ID>`, it uses GET for `status`, `health`, `apps` and `events` (WebSocket), and POST for `pair/start`, `pair/finish` and `tool/<name>`. Agent clients use the authenticated HA routes above.

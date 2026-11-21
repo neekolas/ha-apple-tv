@@ -96,7 +96,7 @@ async def test_public_invalid_arguments(service, name):
     assert set(r["error"]) == {"code", "message", "retryable", "fix"}
     assert r["summary"] and r["evidence"] == [] and r["data"] == {}
     assert not r["ok"] and not r["verified"]
-    assert ("screen" in r) == (name != "tv_status")
+    assert ("screen" in r) == (name not in ("tv_status", "tv_history"))
 
 
 async def test_open_remote_navigate_look_status(ui):

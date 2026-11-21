@@ -63,6 +63,7 @@ With several paired TVs, use `data.tvs[].status` for each receiver’s pairing a
 | Play media | `tv_play {"youtube":"jNQXAC9IVRw"}`, `tv_play {"media":"https://example.org/clip.mp4"}`, or `tv_play {"app":"HBO Max","title":"Succession"}` |
 | Open an app | `tv_open {"app":"Settings","path":["Remotes and Devices"]}` |
 | Read labels or inspect an image | `tv_look {}` or `tv_look {"image":true}` |
+| Read what was watched | `tv_history {"since":"7d"}` or `tv_history {"app":"YouTube","limit":20}` |
 | Move focus | `tv_navigate {"to":"Search","select":true}` |
 | Send remote input | `tv_remote {"keys":["down","select"]}` or `tv_remote {"text":"Succession","submit":true}` |
 | Batch remote work | `tv_sequence {"steps":[{"to":"General"},{"expect":{"focus":"General"}}]}` |
@@ -71,6 +72,16 @@ With several paired TVs, use `data.tvs[].status` for each receiver’s pairing a
 Control and presentation tools check power and wake the TV when needed. `screen.app.source` identifies accessibility observations and now-playing fallbacks. Playback metadata stays in `screen.playing` when another app has focus. Read `screen` and `verified` before choosing the next action. Text observations read the foreground app’s native accessibility tree without moving the inspector or scrolling the TV. Some apps expose few labels. During a menu transition, focus can briefly be null. Read again before sending another key. Request an image only on the intended TV. Capturing it can show a **Screenshot Taken** toast. The bridge sets `data.toast_visible` to `true` for a successful capture. `max_width` accepts 1–4096 pixels and defaults to 1280. DRM-protected video can appear black.
 
 Use `tv://apps` for installed names and IDs, `tv://screen` for the latest text observation and `tv://page-guide` for page authoring. The `present` prompt accepts a topic and provides an HTML scaffold.
+
+### Watch history
+
+The bridge keeps a log of what each TV plays. Agents read it with `tv_history` to learn what you watch and for how long. Each entry has the app, the title, the series or channel when the app reports one, the start and end times, and the seconds actually played. `data.summary` adds totals and the top apps, series and artists. Filter with `since`, `until`, `app`, `search` and `tv`.
+
+The TV pushes its now-playing state to the bridge, so recording adds no traffic and never wakes or changes a TV. The recorder samples when playback changes. Without a change it samples every **history_interval** seconds (default 300). After a change it waits **history_fast_interval** seconds (default 15) and doubles the wait until it reaches the interval. Repeated samples of one item extend one entry. An item that returns within four hours continues its entry. A rewatch from the start is a new entry. Paused time does not count as watched.
+
+The detail depends on the app. Hulu, Disney+, HBO Max, YouTube and Music report titles. Netflix reports no title, so its entries show only the app and the time. The bridge's own pages and clips are not recorded.
+
+The history is private household data. It is stored only on the Home Assistant host, in the app's data at `/data/tvs/<id>/history.jsonl`, with file mode 0600. Home Assistant backups include it. Only callers with an HA administrator token can read it, through `tv_history` on the bridge MCP endpoint or the REST tool route. The Home Assistant LLM tools and Assist do not expose it. The bridge stores descriptive fields only. It never stores media links, profile identifiers or subscription identifiers. Each TV keeps up to **history_max_entries** entries (default 2,000). Set **watch_history** to `false` and restart the app to stop recording. The bridge then does not read or write the file, and `tv_history` returns no entries. Removing a TV from the bridge deletes its history.
 
 ### Presenting pages
 

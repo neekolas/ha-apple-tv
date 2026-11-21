@@ -200,6 +200,7 @@ async def test_fleet_resources_and_scoped_api(tmp_path, aiohttp_client):
         assert {tool.name for tool in listed.tools} == {
             "tv_show", "tv_play", "tv_open", "tv_look", "tv_navigate",
             "tv_remote", "tv_sequence", "tv_power", "tv_pair", "tv_status", "tv_page_run",
+            "tv_history",
         }
         for tool in listed.tools:
             assert tool.description and tool.description.strip(), tool.name

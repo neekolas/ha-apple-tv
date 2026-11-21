@@ -13,6 +13,7 @@ from aiohttp import web
 from jsonschema import Draft202012Validator
 
 from .atv.discovery import describe
+from .history import report
 from .mcp_http import MCP
 from .page_network import PageNetworkPolicy
 from .server import TVRuntime
@@ -206,7 +207,8 @@ class Fleet:
             apple_tv_id=meta.get("identifier") or "",
             **{
                 k: self.options[k]
-                for k in ("presentation_mode", "mirror_size", "mirror_fps", "page_scripts", "default_profile", "app_profile")
+                for k in ("presentation_mode", "mirror_size", "mirror_fps", "page_scripts", "default_profile", "app_profile",
+                          "watch_history", "history_interval", "history_fast_interval", "history_max_entries")
                 if k in self.options
             },
         )
@@ -411,6 +413,18 @@ class Fleet:
             return result
         args = args.copy()
         selector = args.pop("tv", None)
+        if name == "tv_history":
+            # History reads stored entries. It needs no default TV, no tool lock and no connection.
+            try:
+                chosen = [self.select(selector)] if selector else list(self.runtimes.values())
+                sources = [
+                    ({"tv": self.info(rt)["name"], "tv_id": rt.metadata["id"]}, rt.history) for rt in chosen
+                ]
+                result = await report(sources, **args)
+            except Fault as fault:
+                return self.primary.tools.audit_failure(name, args, fault)
+            self.primary.state.audit(name, args, result)
+            return result
         try:
             rt = self.select(selector)
         except Fault as fault:
@@ -492,6 +506,7 @@ class Fleet:
         self.runners[rt] = runner
         if rt in self.runtimes.values():
             rt.engine.start()
+            rt.history.start()
 
     async def start(self):
         try:

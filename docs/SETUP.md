@@ -89,6 +89,10 @@ Set these in **Settings → Apps → Apple TV Agent Bridge → Configuration**. 
 | `mirror_fps` | `10` | Integer from 1 through 60. Higher frame rates need more CPU. |
 | `default_profile` | empty | Preferred label on the tvOS profile picker. The bridge needs screen pairing to read and select it. |
 | `app_profile` | empty | Preferred label on an in-app profile picker. If empty, the bridge tries the selected tvOS profile or `default_profile`. |
+| `watch_history` | `true` | Record what each TV plays for `tv_history`. Set to `false` and restart the app to stop recording. The bridge then neither reads nor writes the history file, and `tv_history` returns no entries. |
+| `history_interval` | `300` | Seconds between samples while nothing changes, 30 through 3600. The open entry is written to disk at most once per interval. |
+| `history_fast_interval` | `15` | Seconds to the next sample after a change, 5 through 300. The wait doubles until it reaches `history_interval`. |
+| `history_max_entries` | `2000` | Entries kept per TV, 100 through 20000. The oldest are dropped first. |
 | `log_level` | `info` | `debug`, `info`, `warning` or `error`. |
 
 ## Connect an agent

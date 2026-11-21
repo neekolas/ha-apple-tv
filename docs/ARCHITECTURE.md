@@ -27,7 +27,7 @@ The app uses host networking. The primary stage listens on all interfaces at por
 
 Supervisor writes `/data/options.json`. The service creates a shared `/data/identity.json` with a controller UUID, 32-byte Ed25519 seed and the name **Agent Bridge**. It creates `/data/internal_token` and advertises the internal host, port and token through Supervisor discovery.
 
-Under `/data/tvs/<id>/`, `receiver.json` identifies the receiver and `pairings.json` records protocol pairings and the last authenticated TV identity. Screen pairing uses `observer/remote.plist`. Mirroring uses `tvpipe/credentials.txt`. Generated clips use `media/`. Tool audit records contain argument names, outcome and time. Each `audit.jsonl` rotates at 10 MiB and keeps one previous file. Upgrades from the legacy single-TV layout copy its records to `/data/single-tv-backup/` before migration.
+Under `/data/tvs/<id>/`, `receiver.json` identifies the receiver and `pairings.json` records protocol pairings and the last authenticated TV identity. Screen pairing uses `observer/remote.plist`. Mirroring uses `tvpipe/credentials.txt`. Generated clips use `media/`. Tool audit records contain argument names, outcome and time. Each `audit.jsonl` rotates at 10 MiB and keeps one previous file. `history.jsonl` holds that TV's watch history, capped at `history_max_entries`. A recorder per receiver builds it from the now-playing state that the TV pushes. It samples on each change the engine publishes and on a timer that backs off from `history_fast_interval` to `history_interval`. File reads and writes run on a worker thread. Only the admin-token MCP and REST routes serve the history. [Watch history research](research/watch-history.md) Upgrades from the legacy single-TV layout copy its records to `/data/single-tv-backup/` before migration.
 
 Stored pages share `/data/content/` and a 500 MiB budget. The cache protects pages in use. ZIP upload limits are 50 MiB compressed, 50 MiB unpacked and 8,192 entries.
 
@@ -46,6 +46,7 @@ Each advertised tool accepts an optional `tv` selector. Use a name or ID from `t
 | `tv_status` | Check reachability, pairing, capabilities, browser use and problems. |
 | `tv_pair` | Start, poll, finish or cancel a control or screen exchange on a registered TV. |
 | `tv_look` | Read accessible labels and focus. Request an image for a DVT capture. |
+| `tv_history` | Read the stored watch history and its summary. Uses no TV lock and no connection. |
 | `tv_open` | Launch an installed app by name or ID. Optionally search or follow a labeled path. |
 | `tv_navigate` | Focus a label and optionally select it. |
 | `tv_remote` | Send keys, a swipe or text. Keys go out in one burst with one screen read at the end and after Home; `check_each` reads after every key. |
@@ -55,7 +56,7 @@ Each advertised tool accepts an optional `tv` selector. Use a name or ID from `t
 | `tv_show` | Show a URL, HTML, inline files or a stored bundle. With only the selector, dismiss that TV's page. |
 | `tv_page_run` | Await caller JavaScript in the presented document and return bounded JSON. The `page_scripts` app option controls this tool. |
 
-Tool calls wait up to ten seconds for the selected TV's tool lock. Results contain `ok`, `summary`, `verified`, `evidence` and `data`. All tools except `tv_status` include `screen`. Errors add `code`, `message`, `retryable` and `fix` under `error`. In a fleet summary, inspect the individual receiver results. The bridge has no purchase guard.
+Tool calls wait up to ten seconds for the selected TV's tool lock. Results contain `ok`, `summary`, `verified`, `evidence` and `data`. All tools except `tv_status` and `tv_history` include `screen`. Errors add `code`, `message`, `retryable` and `fix` under `error`. In a fleet summary, inspect the individual receiver results. The bridge has no purchase guard.
 
 MCP exposes `tv://tvs`, `tv://screen`, `tv://apps`, receiver-specific screen and app resources, and `tv://page-guide`. The `present` prompt requires `topic`. The unlisted `tv_hide` alias also dismisses a page. [Implemented schemas](../app/atv_bridge_app/tools/contract.py)
 
