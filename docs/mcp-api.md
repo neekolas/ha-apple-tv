@@ -136,7 +136,7 @@ Write pages for `tvos` with these layout rules:
 - Keep 60 px free at the top and bottom and 80 px at the sides.
 - Put focusable items in rows and grids, so each arrow has an obvious target.
 - Leave about 8% spare room around each focusable item. The focused item grows by 6%, and a parent with `overflow: hidden` would clip it.
-- Put each row in a horizontal scroll container (`overflow-x: auto`) or an element with `data-tv-group`. At the end of such a row, Left and Right stay in the row. They move to an item outside the row only when it lies straight ahead.
+- Put each row in a horizontal scroll container (`overflow-x: auto`). Mark a row that does not scroll with `data-tv-group`. At the end of a row, Left and Right stay in the row. They move to an item outside the row only when it lies straight ahead.
 - Use a dark background.
 - Do not rely on hover. Every control must be reachable with arrows and work with Enter.
 - Do not run animation without input. The mirror shows about 10 frames per second, so constant motion looks rough.

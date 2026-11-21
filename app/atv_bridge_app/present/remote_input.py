@@ -203,10 +203,12 @@ TVOS_HELPER = r"""() => {
     const w = r.width / s, h = r.height / s, x = r.left + (r.width - w) / 2, y = r.top + (r.height - h) / 2;
     return {left: x, top: y, right: x + w, bottom: y + h, width: w, height: h};
   };
-  // The row of an item: the nearest [data-tv-group] or sideways scroll container.
+  // The row of an item: the nearest [data-tv-group], or the nearest container that scrolls sideways.
+  // A container that scrolls only up and down also computes to overflow-x: auto, so the widths decide.
   const rowOf = el => {
     for (let node = el.parentElement; node && node !== document.body && node !== root; node = node.parentElement) {
-      if (node.hasAttribute('data-tv-group') || /auto|scroll/.test(getComputedStyle(node).overflowX)) return node;
+      if (node.hasAttribute('data-tv-group') || (node.scrollWidth > node.clientWidth
+          && /auto|scroll/.test(getComputedStyle(node).overflowX))) return node;
     }
     return null;
   };

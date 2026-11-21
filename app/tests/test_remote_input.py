@@ -1810,3 +1810,19 @@ async def test_tvos_left_and_right_stay_in_the_row_at_its_end(tvos):
     assert await tvos.press("left", start="t10") == "t10"
     # Up and down still leave the row, and the row below scrolls to show the tile.
     assert await tvos.press("down", start="t07") == "t13"
+
+
+# A page area that scrolls up and down, with one item outside it.
+SCROLLER_CONTENT = """<style>body{margin:0;background:#111} button{position:absolute;width:200px;height:100px}
+#main{position:relative;height:600px;overflow-y:auto}</style>
+<div id=main><button id=inside style='left:400px;top:200px'></button><div style='height:2000px'></div></div>
+<button id=outside style='left:900px;top:700px'></button>"""
+
+
+@pytest.mark.parametrize("browser_frame", [SCROLLER_CONTENT], indirect=True)
+async def test_tvos_only_a_sideways_scroller_keeps_left_and_right(tvos):
+    # Nothing lies straight right of the item. The nearest item that way is outside the scrolling area.
+    # A container that scrolls up and down is no row, so focus may leave it.
+    assert await tvos.frame.evaluate("getComputedStyle(main).overflowX") == "auto"
+    assert await tvos.press("right", start="inside") == "outside"
+    assert await tvos.press("left") == "inside"
