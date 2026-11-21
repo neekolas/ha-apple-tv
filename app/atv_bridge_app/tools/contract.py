@@ -86,7 +86,12 @@ SHOW = {
     }, "Map relative paths to text or base64:-prefixed binary content. Include index.html at the root."),
     "bundle": described(TEXT, "Page bundle ID returned by the ZIP upload endpoint."),
     "title": described(TEXT, "Title to report in screen.presenting."),
-    "audio": described({"enum": ["play", "mute"]}, "Play or mute page audio.", default="play"),
+    "audio": described(
+        {"enum": ["play", "mute"]},
+        "Play or mute page audio. Use mute for a page that plays no sound: "
+        "a mirror with audio uses about one more CPU core on a Home Assistant Green and shows fewer frames.",
+        default="play",
+    ),
     "keep_awake": described(BOOL, "Request a browser wake lock while presenting.", default=True),
     "remote": described(
         {"enum": ["off", "keys", "focus", "tvos"]},

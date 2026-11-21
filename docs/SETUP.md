@@ -87,6 +87,7 @@ Set these in **Settings → Apps → Apple TV Agent Bridge → Configuration**. 
 | `page_network_allow` | `[]` | Extra destinations accessible to every page. Use exact DNS names, IPs, CIDRs or host and port entries. Use brackets around IPv6 with a port. Restart the app after editing. |
 | `page_scripts` | `true` | Permit HA admin callers to run JavaScript in the presented document. Set to `false` and restart the app to disable `tv_page_run`. |
 | `mirror_fps` | `10` | Integer from 1 through 60. Higher frame rates need more CPU. |
+| `mirror_fps_muted` | `15` | Frame rate for a page shown with `audio: "mute"`, from 1 through 60. `0` uses `mirror_fps`. A muted mirror has CPU to spare for more frames. |
 | `default_profile` | empty | Preferred label on the tvOS profile picker. The bridge needs screen pairing to read and select it. |
 | `app_profile` | empty | Preferred label on an in-app profile picker. If empty, the bridge tries the selected tvOS profile or `default_profile`. |
 | `watch_history` | `true` | Record what each TV plays for `tv_history`. Set to `false` and restart the app to stop recording. The bridge then neither reads nor writes the history file, and `tv_history` returns no entries. |

@@ -58,6 +58,7 @@ class TVRuntime:
         presentation_mode="mirror",
         mirror_size="1920x1080",
         mirror_fps=10,
+        mirror_fps_muted=0,
         apple_tv_id="",
         default_profile="",
         app_profile="",
@@ -88,6 +89,7 @@ class TVRuntime:
             stage=self.stage,
             size=mirror_size,
             fps=mirror_fps,
+            fps_muted=mirror_fps_muted,
             resolve_endpoint=resolver.airplay_endpoint,
         )
         play_url = PlayUrlSender(self.engine, self.stage)

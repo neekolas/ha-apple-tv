@@ -104,7 +104,7 @@ A host without a port grants every TCP port on that host. Use brackets for an IP
 
 Expose an application function for the caller, for example `window.setStep = n => document.querySelector('h1').textContent = 'Step ' + n`. Invoke it with `tv_page_run {"script":"window.setStep(arg)","arg":2}`.
 
-Use the 1920×1080 canvas and body text of at least 28 px. Audio plays by default. Set `audio` to `mute` for silence. `keep_awake` defaults to true and requests a browser screen wake lock. Dismiss the page with `tv_show {}`. The `tv_hide` alias is accepted but omitted from `tools/list`. For a specific room use `tv_show {"tv":"<room>"}`.
+Use the 1920×1080 canvas and body text of at least 28 px. Audio plays by default. Set `audio` to `mute` for any page that plays no sound. On a Home Assistant Green, a mirror with audio uses about one more CPU core. A muted 1080p page renders about 40% more frames, and the encoder takes about 80 ms per frame instead of 120 ms. `keep_awake` defaults to true and requests a browser screen wake lock. Dismiss the page with `tv_show {}`. The `tv_hide` alias is accepted but omitted from `tools/list`. For a specific room use `tv_show {"tv":"<room>"}`.
 
 ### Remote input on a page
 
@@ -169,7 +169,7 @@ Set `presentation_mode` in the app options.
 | `play_url` | Records the stage as an H.264/AAC MP4 and plays it over AirPlay. Requires an image built with the repository’s pyatv fork. |
 | `auto` | Tries mirroring twice. After two failed starts it uses MP4 until you hide the page. |
 
-Mirroring defaults to a 1920×1080 canvas at 10 fps and 4000 kbps. Set `mirror_size` to `1280x720` or `1920x1080`, and `mirror_fps` to 1–60. The 720p setting uses 2500 kbps.
+Mirroring defaults to a 1920×1080 canvas at 10 fps and 4000 kbps. Set `mirror_size` to `1280x720` or `1920x1080`, and `mirror_fps` to 1–60. The 720p setting uses 2500 kbps. A page shown with `audio: "mute"` uses `mirror_fps_muted` (default 15; `0` uses `mirror_fps`). On a Home Assistant Green at 1080p, a muted page sends about 9 fps at 15 and about 7 fps at 10. With audio, 15 sends no more frames than 10.
 
 Live URLs always use mirroring. For recorded presentations, `tv_show` reports `data.transport` equal to `"video"` and may return `verified: false` while the clip is rendering. Static pages use a still frame for the duration of their audio, or 60 seconds without a finite audio track. Animated pages and page audio take time to record before playback begins. The clip loops while shown. If the TV closes the AirPlay session early, the bridge reopens it near the last playback position. Sending page data records a new clip.
 

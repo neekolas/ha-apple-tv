@@ -86,14 +86,17 @@ def executable(path, code):
 
 
 @pytest.mark.parametrize(
-    "options,size,fps,bitrate",
+    "options,audio,size,fps,bitrate",
     [
-        ({}, "1920x1080", "10", "4000"),
-        ({"size": "1280x720", "fps": 24}, "1280x720", "24", "2500"),
+        ({}, "play", "1920x1080", "10", "4000"),
+        ({"size": "1280x720", "fps": 24}, "play", "1280x720", "24", "2500"),
+        ({"fps_muted": 15}, "play", "1920x1080", "10", "4000"),
+        ({"fps_muted": 15}, "mute", "1920x1080", "15", "4000"),
+        ({"fps": 12, "fps_muted": 0}, "mute", "1920x1080", "12", "4000"),
     ],
 )
 async def test_sender_receiver_end_restarts_and_hide_reaps(
-    service, tmp_path, options, size, fps, bitrate
+    service, tmp_path, options, audio, size, fps, bitrate
 ):
     script = executable(
         tmp_path / "fake-tvpipe",
@@ -116,6 +119,7 @@ with (root / "stops").open("a") as f:
     service.state.save_pairings(airplay={"ltpk": "ab" * 32, "atv_id": b"AA:BB:CC:DD:EE:FF".hex()})
     resolve = AsyncMock(side_effect=[("192.0.2.1", 7012), ("192.0.2.2", 8123)])
     sender = TvpipeSender("", service.state, script, restart_delay=0.01, resolve_endpoint=resolve, **options)
+    sender.audio = audio
     try:
         await sender.start(STAGE_URL)
         count = tmp_path / "tvpipe" / "launches"
@@ -140,6 +144,7 @@ with (root / "stops").open("a") as f:
             bitrate,
             "--profile",
             sender.profile.name,
+            *(["--no-audio"] if audio == "mute" else []),
         ]
     finally:
         await sender.stop()

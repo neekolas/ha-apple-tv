@@ -26,6 +26,7 @@ options:
   page_scripts: true
   page_network_allow: []
   mirror_fps: 10
+  mirror_fps_muted: 15
   default_profile: ""
   app_profile: ""
   watch_history: true
@@ -47,6 +48,7 @@ schema:
   page_network_allow:
     - str
   mirror_fps: int(1,60)
+  mirror_fps_muted: int(0,60)
   default_profile: str?
   app_profile: str?
   watch_history: bool

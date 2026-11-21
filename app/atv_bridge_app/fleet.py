@@ -207,7 +207,8 @@ class Fleet:
             apple_tv_id=meta.get("identifier") or "",
             **{
                 k: self.options[k]
-                for k in ("presentation_mode", "mirror_size", "mirror_fps", "page_scripts", "default_profile", "app_profile",
+                for k in ("presentation_mode", "mirror_size", "mirror_fps", "mirror_fps_muted", "page_scripts",
+                          "default_profile", "app_profile",
                           "watch_history", "history_interval", "history_fast_interval", "history_max_entries")
                 if k in self.options
             },
