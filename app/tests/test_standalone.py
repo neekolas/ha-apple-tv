@@ -364,6 +364,13 @@ async def test_explicit_removal_still_deletes_the_pairings(tmp_path):
     assert not (tmp_path / "tvs" / key).exists()
     # The listed TV stays suppressed, as in Home Assistant, until it is enrolled again.
     assert start_fleet(tmp_path, "name=Living Room,host=192.0.2.15").runtimes == {}
+    # A kept TV can be deleted too. A TV with its name is then a new TV.
+    den = pair(start_fleet(tmp_path, "name=Den,host=192.0.2.16"))
+    fleet = start_fleet(tmp_path, "name=Office,host=192.0.2.17")
+    assert den in fleet.kept
+    await fleet.remove(den)
+    assert not (tmp_path / "tvs" / den).exists() and den not in fleet.registry["kept"]
+    assert fleet.register({"name": "Den", "host": "192.0.2.18"}).metadata["id"] != den
 
 
 def test_home_assistant_still_deletes_a_tv_that_leaves_the_options(tmp_path):

@@ -225,6 +225,10 @@ class Fleet:
                 if rt is self.public_receiver:
                     self.public_receiver = None
             self.erase_state(key)
+            if self.kept and key in self.kept:
+                self.kept.discard(key)
+                self.registry["kept"] = sorted(self.kept)
+                self.save_registry()
             if key not in self.registry["configured"].values():
                 self.registry["removed"].remove(key)
                 self.save_registry()
