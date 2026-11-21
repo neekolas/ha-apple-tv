@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import io
 import json
 import logging
@@ -7,7 +8,7 @@ import re
 import signal
 import zipfile
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import aiohttp
 import pytest
@@ -651,6 +652,35 @@ async def test_fleet_gives_every_stage_the_key(tmp_path):
         assert home.select().operations.live_mirror.stage_url == home.primary.stage.origin + "/stage"
     finally:
         await home.close()
+
+
+async def test_page_errors_never_show_the_stage_key(monkeypatch):
+    from playwright.async_api import Error
+
+    from atv_bridge_app import live
+    from atv_bridge_app.present import browsers
+    from atv_bridge_app.present.tvpipe import TvpipeSender
+
+    monkeypatch.setattr(browsers, "sweep", AsyncMock())
+    url = "http://127.0.0.1:8766/stage?key=" + "k" * 32
+    # A running mirror that shows a live URL returns to the stage.
+    sender = TvpipeSender("192.0.2.15", None)
+    sender.runner = asyncio.get_running_loop().create_future()
+    sender.started, sender.url, sender.running_audio = True, "https://example.com/", sender.audio
+    page = Mock()
+    # Playwright quotes the URL in the message and again in its call log.
+    page.goto = AsyncMock(side_effect=Error(
+        f"Page.goto: net::ERR_CONNECTION_REFUSED at {url}\nCall log:\n"
+        f'  - navigating to "{url}", waiting until "domcontentloaded"'))
+    sender.browser_page = AsyncMock(return_value=page)
+    try:
+        with pytest.raises(Fault) as failed:
+            await sender.start(url)
+    finally:
+        sender.runner.cancel()
+    text = json.dumps(failed.value.result())
+    assert "k" * 32 not in text and text.count("/stage?key=***") == 2
+    assert failed.value.code == "page_unreachable" and failed.value.remediation == live.REFUSED_FIX
 
 
 def test_child_processes_never_inherit_the_tokens(monkeypatch):

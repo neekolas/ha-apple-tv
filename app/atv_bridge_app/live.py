@@ -2,6 +2,7 @@
 
 import asyncio
 import errno
+import re
 import socket
 import ssl
 from contextvars import ContextVar
@@ -63,6 +64,13 @@ async def resolve_tailnet(stage, hostname):
 SUPERVISOR_URL = "http://supervisor"
 TAILNET_DNS_FIX = "Set HA DNS to Tailscale: ha dns options --servers dns://100.100.100.100"
 REFUSED_FIX = "Is the agent's server and tailscale serve running?"
+# Playwright quotes the URL that failed, and the stage URL carries the stage key.
+URL_KEY = re.compile(r"([?&]key=)[^&#\s\"'<>]+")
+
+
+def redact(text):
+    """Hide the stage key, and any other URL key, in text that can quote a URL."""
+    return URL_KEY.sub(r"\1***", text)
 
 
 def page_failure(host, exc):
@@ -92,7 +100,7 @@ def page_failure(host, exc):
         fix = "Check the route to the server and whether it responds within 8 seconds."
     else:
         fix = "Check the server and the network route from Home Assistant."
-    return Fault("page_unreachable", f"Could not load {host}: {detail}", fix, True)
+    return Fault("page_unreachable", f"Could not load {host}: {redact(detail)}", fix, True)
 
 
 class ProbeConnector(TCPConnector):
