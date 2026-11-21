@@ -102,9 +102,10 @@ def migrate(controller, legacy_host, legacy_id):
 
 
 class Fleet:
-    def __init__(self, root, options, factory=TVRuntime, *, stage_port=8766):
+    def __init__(self, root, options, factory=TVRuntime, *, stage_port=8766, stage_host="0.0.0.0"):
         self.controller = State(root)
         self.stage_port = stage_port
+        self.stage_host = stage_host
         self.stage_ports = set()
         self.page_network = PageNetworkPolicy(options.get("page_network_allow", []), self.stage_ports)
         self.options = options
@@ -491,7 +492,7 @@ class Fleet:
             runner = web.AppRunner(app, access_log=None, shutdown_timeout=2)
             await runner.setup()
             try:
-                await web.TCPSite(runner, "0.0.0.0" if primary else "127.0.0.1", port).start()
+                await web.TCPSite(runner, self.stage_host if primary else "127.0.0.1", port).start()
             except BaseException:
                 await runner.cleanup()
                 raise
@@ -538,5 +539,5 @@ class Fleet:
             if isinstance(result, BaseException):
                 raise result
 
-    def app(self):
-        return self.primary.app(self)
+    def app(self, authorize=None):
+        return self.primary.app(self, authorize)

@@ -179,8 +179,20 @@ class TVRuntime:
         await self.stage.hide()
         await self.observer.close()
 
-    def app(self, fleet=None):
+    def app(self, fleet=None, authorize=None):
+        """Build the API. `authorize(request)` returns None to accept a request or a Fault to
+        reject it. The default accepts only the internal token. Standalone mode supplies its own."""
         mcp = fleet.mcp if fleet else self.mcp
+
+        def internal_token(request):
+            supplied = request.headers.get("Authorization", "").encode()
+            if not hmac.compare_digest(supplied, f"Bearer {self.state.token}".encode()):
+                return Fault(
+                    "unauthorized", "Bearer token required.", "Use the token from Supervisor discovery."
+                )
+            return None
+
+        authorize = authorize or internal_token
 
         def receiver(request):
             if fleet is None or (not fleet.runtimes and "tv" not in request.match_info):
@@ -203,11 +215,7 @@ class TVRuntime:
 
         @web.middleware
         async def auth(request, handler):
-            supplied = request.headers.get("Authorization", "").encode()
-            if not hmac.compare_digest(supplied, f"Bearer {self.state.token}".encode()):
-                fault = Fault(
-                    "unauthorized", "Bearer token required.", "Use the token from Supervisor discovery."
-                )
+            if fault := authorize(request):
                 return web.json_response(fault.result(), status=401)
             try:
                 return await handler(request)

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import signal
+import sys
 from pathlib import Path
 
 from aiohttp import web
@@ -10,6 +11,7 @@ from aiohttp import web
 from .processes import isolate_supervisor_token, supervisor_token
 from .fleet import Fleet
 from .ingress import panel
+from .standalone import configure
 
 LAG_LIMIT = 1.0
 
@@ -25,11 +27,13 @@ async def watch_event_loop():
             log.warning("Event loop stalled for %d ms", lag * 1000)
 
 
-async def main():
+async def main(argv=None):
     os.umask(0o077)
     isolate_supervisor_token()
     root = Path(os.environ.get("ATV_BRIDGE_DATA", "/data")).resolve()
-    options = json.loads((root / "options.json").read_text())
+    # Standalone settings, or None when Home Assistant's Supervisor supplies options.json.
+    plan = configure(sys.argv[1:] if argv is None else argv, os.environ, root, supervisor_token())
+    options = plan.options if plan else json.loads((root / "options.json").read_text())
     logging.basicConfig(level=options.get("log_level", "info").upper())
     # pyatv's wire-level debug logs include keys, PINs and keyboard contents.
     logging.getLogger("pyatv").setLevel(logging.WARNING)
@@ -38,23 +42,29 @@ async def main():
     # Stateless MCP logs one "Terminating session: None" line per request. The bridge logs requests itself.
     logging.getLogger("mcp.server.streamable_http").setLevel(logging.WARNING)
     watchdog = asyncio.create_task(watch_event_loop())
-    service = Fleet(root, options)
+    service = Fleet(root, options, **(plan.fleet if plan else {}))
     stopped = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, stopped.set)
     runners = []
     try:
-        for app, address, port in [
+        listeners = plan.listeners(service) if plan else [
             (service.app(), "127.0.0.1", 8765),
             (panel(service), "172.30.32.1" if supervisor_token() else "127.0.0.1", 8099),
-        ]:
+        ]
+        for app, address, port in listeners:
             runner = web.AppRunner(app, access_log=None, shutdown_timeout=2)
             await runner.setup()
             runners.append(runner)
             await web.TCPSite(runner, address, port).start()
-        logging.getLogger(__name__).info(
-            "Apple TV Agent Bridge listening on loopback 8765 and stage 8766"
-        )
+        if plan:
+            logging.getLogger(__name__).log(
+                logging.INFO if plan.token else logging.WARNING, "%s", plan.describe()
+            )
+        else:
+            logging.getLogger(__name__).info(
+                "Apple TV Agent Bridge listening on loopback 8765 and stage 8766"
+            )
         await stopped.wait()
     finally:
         watchdog.cancel()
