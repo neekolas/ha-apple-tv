@@ -136,7 +136,7 @@ class TvpipeSender(Sender):
         super().__init__("mirror")
         self.size = size
         self.fps = fps
-        # A muted mirror has CPU to spare for a higher rate. 0 uses fps.
+        # A muted mirror has CPU to spare for a higher rate. It never runs slower than fps.
         self.fps_muted = fps_muted
         self.stage = stage
         self.proxy = None
@@ -386,7 +386,7 @@ class TvpipeSender(Sender):
                         "--size",
                         self.size,
                         "--fps",
-                        str(self.fps_muted if self.audio == "mute" and self.fps_muted else self.fps),
+                        str(max(self.fps, self.fps_muted) if self.audio == "mute" else self.fps),
                         "--bitrate",
                         "2500" if self.size == "1280x720" else "4000",
                         *(["--profile", self.profile.name] if self.profile else []),

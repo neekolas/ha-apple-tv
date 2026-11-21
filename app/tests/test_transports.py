@@ -93,6 +93,7 @@ def executable(path, code):
         ({"fps_muted": 15}, "play", "1920x1080", "10", "4000"),
         ({"fps_muted": 15}, "mute", "1920x1080", "15", "4000"),
         ({"fps": 12, "fps_muted": 0}, "mute", "1920x1080", "12", "4000"),
+        ({"fps": 20, "fps_muted": 15}, "mute", "1920x1080", "20", "4000"),
     ],
 )
 async def test_sender_receiver_end_restarts_and_hide_reaps(

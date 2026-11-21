@@ -169,7 +169,7 @@ Set `presentation_mode` in the app options.
 | `play_url` | Records the stage as an H.264/AAC MP4 and plays it over AirPlay. Requires an image built with the repository’s pyatv fork. |
 | `auto` | Tries mirroring twice. After two failed starts it uses MP4 until you hide the page. |
 
-Mirroring defaults to a 1920×1080 canvas at 10 fps and 4000 kbps. Set `mirror_size` to `1280x720` or `1920x1080`, and `mirror_fps` to 1–60. The 720p setting uses 2500 kbps. A page shown with `audio: "mute"` uses `mirror_fps_muted` (default 15; `0` uses `mirror_fps`). On a Home Assistant Green at 1080p, a muted page sends about 9 fps at 15 and about 7 fps at 10. With audio, 15 sends no more frames than 10.
+Mirroring defaults to a 1920×1080 canvas at 10 fps and 4000 kbps. Set `mirror_size` to `1280x720` or `1920x1080`, and `mirror_fps` to 1–60. The 720p setting uses 2500 kbps. A page shown with `audio: "mute"` uses the larger of `mirror_fps_muted` (default 15; `0` turns it off) and `mirror_fps`. On a Home Assistant Green at 1080p, a muted page sends about 9 fps at 15 and about 7 fps at 10. With audio, 15 sends no more frames than 10.
 
 Live URLs always use mirroring. For recorded presentations, `tv_show` reports `data.transport` equal to `"video"` and may return `verified: false` while the clip is rendering. Static pages use a still frame for the duration of their audio, or 60 seconds without a finite audio track. Animated pages and page audio take time to record before playback begins. The clip loops while shown. If the TV closes the AirPlay session early, the bridge reopens it near the last playback position. Sending page data records a new clip.
 
