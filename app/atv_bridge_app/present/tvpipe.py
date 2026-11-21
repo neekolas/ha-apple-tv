@@ -26,11 +26,17 @@ _LEVELS = {"error": logging.ERROR, "warn": logging.WARNING, "info": logging.INFO
 # tvpipe's debug and trace lines worth keeping: the capture page's encoder
 # report (a trace), the encoded rate at tvpipe, AirPlay send timing, the
 # receiver's own reports of lost and late packets, and the viewport fit.
-# The others are dropped.
-_KEEP = ("share: page stats", "fps from the page", "airplay: timing:", "airplay: receiver report",
-         "browser: viewport")
+# The others are dropped. Each pattern must match at the start of the line,
+# so page console text that quotes one is dropped too.
+_KEEP = re.compile(
+    r"share: (?:page stats |[0-9.]+ fps from the page)|airplay: (?:timing: |receiver report )|browser: viewport: "
+)
 _STATS_WINDOW_MS = 5000
-_URL = re.compile(r"\b(?:https?|wss?)://([^/\s?#]+)\S*")
+_RECEIVER_COUNTS = ("pushed", "dropped", "dropped_full", "dropped_waiting")
+# Group 1 is the hostname. The optional group skips userinfo up to its last "@".
+_URL = re.compile(r"\b(?:https?|wss?)://(?:[^/\s?#]*@)?(\[[^\]/\s?#]*\]|[^/\s?#:]*)\S*")
+# Bytes of a skipped oversized machine line that the warning shows.
+_HEAD_BYTES = 200
 
 # crates/tvpipe/src/browser/capture.js at the release pinned by install-tvpipe.sh.
 CAPTURE_JS_LENGTH = 38420
@@ -62,12 +68,49 @@ def log_event(event):
     """Write one tvpipe `log` event to the app log at its own level."""
     level, message = event.get("level"), str(event.get("message", ""))
     if level in ("debug", "trace"):
-        if not any(key in message for key in _KEEP):
+        if not _KEEP.match(message):
             return
         level = "debug"
-    # A shown page's URL can carry credentials in its path or query. Keep only the host.
+    # A shown page's URL can carry credentials in its userinfo, path or query. Keep only the hostname.
     message = _URL.sub(r"\1", message)
     _LOG.log(_LEVELS.get(level, logging.INFO), "tvpipe: %s", message)
+
+
+class MachineLines:
+    """Read tvpipe's newline-framed machine events from its stdout.
+
+    A line longer than the stream limit is skipped, and a warning shows its first bytes.
+    A read that a timeout cancels keeps the skip state, so the next read resumes it.
+    """
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.head = None  # The first bytes of the oversized line being skipped.
+        self.size = 0
+
+    async def readline(self):
+        """Return the next whole line, or the partial last line at EOF."""
+        while True:
+            try:
+                line, end = await self.stream.readuntil(b"\n"), False
+            except asyncio.IncompleteReadError as exc:
+                line, end = exc.partial, True
+            except asyncio.LimitOverrunError as exc:
+                # These bytes are buffered already, so this read does not wait.
+                chunk = await self.stream.readexactly(exc.consumed)
+                if self.head is None:
+                    self.head, self.size = chunk[:_HEAD_BYTES], 0
+                self.size += len(chunk)
+                continue
+            if self.head is None:
+                return line
+            # This line ends the oversized one.
+            self.size += len(line)
+            head = _URL.sub(r"\1", self.head.decode(errors="replace"))
+            _LOG.warning("tvpipe: skipped a %d-byte machine line that starts with %s", self.size, head)
+            self.head = None
+            if end:
+                return b""
 
 
 class SentRate:
@@ -82,8 +125,7 @@ class SentRate:
         now = (
             event.get("elapsed_ms", 0),
             event.get("video_frames", 0),
-            sum(row.get("pushed", 0) for row in rows),
-            sum(row.get("dropped", 0) for row in rows),
+            *(sum(row.get(key, 0) for row in rows) for key in _RECEIVER_COUNTS),
         )
         if self.mark is None or now[0] < self.mark[0]:
             self.mark = self.last = now
@@ -96,12 +138,13 @@ class SentRate:
         span = (now[0] - self.mark[0]) / 1000
         if span * 1000 >= _STATS_WINDOW_MS:
             _LOG.debug(
-                "tvpipe sent %.1f video fps over %.1f s, per report %s; receiver packets %.1f/s, dropped %d",
+                "tvpipe sent %.1f video fps over %.1f s, per report %s; receiver packets %.1f/s, "
+                "dropped %d, dropped_full %d, dropped_waiting %d",
                 (now[1] - self.mark[1]) / span,
                 span,
                 " ".join(self.steps),
                 (now[2] - self.mark[2]) / span,
-                now[3] - self.mark[3],
+                *(count - start for count, start in zip(now[3:], self.mark[3:])),
             )
             self.mark = now
             self.steps = []
@@ -404,10 +447,11 @@ class TvpipeSender(Sender):
                     )
                 proc.stdin.write(b"SLRW")
                 await proc.stdin.drain()
+                lines = MachineLines(proc.stdout)
                 rate = SentRate()
                 while True:
                     try:
-                        line = await asyncio.wait_for(proc.stdout.readline(), 0.5)
+                        line = await asyncio.wait_for(lines.readline(), 0.5)
                     except TimeoutError:
                         if proc.returncode is not None:
                             break
@@ -428,7 +472,7 @@ class TvpipeSender(Sender):
                     if kind == "log":
                         log_event(event)
                     if kind in ("capture", "started"):
-                        _LOG.info("tvpipe %s: %s", kind, json.dumps(event))
+                        _LOG.debug("tvpipe %s: %s", kind, json.dumps(event))
                     if kind == "stats":
                         self.frames = sum(
                             row.get("pushed", 0) for row in event.get("receivers", [])

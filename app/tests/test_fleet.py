@@ -53,6 +53,14 @@ async def test_caller_scripts_can_be_disabled_across_receivers(tmp_path):
         assert reply["error"]["code"] == "scripts_disabled"
 
 
+def test_mirror_options_reach_every_sender(tmp_path):
+    # The code defaults differ from config.yaml, so a key that the fleet drops changes the mirror.
+    fleet = rooms(tmp_path, mirror_size="1280x720", mirror_fps=12, mirror_fps_muted=20)
+    for runtime in fleet.runtimes.values():
+        mirror = runtime.operations.live_mirror
+        assert (mirror.size, mirror.fps, mirror.fps_muted) == ("1280x720", 12, 20)
+
+
 def test_migration_preserves_records_and_never_overwrites_new_pairings(tmp_path):
     old = State(tmp_path)
     old.save_pairings(

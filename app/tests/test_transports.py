@@ -12,7 +12,7 @@ from mcp import ClientSession, types
 from mcp.client.streamable_http import streamable_http_client
 
 from atv_bridge_app.present.sender import STAGE_URL
-from atv_bridge_app.present.tvpipe import SentRate, TvpipeSender, log_event
+from atv_bridge_app.present.tvpipe import MachineLines, SentRate, TvpipeSender, log_event
 from atv_bridge_app.state import Fault
 from atv_bridge_app.tools.contract import SCHEMAS, INSTRUCTIONS
 
@@ -96,9 +96,12 @@ def executable(path, code):
         ({"fps": 20, "fps_muted": 15}, "mute", "1920x1080", "20", "4000"),
     ],
 )
+@pytest.mark.parametrize("level", ["INFO", "DEBUG"])
 async def test_sender_receiver_end_restarts_and_hide_reaps(
-    service, tmp_path, options, audio, size, fps, bitrate
+    service, tmp_path, caplog, options, audio, size, fps, bitrate, level
 ):
+    # tvpipe runs with --debug only when the app logs at debug level.
+    caplog.set_level(level, "atv_bridge_app.present.tvpipe")
     script = executable(
         tmp_path / "fake-tvpipe",
         """import json, os, sys, time
@@ -132,6 +135,7 @@ with (root / "stops").open("a") as f:
         assert "192.0.2.2:8123" in (count.parent / "credentials.txt").read_text()
         assert resolve.await_args.args == ("192.0.2.1",)
         assert json.loads(count.read_text().splitlines()[0]) == [
+            *(["--debug"] if level == "DEBUG" else []),
             "--machine",
             "share",
             "http://127.0.0.1:8766/stage",
@@ -159,10 +163,14 @@ def test_sent_rate_logs_pushed_frames(caplog):
         rate.add({
             "elapsed_ms": second * 1000,
             "video_frames": second * 9 - (second == 3),
-            "receivers": [{"pushed": second * 130, "dropped": second}],
+            "receivers": [
+                {"pushed": second * 130, "dropped": second, "dropped_full": 2 * second},
+                {"dropped_waiting": 3 * second},
+            ],
         })
     assert [r.getMessage() for r in caplog.records] == [
-        "tvpipe sent 9.0 video fps over 5.0 s, per report 9 9 8 10 9; receiver packets 130.0/s, dropped 5"
+        "tvpipe sent 9.0 video fps over 5.0 s, per report 9 9 8 10 9; receiver packets 130.0/s, "
+        "dropped 5, dropped_full 10, dropped_waiting 15"
     ]
 
 
@@ -171,18 +179,166 @@ def test_tvpipe_log_keeps_useful_lines(caplog):
     for level, message in (
         ("trace", "cdp> Runtime.evaluate"),
         ("trace", 'share: page stats {"fps":9.5}'),
+        ("debug", "share: 9.4 fps from the page, capture to tvpipe avg 70.1 ms, max 233.0 ms"),
         ("debug", "airplay: SETUP"),
         ("debug", "airplay: receiver report (rrmt): rrmt latePackets=0"),
+        ("debug", "page console.error: airplay: timing: video 9 frames late"),
+        ("debug", "page warning (network): share: page stats faked"),
         ("warn", "share: the capture is slow"),
         ("warn", "browser: https://example.com/a?token=secret answered 500 Error"),
     ):
         log_event({"type": "log", "level": level, "message": message})
     assert [(r.levelname, r.getMessage()) for r in caplog.records] == [
         ("DEBUG", 'tvpipe: share: page stats {"fps":9.5}'),
+        ("DEBUG", "tvpipe: share: 9.4 fps from the page, capture to tvpipe avg 70.1 ms, max 233.0 ms"),
         ("DEBUG", "tvpipe: airplay: receiver report (rrmt): rrmt latePackets=0"),
         ("WARNING", "tvpipe: share: the capture is slow"),
         ("WARNING", "tvpipe: browser: example.com answered 500 Error"),
     ]
+
+
+@pytest.mark.parametrize("url,host", [
+    ("https://user:s3cret@example.com:8443/a?token=t", "example.com"),
+    ("http://user@example.com/", "example.com"),
+    ("wss://a:p@ss@example.com/ws", "example.com"),
+    ("http://[fd00::5]:8080/x?token=t", "[fd00::5]"),
+    ("https://example.com?next=user@other.example", "example.com"),
+])
+def test_tvpipe_log_keeps_only_the_hostname(caplog, url, host):
+    caplog.set_level(logging.DEBUG, "atv_bridge_app.present.tvpipe")
+    log_event({"type": "log", "level": "warn", "message": f"browser: {url} answered 500"})
+    assert caplog.records[0].getMessage() == f"tvpipe: browser: {host} answered 500"
+
+
+async def wait_until(check, timeout=3):
+    async with asyncio.timeout(timeout):
+        while not check():
+            await asyncio.sleep(0.02)
+
+
+def tvpipe_records(caplog):
+    return [(r.levelname, r.getMessage()) for r in caplog.records if r.name == "atv_bridge_app.present.tvpipe"]
+
+
+async def test_sender_logs_capture_and_started_at_debug(service, tmp_path, caplog):
+    caplog.set_level(logging.DEBUG, "atv_bridge_app.present.tvpipe")
+    script = executable(
+        tmp_path / "events",
+        """import json, sys
+for event in (
+    {"type": "capture", "width": 1920, "height": 1080, "audio": False},
+    {"type": "started", "route": "airplay", "latency_ms": 300},
+    {"type": "stats", "elapsed_ms": 1000, "video_frames": 9, "receivers": [{"pushed": 12}]},
+):
+    print(json.dumps(event), flush=True)
+sys.stdin.buffer.read()
+""",
+    )
+    sender = TvpipeSender("192.0.2.1", service.state, script)
+    try:
+        await sender.start(STAGE_URL)
+        assert sender.started and sender.status()["state"] == "showing"
+        await wait_until(lambda: sender.frames == 12)
+        assert tvpipe_records(caplog) == [
+            ("DEBUG", 'tvpipe capture: {"type": "capture", "width": 1920, "height": 1080, "audio": false}'),
+            ("DEBUG", 'tvpipe started: {"type": "started", "route": "airplay", "latency_ms": 300}'),
+        ]
+    finally:
+        await sender.stop()
+
+
+async def test_sender_skips_oversized_machine_lines(service, tmp_path, caplog):
+    script = executable(
+        tmp_path / "chatty",
+        """import json, os, sys, time
+from pathlib import Path
+with (Path(os.environ['TVPIPE_CONFIG_DIR']) / 'launches').open('a') as f:
+    f.write("start\\n")
+out = sys.stdout.buffer
+big = json.dumps({"type": "log", "level": "warn", "module": "browser::headless",
+                  "message": "page console.error: https://user:s3cret@example.com/x " + "x" * 2**20}).encode()
+out.write(b'{"type":"capture","width":1920,"height":1080,"audio":true}\\n')
+# The first long line spans the sender's 0.5 s poll.
+out.write(big[:600000])
+out.flush()
+time.sleep(0.7)
+out.write(big[600000:] + b'\\n{"type":"started"}\\n')
+out.flush()
+# The second long line arrives together with the next event.
+out.write(big + b'\\n{"type":"stats","receivers":[{"pushed":4242}]}\\n')
+out.flush()
+sys.stdin.buffer.read()
+""",
+    )
+    sender = TvpipeSender("192.0.2.1", service.state, script)
+    try:
+        await sender.start(STAGE_URL)
+        await wait_until(lambda: sender.frames == 4242)
+        assert sender.problem is None and not sender.runner.done()
+        assert (tmp_path / "tvpipe" / "launches").read_text() == "start\n"
+        skipped = [message for level, message in tvpipe_records(caplog) if level == "WARNING"]
+        assert len(skipped) == 2
+        for message in skipped:
+            assert message.startswith("tvpipe: skipped a 1048") and len(message) < 300
+            assert "page console.error: example.com xxx" in message and "s3cret" not in message
+    finally:
+        await sender.stop()
+
+
+async def test_machine_lines_skip_oversized_lines_in_any_chunking(caplog):
+    line, big = b'{"type":"stats"}\n', b"x" * 3000
+    reader = asyncio.StreamReader(limit=1024)
+    lines = MachineLines(reader)
+    # The newline is already buffered past the limit.
+    reader.feed_data(big + b"\n" + line)
+    assert await lines.readline() == line
+    # The newline arrives after a read timed out.
+    reader.feed_data(big[:1500])
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(lines.readline(), 0.05)
+    reader.feed_data(big[1500:] + b"\n" + line)
+    assert await lines.readline() == line
+    # An oversized last line ends at EOF.
+    reader.feed_data(big)
+    reader.feed_eof()
+    assert await lines.readline() == b""
+    head = "x" * 200
+    assert tvpipe_records(caplog) == [
+        ("WARNING", f"tvpipe: skipped a 3001-byte machine line that starts with {head}"),
+        ("WARNING", f"tvpipe: skipped a 3001-byte machine line that starts with {head}"),
+        ("WARNING", f"tvpipe: skipped a 3000-byte machine line that starts with {head}"),
+    ]
+
+
+async def test_sender_relaunches_when_audio_changes(service, tmp_path):
+    script = executable(
+        tmp_path / "audio",
+        """import json, os, sys
+from pathlib import Path
+root = Path(os.environ['TVPIPE_CONFIG_DIR'])
+with (root / 'launches').open('a') as f:
+    f.write(json.dumps(sys.argv[1:]) + '\\n')
+print('{"type":"started"}', flush=True)
+sys.stdin.buffer.read()
+with (root / "stops").open("a") as f:
+    f.write("stop\\n")
+""",
+    )
+    sender = TvpipeSender("192.0.2.1", service.state, script, fps_muted=15)
+    launches, stops = tmp_path / "tvpipe" / "launches", tmp_path / "tvpipe" / "stops"
+    try:
+        for audio in ("play", "mute", "mute"):
+            sender.audio = audio
+            await sender.start(STAGE_URL)
+        runs = [json.loads(run) for run in launches.read_text().splitlines()]
+        assert [(run[run.index("--fps") + 1], "--no-audio" in run) for run in runs] == [
+            ("10", False),
+            ("15", True),
+        ]
+        assert stops.read_text() == "stop\n"
+    finally:
+        await sender.stop()
+    assert stops.read_text() == "stop\nstop\n"
 
 
 async def test_sender_pin_stops_restart(service, tmp_path):
