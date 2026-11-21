@@ -21,6 +21,10 @@ TRANSITION = tuple(map(ipaddress.ip_network, (
     "64:ff9b::/96", "64:ff9b:1::/48", "2001::/32", "2002::/16", "192.88.99.0/24",
 )))
 HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
+BLOCKED_FIX = (
+    "Use a public or tailnet URL, or configure page_network_allow for a trusted LAN service. "
+    "The bridge host is protected."
+)
 
 
 class BlockedAddress(Fault):
@@ -31,8 +35,7 @@ class BlockedAddress(Fault):
         super().__init__(
             "blocked_address",
             f"Page network access blocked ({target}).",
-            "Use a public or tailnet URL, or configure page_network_allow for a trusted LAN service. "
-            "The bridge host is protected.",
+            BLOCKED_FIX,
         )
 
 
@@ -136,13 +139,20 @@ def _classification(address):
 
 
 class PageNetworkPolicy:
-    def __init__(self, allow=(), stage_ports=()):
+    def __init__(self, allow=(), stage_ports=(), *, tailnet=True, host_addresses=()):
+        """`tailnet=False` makes tailnet addresses need an allow entry. `host_addresses` are IPs or
+        CIDRs of the bridge's computer that no allow entry can open. Standalone mode sets both."""
         if not isinstance(allow, (tuple, list)):
             raise ValueError("page_network_allow must be a list")
         try:
             self.allow = tuple(_Allow.parse(entry) for entry in allow)
         except ValueError as exc:
             raise ValueError(f"Invalid page_network_allow entry: {exc}") from exc
+        self.tailnet = tailnet
+        try:
+            self.host_networks = tuple(ipaddress.ip_network(entry) for entry in host_addresses)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid host address: {exc}") from exc
         # Fleet updates this set as receiver-specific stage listeners start and stop.
         self.stage_ports = stage_ports
 
@@ -177,9 +187,9 @@ class PageNetworkPolicy:
             kind = _classification(address)
             if kind in {"loopback", "unspecified", "multicast", "transition", "HA Supervisor"}:
                 raise BlockedAddress(kind, address)
-            if address in local_addresses:
+            if address in local_addresses or any(address in network for network in self.host_networks):
                 raise BlockedAddress("bridge host", address)
-            if kind == "tailnet":
+            if kind == "tailnet" and self.tailnet:
                 continue
             if kind == "public":
                 if not any(address in network for network in local_networks):

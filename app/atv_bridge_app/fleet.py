@@ -106,15 +106,20 @@ def migrate(controller, legacy_host, legacy_id):
 
 class Fleet:
     def __init__(self, root, options, factory=TVRuntime, *, stage_port=8766, stage_host="0.0.0.0",
-                 stage_key=None, keep_unlisted=False):
+                 stage_key=None, keep_unlisted=False, page_tailnet=True, page_host_addresses=()):
         """`keep_unlisted` keeps the records of TVs that leave the configured list, instead of
-        deleting them, until a listed TV matches one again. Standalone mode sets it."""
+        deleting them, until a listed TV matches one again. `page_tailnet=False` makes pages need an
+        allow entry for tailnet addresses, and pages never reach `page_host_addresses`. Standalone
+        mode sets all three."""
         self.controller = State(root)
         self.stage_port = stage_port
         self.stage_host = stage_host
         self.stage_key = stage_key
         self.stage_ports = set()
-        self.page_network = PageNetworkPolicy(options.get("page_network_allow", []), self.stage_ports)
+        self.page_network = PageNetworkPolicy(
+            options.get("page_network_allow", []), self.stage_ports,
+            tailnet=page_tailnet, host_addresses=page_host_addresses,
+        )
         self.options = options
         self.factory = factory
         self.runtimes = {}

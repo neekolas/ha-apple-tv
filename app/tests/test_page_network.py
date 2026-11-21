@@ -141,6 +141,39 @@ async def test_extra_destinations_and_ports(monkeypatch):
             await policy.resolve(host, port)
 
 
+@pytest.mark.parametrize("host", ["100.64.0.1", "fd7a:115c:a1e0::1", "::ffff:100.64.0.1"])
+async def test_tailnet_can_need_a_grant(host):
+    with pytest.raises(BlockedAddress, match="tailnet"):
+        await PageNetworkPolicy(tailnet=False).resolve(host, 443)
+    granted = PageNetworkPolicy(allow=["100.64.0.0/10", "[fd7a:115c:a1e0::1]:443"], tailnet=False)
+    assert await granted.resolve(host, 443) == [str(page_network._address(host))]
+
+
+async def test_host_addresses_stay_blocked_under_every_grant(monkeypatch):
+    dns_answers(monkeypatch, iter([["192.168.1.20"]]))
+    hosts = ["192.168.1.20", "100.101.102.103/32", "2001:db8:1::/64"]
+    for tailnet in (True, False):
+        policy = PageNetworkPolicy(
+            allow=["192.168.1.0/24", "192.168.1.20:7000", "100.64.0.0/10", "2001:db8::/32"],
+            tailnet=tailnet, host_addresses=hosts,
+        )
+        for host, port in [("192.168.1.20", 7000), ("100.101.102.103", 443), ("2001:db8:1::5", 443),
+                           ("::ffff:192.168.1.20", 80)]:
+            with pytest.raises(BlockedAddress, match="bridge host"):
+                await policy.resolve(host, port)
+        assert await policy.resolve("192.168.1.21", 80) == ["192.168.1.21"]
+        assert await policy.resolve("100.101.102.104", 443) == ["100.101.102.104"]
+    # A name that resolves to a host address is blocked too.
+    with pytest.raises(BlockedAddress, match="bridge host"):
+        await policy.resolve("mac.example", 7000)
+
+
+@pytest.mark.parametrize("hosts", [["192.168.1.20/24"], ["mac.local"], [None]])
+def test_invalid_host_address(hosts):
+    with pytest.raises(ValueError, match="host address"):
+        PageNetworkPolicy(host_addresses=hosts)
+
+
 async def test_broad_lan_grant_keeps_supervisor_protected():
     policy = PageNetworkPolicy(allow=["172.16.0.0/12"])
     with pytest.raises(BlockedAddress, match="HA Supervisor"):

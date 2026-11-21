@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .live import TAILNET_DNS_FIX
-from .page_network import PageNetworkPolicy
+from .page_network import BLOCKED_FIX, PageNetworkPolicy
 from .state import Fault
 
 PREFIX = "TV_USE_"
@@ -84,6 +84,13 @@ def address(text):
         raise argparse.ArgumentTypeError(f"expected an IP address, not {text!r}") from None
 
 
+def network(text):
+    try:
+        return str(ipaddress.ip_network(text.strip()))
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected an IP address or CIDR, not {text!r}") from None
+
+
 def ipv4(text):
     try:
         return str(ipaddress.IPv4Address(text.strip()))
@@ -138,8 +145,13 @@ OPTIONS = [
     Option("page_scripts", "--page-scripts", "PAGE_SCRIPTS", boolean,
            "Allow tv_page_run. Default true.", "bool"),
     Option("page_network_allow", "--page-network-allow", "PAGE_NETWORK_ALLOW", text,
-           "Extra page destination: hostname, IP, CIDR or host:port. Repeat the flag for more. "
-           "In the variable, separate entries with commas.", "list", ","),
+           "Extra page destination: hostname, IP, CIDR or host:port. Tailnet addresses need an "
+           "entry too. Repeat the flag for more. In the variable, separate entries with commas.",
+           "list", ","),
+    Option("host_addresses", "--host-address", "HOST_ADDRESSES", network,
+           "An IP or CIDR of the computer that runs the container. Pages never reach it, even "
+           "with a page network entry. Repeat the flag for more. In the variable, separate "
+           "entries with commas.", "list", ","),
     Option("default_profile", "--default-profile", "DEFAULT_PROFILE", text,
            "Preferred tvOS profile label."),
     Option("app_profile", "--app-profile", "APP_PROFILE", text, "Preferred in-app profile label."),
@@ -233,10 +245,13 @@ REMEDIATION = {
         'Run tv_pair with kind "screen" for this TV.',
     TAILNET_DNS_FIX:
         "Ignore this unless pages use tailnet names. To load them, give the container a DNS server "
-        "that resolves them.",
+        "that resolves them, and grant their addresses in TV_USE_PAGE_NETWORK_ALLOW.",
     "Check the hostname and the HA DNS resolver.": "Check the hostname and the container's DNS resolver.",
     "Check the server and the network route from Home Assistant.":
         "Check the server and the network route from the bridge's computer.",
+    BLOCKED_FIX:
+        "Use a public URL, or grant the destination in TV_USE_PAGE_NETWORK_ALLOW. Tailnet "
+        "addresses need a grant too. The container's own addresses and TV_USE_HOST_ADDRESSES stay blocked.",
 }
 
 
@@ -343,6 +358,8 @@ class Settings:
     token: str | None
     # Warnings to log once logging is configured.
     warnings: tuple = ()
+    # Addresses of the computer that runs the container. Pages never reach them.
+    host_addresses: tuple = ()
     # One secret per process. The bridge's browser loads the stage with it, and the stage
     # refuses every other client.
     stage_key: str = field(default_factory=lambda: secrets.token_hex(16), repr=False)
@@ -353,8 +370,10 @@ class Settings:
 
     @property
     def fleet(self):
-        """Keyword arguments for Fleet. Standalone mode keeps the records of TVs that leave the list."""
-        return {"stage_host": self.stage_listen, "stage_key": self.stage_key, "keep_unlisted": True}
+        """Keyword arguments for Fleet. Standalone mode keeps the records of TVs that leave the list,
+        and pages need an allow entry for tailnet addresses, because the Mac can have one."""
+        return {"stage_host": self.stage_listen, "stage_key": self.stage_key, "keep_unlisted": True,
+                "page_tailnet": False, "page_host_addresses": self.host_addresses}
 
     def listeners(self, service):
         return [(service.app(authorize=self.authorize), self.listen, self.port)]
@@ -424,7 +443,8 @@ def settings(argv, environ):
                   f"and add TVs by discovery, set {PREFIX}DISCOVER=true or pass --discover.{hint}")
     warnings = tuple(f"{name} is not a tv-use setting and is ignored. Check its spelling. "
                      "--help lists the settings." for name in unknown)
-    return Settings(options, listen, port, values["stage_listen"] or "127.0.0.1", token or None, warnings)
+    return Settings(options, listen, port, values["stage_listen"] or "127.0.0.1", token or None, warnings,
+                    host_addresses=tuple(values["host_addresses"] or ()))
 
 
 def configure(argv, environ, root, supervisor):

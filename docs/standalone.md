@@ -87,7 +87,8 @@ docker run ... ghcr.io/neekolas/tv-use-bridge:latest \
 | `TV_USE_MIRROR_FPS` | `--mirror-fps` | `10` | 1 through 60. |
 | `TV_USE_MAX_ACTIVE_MIRRORS` | `--max-active-mirrors` | `1` | Concurrent mirror sessions across the TVs. |
 | `TV_USE_PAGE_SCRIPTS` | `--page-scripts`, `--no-page-scripts` | `true` | Allow `tv_page_run`. |
-| `TV_USE_PAGE_NETWORK_ALLOW` | `--page-network-allow` | none | Extra destinations for pages: hostnames, IPs, CIDRs or `host:port`. Separate entries with commas in the variable. Repeat the flag for more. |
+| `TV_USE_PAGE_NETWORK_ALLOW` | `--page-network-allow` | none | Extra destinations for pages: hostnames, IPs, CIDRs or `host:port`. Tailnet addresses need an entry too, such as `100.64.0.0/10`. Separate entries with commas in the variable. Repeat the flag for more. [Security](#security) |
+| `TV_USE_HOST_ADDRESSES` | `--host-address` | none | The addresses of the computer that runs the container, as IPs or CIDRs, such as the Mac's LAN and tailnet addresses. Pages never reach them, even through `TV_USE_PAGE_NETWORK_ALLOW`. Separate entries with commas in the variable. Repeat the flag for more. This setting has no Home Assistant app option. |
 | `TV_USE_DEFAULT_PROFILE` | `--default-profile` | none | Preferred tvOS profile label. |
 | `TV_USE_APP_PROFILE` | `--app-profile` | none | Preferred in-app profile label. |
 | `TV_USE_WATCH_HISTORY` | `--watch-history`, `--no-watch-history` | `true` | Record what each TV plays for `tv_history`. |
@@ -203,10 +204,10 @@ Linux was not tested. There, `--network host` gives the container the host's own
 - **Chromium's debugging port and the page proxy** accept any client on the container's loopback. Bridge networking keeps them inside the container. Host networking exposes them. See [Host networking](#host-networking).
 - **The token.** Prefer `TV_USE_TOKEN_FILE`. A `TV_USE_TOKEN` value is visible in `docker inspect` and in the container's `/proc/1/environ`. The bridge removes it from the environment of the processes that it starts, such as Chromium and tvpipe.
 - **Plain HTTP.** Send the token only over a trusted network.
-- **Pages** cannot reach the container's own addresses or loopback. On a Mac, the container cannot see the Mac's addresses, so it cannot protect them:
-  - **LAN.** Grant exact `host:port` entries in `TV_USE_PAGE_NETWORK_ALLOW`, never a subnet that contains the Mac. Otherwise a page can reach every service on the Mac that listens on the LAN.
-  - **Tailnet.** Pages may reach tailnet addresses by default. These include the Mac's own tailnet address when the Mac runs Tailscale. In testing, the container reached the Mac's AirPlay receiver ports on that address.
-  - **IPv6.** The page rules treat a global IPv6 address as public internet, because the container cannot see the LAN's IPv6 prefix. If the container has IPv6 routing, a page can reach a LAN device, including the Mac, at its global IPv6 address. The tested network had no global IPv6, and the container could not reach public IPv6 addresses.
+- **Pages** cannot reach the container's own addresses or loopback. On a Mac, the container cannot see the Mac's addresses, so it protects them only when `TV_USE_HOST_ADDRESSES` lists them. That check comes before `TV_USE_PAGE_NETWORK_ALLOW`, so no grant can reach a listed address. List the Mac's LAN address, and its tailnet address if the Mac runs Tailscale. A DHCP reservation keeps the LAN address fixed.
+  - **LAN.** Grant exact `host:port` entries in `TV_USE_PAGE_NETWORK_ALLOW`. Grant a subnet that contains the Mac only when `TV_USE_HOST_ADDRESSES` lists the Mac's address. Otherwise a page can reach every service on the Mac that listens on the LAN.
+  - **Tailnet.** Pages cannot reach tailnet addresses, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, unless `TV_USE_PAGE_NETWORK_ALLOW` grants them. The Home Assistant app allows them by default. The tailnet includes the Mac's own tailnet address when the Mac runs Tailscale. In testing, the container reached the Mac's AirPlay receiver ports on that address. Before you grant a tailnet range, list that address in `TV_USE_HOST_ADDRESSES`.
+  - **IPv6.** The page rules treat a global IPv6 address as public internet, because the container cannot see the LAN's IPv6 prefix. If the container has IPv6 routing, a page can reach a LAN device, including the Mac, at its global IPv6 address. To block the LAN, list its IPv6 prefix in `TV_USE_HOST_ADDRESSES`. The tested network had no global IPv6, and the container could not reach public IPv6 addresses.
 
 ## Measured results
 
@@ -242,7 +243,8 @@ Measured on 21 November 2026 against an Apple TV 4K (2nd generation) on tvOS 27.
 | `tv_unreachable` | Wake the TV. Check that the address in `TV_USE_TVS` is current. The container does not find a TV that changed its address. |
 | `waiting_for_pairing_screen` does not change | Open **Settings → Remotes and Devices → Remote App and Devices** on the TV and leave it open. |
 | `sender_failed` on `tv_show` | Check that the TV is awake and that AirPlay **Allow Access** includes this network. Read `docker logs tv-use`. |
-| `tailnet_dns_missing` | Ignore it unless pages use tailnet names. To load them, give the container a DNS server that resolves them. |
+| `tailnet_dns_missing` | Ignore it unless pages use tailnet names. To load them, give the container a DNS server that resolves them, and grant their addresses in `TV_USE_PAGE_NETWORK_ALLOW`. |
+| `blocked_address` on a tailnet URL | Standalone mode blocks tailnet addresses by default. Grant the address or range in `TV_USE_PAGE_NETWORK_ALLOW`. |
 | The mirror stutters | Lower `TV_USE_MIRROR_FPS`, or set `TV_USE_MIRROR_SIZE=1280x720`. |
 
 ## Update and remove

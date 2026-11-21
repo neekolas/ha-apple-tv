@@ -48,6 +48,7 @@ def test_environment_sets_every_option():
         TV_USE_MAX_ACTIVE_MIRRORS="2",
         TV_USE_PAGE_SCRIPTS="false",
         TV_USE_PAGE_NETWORK_ALLOW="192.0.2.8:8443, dashboard.example",
+        TV_USE_HOST_ADDRESSES="192.0.2.64, 100.101.102.103,fd7a:115c:a1e0::/48",
         TV_USE_DEFAULT_PROFILE="Sam",
         TV_USE_APP_PROFILE="Kids",
         TV_USE_WATCH_HISTORY="off",
@@ -81,7 +82,10 @@ def test_environment_sets_every_option():
         "log_level": "debug",
     }
     assert (plan.listen, plan.port, plan.stage_listen, plan.token) == ("192.0.2.64", 9000, "0.0.0.0", TOKEN)
-    assert plan.fleet == {"stage_host": "0.0.0.0", "stage_key": plan.stage_key, "keep_unlisted": True}
+    # Host addresses are not a Home Assistant option. They reach Fleet only.
+    assert plan.host_addresses == ("192.0.2.64/32", "100.101.102.103/32", "fd7a:115c:a1e0::/48")
+    assert plan.fleet == {"stage_host": "0.0.0.0", "stage_key": plan.stage_key, "keep_unlisted": True,
+                          "page_tailnet": False, "page_host_addresses": plan.host_addresses}
     assert re.fullmatch("[0-9a-f]{32}", plan.stage_key) and plan.stage_key != standalone().stage_key
     assert plan.warnings == ()
 
@@ -89,17 +93,20 @@ def test_environment_sets_every_option():
 def test_flags_win_over_environment():
     plan = standalone(
         ["--tv", "192.0.2.20", "--tv", "id=BB:02", "--mirror-fps", "15", "--no-watch-history",
-         "--page-network-allow", "10.0.0.5", "--port", "9100", "--log-level", "warning"],
+         "--page-network-allow", "10.0.0.5", "--port", "9100", "--log-level", "warning",
+         "--host-address", "192.0.2.65"],
         TV_USE_TVS="192.0.2.15",
         TV_USE_MIRROR_FPS="30",
         TV_USE_WATCH_HISTORY="true",
         TV_USE_PAGE_NETWORK_ALLOW="192.0.2.8",
+        TV_USE_HOST_ADDRESSES="192.0.2.64",
         TV_USE_PORT="9000",
     )
     assert plan.options["apple_tvs"] == [{"host": "192.0.2.20"}, {"id": "BB:02"}]
     assert plan.options["mirror_fps"] == 15
     assert plan.options["watch_history"] is False
     assert plan.options["page_network_allow"] == ["10.0.0.5"]
+    assert plan.host_addresses == ("192.0.2.65/32",)
     assert plan.options["log_level"] == "warning"
     assert plan.port == 9100
     # Defaults keep the token required and the stage on loopback.
@@ -135,6 +142,9 @@ def test_options_are_copies_of_the_defaults():
         (["--tv", "host=192.0.2.1,host=192.0.2.2"], {}, "expected host=IP"),
         (["--tv", "name="], {}, "expected host=IP"),
         ([], {"TV_USE_PAGE_NETWORK_ALLOW": "a.local:99999"}, "Invalid page_network_allow entry"),
+        # A CIDR with host bits set is ambiguous: one address or its whole network.
+        ([], {"TV_USE_HOST_ADDRESSES": "192.0.2.64/24"}, "TV_USE_HOST_ADDRESSES: expected an IP address or CIDR"),
+        (["--host-address", "mac.local"], {}, "expected an IP address or CIDR"),
         (["--unknown"], {}, "unrecognized arguments"),
     ],
 )
@@ -696,6 +706,33 @@ async def test_page_errors_never_show_the_stage_key(monkeypatch):
     assert failed.value.code == "page_unreachable" and failed.value.remediation == live.REFUSED_FIX
 
 
+TAILNET_PEER = "100.101.102.103"
+
+
+async def test_standalone_pages_need_a_grant_for_the_tailnet(tmp_path, monkeypatch):
+    from atv_bridge_app import page_network
+    from atv_bridge_app.page_network import BlockedAddress
+
+    monkeypatch.setattr(page_network, "_local_interfaces", lambda: (set(), set()))
+    # Home Assistant mode still lets pages reach the tailnet.
+    home = Fleet(tmp_path / "ha", DEFAULTS | {"apple_tvs": [{"host": "192.0.2.15"}]}, factory=fake_runtime, stage_port=0)
+    assert await home.page_network.resolve(TAILNET_PEER, 443) == [TAILNET_PEER]
+    fleet = start_fleet(tmp_path / "a", "192.0.2.15")
+    for peer in (TAILNET_PEER, "fd7a:115c:a1e0::1"):
+        with pytest.raises(BlockedAddress, match="tailnet"):
+            await fleet.page_network.resolve(peer, 443)
+    # An allow entry grants the tailnet again, except for the host addresses.
+    granted = start_fleet(tmp_path / "b", "192.0.2.15", ["--page-network-allow", "100.64.0.0/10",
+                                                       "--host-address", "100.64.0.7"])
+    assert await granted.page_network.resolve(TAILNET_PEER, 443) == [TAILNET_PEER]
+    with pytest.raises(BlockedAddress, match="bridge host"):
+        await granted.page_network.resolve("100.64.0.7", 443)
+    # Standalone mode rewords the fix, which tells Home Assistant users to use a tailnet URL.
+    assert "tailnet URL" in BlockedAddress("tailnet").remediation
+    monkeypatch.setattr(state, "REWORDING", dict(REMEDIATION))
+    assert "Tailnet addresses need a grant" in BlockedAddress("tailnet").remediation
+
+
 def test_child_processes_never_inherit_the_tokens(monkeypatch):
     monkeypatch.setenv("TV_USE_TOKEN", TOKEN)
     monkeypatch.setenv("SUPERVISOR_TOKEN", "supervisor-secret")
@@ -835,7 +872,7 @@ async def test_standalone_main_uses_environment_and_one_listener(tmp_path, run_m
     calls = await run_main(tmp_path, ["--mirror-fps", "30", "--port", "9200"])
     assert calls["options"] == DEFAULTS | {"apple_tvs": [{"host": "192.0.2.15", "id": "AA:01"}], "mirror_fps": 30}
     assert calls["kwargs"] == {"stage_host": "127.0.0.1", "stage_key": calls["kwargs"]["stage_key"],
-                               "keep_unlisted": True}
+                               "keep_unlisted": True, "page_tailnet": False, "page_host_addresses": ()}
     assert callable(calls["authorize"])
     assert calls["binds"] == [("0.0.0.0", 9200)]
     assert not (tmp_path / "options.json").exists()
