@@ -701,6 +701,7 @@ async def test_watch_logs_what_a_remote_sends_for_touch(watch, caplog):
             feed(message)
         feed("destinations for Digitizer event: (<keyboardFocus; token: 0xB5890338>)", "EventDelivery")
         feed("destinations for Digitizer event: (<keyboardFocus; token: 0xB5890338>)", "EventDelivery")
+        feed("new dispatching rulesets for pid:37: [\n    (all senders); desc: (Scroll, Digitizer) -> <keyboardFocus>\n]", "Dispatch")
         for at, message in stroke((0.03, 0.5), (0.97, 0.5), 0.045):
             FakeTrace.streams[-1].lines.put_nowait(entry(message, device=time.time() + at, category="TouchEvents"))
         await until(lambda: any(e["event"] == "gesture" for e in events))
@@ -709,6 +710,10 @@ async def test_watch_logs_what_a_remote_sends_for_touch(watch, caplog):
         assert logged("First touch-down line of this watch") == [f"First touch-down line of this watch: {unknown}"]
         # A touch line in another log category is shown once per category.
         assert len(logged("First line about touch in log category EventDelivery")) == 1
+        # A line with line breaks stays one log line. The app reads the level from the start of each line.
+        assert logged("log category Dispatch") == [
+            "First line about touch in log category Dispatch: new dispatching rulesets for pid:37: [ (all senders); "
+            "desc: (Scroll, Digitizer) -> <keyboardFocus> ]"]
         # Lines of an unknown shape are reported. Known lines without a position are not.
         assert [e["message"] for e in events if e["event"] == "touch_unmatched"] == [unknown, unknown]
         # The report names the device that announced itself.
@@ -1782,6 +1787,33 @@ async def test_tvos_up_and_down_go_straight_when_rows_are_scrolled_by_whole_colu
     # smooth scrolling. The next key then reads boxes that no longer move.
     assert await tvos.press("right", "right", start="t01") == "t03"
     assert await tvos.frame.evaluate("[row0.scrollLeft, t03.getBoundingClientRect().right]") == [60, 1200]
+
+
+# The tile of the row above (-1) or below (1) that covers most of the focused tile, without its lift.
+STRAIGHT = """step => {
+  const active = document.activeElement, box = active.getBoundingClientRect();
+  const center = (box.left + box.right) / 2, half = active.offsetWidth / 2;
+  const rows = [row0, row1, row2];
+  let best = null, most = 0;
+  for (const tile of rows[rows.indexOf(active.parentElement) + step].children) {
+    const r = tile.getBoundingClientRect();
+    const covered = Math.min(r.right, center + half) - Math.max(r.left, center - half);
+    if (covered > most) [best, most] = [tile.id, covered];
+  }
+  return best;
+}"""
+
+
+@ROWS_PAGE
+@pytest.mark.parametrize("offsets", [{"row1": 320, "row2": 640}, {"row1": 570, "row2": 130}, {"row1": 1260, "row2": 0}])
+async def test_tvos_up_and_down_go_straight_from_every_column(tvos, offsets):
+    """Also from the edge columns, where the scroll margin moves a row when its tile gets focus."""
+    for column in range(4):
+        await tvos.scroll(row0=0, **offsets)
+        await tvos.press(start=f"t0{column}")
+        for key, step in (("down", 1), ("down", 1), ("up", -1), ("up", -1)):
+            straight = await tvos.frame.evaluate(STRAIGHT, step)
+            assert straight and await tvos.press(key) == straight, (column, key)
 
 
 @ROWS_PAGE

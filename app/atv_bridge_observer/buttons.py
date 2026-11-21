@@ -297,7 +297,8 @@ class ButtonWatch:
         """Log one raw line per key and watch start. The app log then shows what a remote sends."""
         if key not in self.logged and len(self.logged) < ONCE_LIMIT:
             self.logged.add(key)
-            logging.info("%s: %s", what, str(message)[:LINE_LIMIT])
+            # One line: the app reads the level of each observer log line from its start.
+            logging.info("%s: %s", what, " ".join(str(message).split())[:LINE_LIMIT])
 
     def _touch(self, message, device, now, stale):
         # These two do not depend on the matcher in touch.py: a remote can log another line shape.
