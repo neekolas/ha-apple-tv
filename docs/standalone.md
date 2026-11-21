@@ -49,7 +49,7 @@ The trade-off: the computer that runs the container must stay on and awake. When
      ghcr.io/neekolas/tv-use-bridge:latest
    ```
 
-   The container uses Docker's default bridge network. `-p 127.0.0.1:8765:8765` publishes only the MCP port, and only to this Mac. The container's other ports stay on its own loopback, which no program on the Mac can reach. See [Networking](#networking). After you pair the TV, add its ID to `TV_USE_TVS`.
+   The container uses Docker's default bridge network. `-p 127.0.0.1:8765:8765` publishes only the MCP port, and only to this Mac. The container's other ports stay on its own loopback, which no program on the Mac can reach. See [Networking](#networking). After you pair the TV, add one of its advertised identifiers to `TV_USE_TVS` as `id=`.
 
 4. Check the container. The first command reports the TV connection and pairings in short form. The second reports the TV and its pairings in full.
 
@@ -82,7 +82,7 @@ docker run ... ghcr.io/neekolas/tv-use-bridge:latest \
 | `TV_USE_TOKEN` | `--token` | none | Bearer token that clients must send. At least 16 characters. A variable or flag value is visible in `docker inspect`. Prefer a token file. |
 | `TV_USE_TOKEN_FILE` | `--token-file` | none | File that holds the token. Use this or `TV_USE_TOKEN`, not both. |
 | `TV_USE_INSECURE_LOCAL` | `--insecure-local` | off | Accept requests without a token. The server then listens on the container's loopback only and accepts only the host names `localhost`, `127.0.0.1` and `::1`. `-p` cannot reach the container's loopback, so this works only with `--network host`, where any program on the computer can then control the TV. Use it only for a short test on a computer you trust. |
-| `TV_USE_TVS` | `--tv` | none | The TVs. Write each TV as `host=IP,id=ID,name=NAME` with any of the three keys, or as a bare IPv4 address. A name cannot contain a comma, and in the variable it cannot contain a semicolon. Separate TVs with semicolons in the variable. Repeat the flag for more TVs. A flag replaces the whole list from the variable. The ID is the TV's advertised identifier from `tv://tvs`. The container refuses to start with an empty list unless `TV_USE_DISCOVER` is on. [Keep each TV's pairings.](#keep-each-tvs-pairings) |
+| `TV_USE_TVS` | `--tv` | none | The TVs. Write each TV as `host=IP,id=IDENTIFIER,name=NAME` with any of the three keys, or as a bare IPv4 address. `IDENTIFIER` is one of the TV's advertised identifiers, not its record ID. A name cannot contain a comma, and in the variable it cannot contain a semicolon. Separate TVs with semicolons in the variable. Repeat the flag for more TVs. A flag replaces the whole list from the variable. The container refuses to start with an empty list unless `TV_USE_DISCOVER` is on. [Keep each TV's pairings.](#keep-each-tvs-pairings) |
 | `TV_USE_DISCOVER` | `--discover` | off | Allow an empty `TV_USE_TVS` and add TVs that Bonjour discovery finds. Discovery does not work on a Mac. |
 | `TV_USE_LISTEN` | `--listen` | `0.0.0.0` | Address for MCP and REST in the container. `127.0.0.1` with `--insecure-local`. |
 | `TV_USE_PORT` | `--port` | `8765` | Port for MCP and REST. It cannot be 8766. |
@@ -108,17 +108,22 @@ The settings match the [Home Assistant app options](SETUP.md#app-options). A bad
 
 ### Keep each TV's pairings
 
-The bridge never deletes a TV's pairing records because of a change to the TV list. A TV can leave the list through a typo in its address, a misspelled variable, a start with one `--tv` flag, or a second container on the same volume. The bridge then keeps the TV's records in the volume and leaves the TV out of `tv://tvs`. The log names each kept TV and its ID:
+`tv://tvs` and `GET /api/tvs` identify each TV in two ways:
+
+- The **record ID**, in `id`, such as `8fbc2b6530915fde8e449c7e72027484`. The bridge gives this ID to its records of the TV. The log, `DELETE /api/tvs/<record ID>` and the folder `/data/tvs/<record ID>/` use it.
+- The **advertised identifiers**, in `identifiers`, such as `2A:74:70:4C:0A:71`. The TV advertises them on the network. `id=` in `TV_USE_TVS` takes one of them. It does not take the record ID.
+
+The bridge never deletes a TV's pairing records because of a change to the TV list. A TV can leave the list through a typo in its address, a misspelled variable, a start with one `--tv` flag, or a second container on the same volume. The bridge then keeps the TV's records in the volume and leaves the TV out of `tv://tvs`. The log names each kept TV and its record ID:
 
 ```text
 WARNING:atv_bridge_app.fleet:Kept the records of TV Living Room (ID 8fbc2b6530915fde8e449c7e72027484), which the TV list no longer names. Add the TV to the list again to use its pairings.
 ```
 
-When a listed TV matches a kept record again, the bridge uses the record and its pairings. It matches the TV's stored identifier first, then its name, then its address. An entry with an ID never takes the records of a TV with other identifiers. An entry with a name never takes the records of a TV with another name, unless the entry's ID matches the TV's stored identifier. A new TV at a kept TV's address therefore needs its own name.
+When a listed TV matches a kept record again, the bridge uses the record and its pairings. It matches the TV's stored advertised identifiers first, then its name, then its address. An entry with `id=` never takes the records of a TV that stores other advertised identifiers. An entry with a name never takes the records of a TV with another name, unless the entry's `id=` matches one of the TV's stored advertised identifiers. A new TV at a kept TV's address therefore needs its own name.
 
-Add each TV's ID to `TV_USE_TVS` after you pair it, because the ID is the strongest match. To find the ID, read `identifiers` from `tv://tvs` or `GET /api/tvs` after pairing. Add `id=<first identifier>` to the entry and restart. A later address change then needs only a new `host=`.
+Add an advertised identifier of each TV to `TV_USE_TVS` after you pair it, because it is the strongest match. To find it, read `identifiers` from `tv://tvs` or `GET /api/tvs` after pairing. Add `id=<first advertised identifier>` to the entry and restart. A later address change then needs only a new `host=`.
 
-To delete a TV's records, send `DELETE /api/tvs/<TV ID>` with the token. This also works for a kept TV, with the ID from the log. A TV that `TV_USE_TVS` still names returns without pairings at the next start.
+To delete a TV's records, send `DELETE /api/tvs/<record ID>` with the token. This also works for a kept TV, with the record ID from the log. A TV that `TV_USE_TVS` still names returns without pairings at the next start.
 
 ### How the container chooses its mode
 
@@ -136,13 +141,13 @@ Pair through the `tv_pair` tool. Standalone mode has no pairing panel, because a
 The TV lists the container as **Agent Bridge** under **Remote App and Devices**. The container has its own identity in the volume. A TV that is also paired with the Home Assistant app lists two **Agent Bridge** entries.
 
 1. **Control.** Call `tv_pair {"tv":"Living Room","kind":"control"}`. The TV shows a four-digit AirPlay code. Call `tv_pair` again with the same `tv` and `kind`, the returned `data.pairing_id` and `"code":"1234"`, using the digits on the TV as a string. The bridge then tests whether the AirPlay credentials also work for Companion, the remote control protocol.
-2. **Companion, if needed.** If `tv_status` still reports a control problem after step 1, pair Companion through REST, with the token and `Content-Type: application/json`. Post `{"protocol":"companion"}` to `/api/tvs/<TV ID>/pair/start`. Then post `{"pairing_id":"<returned ID>","pin":"<code on the TV>"}` to `/api/tvs/<TV ID>/pair/finish`.
+2. **Companion, if needed.** If `tv_status` still reports a control problem after step 1, pair Companion through REST, with the token and `Content-Type: application/json`. Post `{"protocol":"companion"}` to `/api/tvs/<record ID>/pair/start`. Then post `{"pairing_id":"<returned ID>","pin":"<code on the TV>"}` to `/api/tvs/<record ID>/pair/finish`.
 3. **Screen.** Call `tv_pair {"tv":"Living Room","kind":"screen"}`. If the state is `waiting_for_pairing_screen`, open **Settings → Remotes and Devices → Remote App and Devices** on the TV and leave it open. Poll with the same `tv`, `kind` and `pairing_id` until the state is `code_on_screen`. Then submit the six-digit code as a string.
 4. Call `tv_status {"tv":"Living Room"}`. Control and screen pairing should both be `"ok"`.
 
 Submit the digits once. If a code fails, start a new exchange and wait for a new code. Many failed attempts can make the TV refuse pairing until it restarts.
 
-Pairing records live in the volume under `/data/tvs/<TV ID>/`. Keep the volume to keep the pairings. `docker volume rm` deletes them.
+Pairing records live in the volume under `/data/tvs/<record ID>/`. Keep the volume to keep the pairings. `docker volume rm` deletes them.
 
 ## Connect an agent
 
@@ -245,7 +250,7 @@ Measured on 21 November 2026 against an Apple TV 4K (2nd generation) on tvOS 27.
 | Connection reset on `localhost:8765` | Without host networking, connect to `127.0.0.1`. The server listens on IPv4 only. |
 | `405` on `GET /mcp` | Expected. The server answers MCP with `POST` only. |
 | `tv_not_found` or no TV in `tv://tvs` | Add the TV to `TV_USE_TVS` with its IP address and restart the container. Discovery does not work on a Mac. |
-| A TV and its pairings are gone from `tv://tvs` after a change to `TV_USE_TVS` | Look for `Kept the records of TV` in `docker logs tv-use`. Correct the entry, or add the TV's ID or name, and restart. The bridge then uses the kept pairings. |
+| A TV and its pairings are gone from `tv://tvs` after a change to `TV_USE_TVS` | Look for `Kept the records of TV` in `docker logs tv-use`. Correct the entry, or add the TV's advertised identifier as `id=` or its name as `name=`, and restart. The bridge then uses the kept pairings. |
 | `tv_unreachable` | Wake the TV. Check that the address in `TV_USE_TVS` is current. The container does not find a TV that changed its address. |
 | `waiting_for_pairing_screen` does not change | Open **Settings → Remotes and Devices → Remote App and Devices** on the TV and leave it open. |
 | `sender_failed` on `tv_show` | Check that the TV is awake and that AirPlay **Allow Access** includes this network. Read `docker logs tv-use`. |
@@ -256,4 +261,4 @@ Measured on 21 November 2026 against an Apple TV 4K (2nd generation) on tvOS 27.
 ## Update and remove
 
 - **Update.** Run `docker pull ghcr.io/neekolas/tv-use-bridge:latest`, then `docker rm -f tv-use` and the same `docker run` command. The volume keeps the pairings.
-- **Remove.** Run `docker rm -f tv-use`. To delete the pairings, also run `docker volume rm tv-use-data`. To delete one TV's pairings instead, send `DELETE /api/tvs/<TV ID>` first. On each TV, remove **Agent Bridge** under **Settings → Remotes and Devices → Remote App and Devices**.
+- **Remove.** Run `docker rm -f tv-use`. To delete the pairings, also run `docker volume rm tv-use-data`. To delete one TV's pairings instead, send `DELETE /api/tvs/<record ID>` first. On each TV, remove **Agent Bridge** under **Settings → Remotes and Devices → Remote App and Devices**.
