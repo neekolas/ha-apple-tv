@@ -20,7 +20,9 @@ KEYS = {
 STALE_S = 2.0
 QUEUE_LIMIT = 8
 RETRY_MAX_S = 30
-REASONS = {"pairing_required": "screen_not_paired"}
+# Reasons for state "unavailable" that start in the app. The observer adds its own
+# (atv_bridge_observer/buttons.py, class Unavailable).
+REASONS = {"pairing_required": "screen_not_paired", "screen_pairing_invalid": "screen_pairing_invalid"}
 
 # Runs in the stage document. Key events go to the focused frame.
 FOCUS_STAGE = """() => {
@@ -120,7 +122,6 @@ class RemoteInput:
         self.mode = "off"
         self.state = "off"
         self.reason = None
-        self.blocked = None
         self.revision = None
         self.presses = 0
         self.missed = 0
@@ -133,6 +134,21 @@ class RemoteInput:
         self.changed = asyncio.Event()
         self.queue = asyncio.Queue()
         ops.stage.on_change = self.sync
+        # The transport can change after the show: a mirror can fail or fall back to a recording.
+        for sender in {id(s): s for s in (ops.sender, getattr(ops, "live_mirror", None)) if s}.values():
+            if events := getattr(sender, "events", None):
+                events.subscribe(lambda _status: self.wake.set())
+
+    def transport_problem(self):
+        """Return why the page cannot get keys, or None when a working mirror shows it."""
+        presenter = getattr(self.ops, "presenter", None) or self.ops.sender
+        active = getattr(presenter, "active", presenter)
+        if getattr(active, "mode", None) != "mirror":
+            return "not_mirrored"
+        status = getattr(active, "status", None)
+        if status and not status().get("ok", True):
+            return "mirror_failed"
+        return None
 
     def sync(self):
         """Follow the stage. Every way to dismiss or replace a page ends here."""
@@ -140,27 +156,18 @@ class RemoteInput:
         mode = (page or {}).get("remote") or "off"
         revision = page["revision"] if page else None
         if revision != self.revision:
-            self.revision, self.presses, self.last, self.blocked = revision, 0, None, None
+            self.revision, self.presses, self.last = revision, 0, None
         self.mode = mode
         if mode == "off":
             self._set("off")
             while not self.queue.empty():
                 self.queue.get_nowait()
         else:
-            if getattr(self.ops.sender, "mode", None) == "play_url" and not page.get("url"):
-                self.blocked = "not_mirrored"
             if not self.watching and self.state != "unavailable":
                 self._set("starting")
-            if not self.tasks and not self.blocked:
+            if not self.tasks:
                 self._start()
         self.wake.set()
-
-    def block(self, reason):
-        """The page is shown without a browser. Stop the watch but keep the requested mode."""
-        if self.mode != "off":
-            self.blocked = reason
-            self.changed.set()
-            self.wake.set()
 
     def _start(self):
         subscribe = getattr(self.ops.observer, "subscribe", None)
@@ -181,7 +188,8 @@ class RemoteInput:
         self.delay = min(self.delay * 2, RETRY_MAX_S)
 
     def wanted(self):
-        return self.mode != "off" and not self.blocked
+        """True while a working mirror shows a page that asked for remote input."""
+        return self.mode != "off" and not self.transport_problem()
 
     def on_event(self, event):
         """Called by the pipe reader. It only records state and queues work."""
@@ -218,8 +226,7 @@ class RemoteInput:
                     await self.ops.observer.call("buttons_start")
                 except Exception as exc:  # noqa: BLE001 - The page still shows. Retry later.
                     self.watching = False
-                    code = classify(exc).code
-                    self._set("unavailable", REASONS.get(code, code))
+                    self._set("unavailable", REASONS.get(classify(exc).code, "observer_unavailable"))
                     self._retry()
             elif not self.wanted() and self.watching:
                 self.watching = False
@@ -289,10 +296,9 @@ class RemoteInput:
         if self.mode == "off":
             return None
         state, reason = self.state, self.reason
-        presenter = getattr(self.ops, "presenter", None)
         # In auto mode the mirror can fall back to a recording after the show.
-        if self.blocked or getattr(getattr(presenter, "active", presenter), "mode", None) == "play_url":
-            state, reason = "unavailable", self.blocked or "not_mirrored"
+        if problem := self.transport_problem():
+            state, reason = "unavailable", problem
         result = {"mode": self.mode, "state": state, "presses": self.presses, "last": self.last}
         if state == "unavailable" and reason:
             result["reason"] = reason

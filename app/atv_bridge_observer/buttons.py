@@ -48,6 +48,11 @@ def match_press(process, category, message):
 STREAM_FLAGS = int(OsActivityStreamFlag.PAYLOAD)
 STALE_S = 2.0
 CONNECT_GRACE_S = 1.0
+# A late line that stays late by the same amount for this long is a clock step, not a backlog.
+REBASE_AFTER_S = 3.0
+REBASE_TOLERANCE_S = 0.5
+OPEN_TIMEOUT_S = 8
+ESTABLISH_TIMEOUT_S = 10
 PROBE_INTERVAL_S = 30
 PROBE_RETRY_S = 5
 RETRY_MIN_S = 0.5
@@ -57,27 +62,62 @@ UNMATCHED_WINDOW_S = 10
 
 
 class Freshness:
-    """Decide whether a log line is live. Old lines must never become key presses."""
+    """Decide whether a log line is live. Old lines must never become key presses.
 
-    def __init__(self, now):
+    now is the host's monotonic clock, so a host clock change has no effect.
+    device is the TV's wall clock. Only differences between lines are used.
+    """
+
+    def __init__(self, now, lag=float("inf")):
         self.connected = now
         self.latest = float("-inf")
-        self.lag = float("inf")
+        # The baseline of an earlier connection still holds. With it, replayed lines
+        # are late from the first one. Without it, only the connect grace period protects.
+        self.lag = lag
+        self.late = None  # (first arrival, lag) of a run of late lines with the same lag
 
     def stale(self, device, now):
         # The smallest lag seen is the clock offset plus the normal delay.
         lag = now - device
+        late = lag - self.lag > STALE_S or self.latest - device > STALE_S
+        if late:
+            # A backlog arrives in a burst and its lag shrinks. After a clock step on the TV
+            # every line is late by the same amount. Accept that as the new baseline.
+            if self.late and abs(lag - self.late[1]) <= REBASE_TOLERANCE_S:
+                if now - self.late[0] >= REBASE_AFTER_S:
+                    self.lag, self.latest, self.late = lag, device, None
+                    return now - self.connected < CONNECT_GRACE_S
+            else:
+                self.late = (now, lag)
+            return True
+        self.late = None
         self.lag = min(self.lag, lag)
         self.latest = max(self.latest, device)
-        return (
-            now - self.connected < CONNECT_GRACE_S
-            or self.latest - device > STALE_S
-            or lag - self.lag > STALE_S
-        )
+        return now - self.connected < CONNECT_GRACE_S
 
 
 class Unavailable(Exception):
-    """The watch cannot run now. The message is the reason reported to the app."""
+    """The watch cannot run now. The message is a stable reason code reported to the app.
+
+    Codes: screen_not_paired, pairing_in_progress, screen_pairing_invalid, tv_unreachable,
+    service_missing, process_not_found, process_restarted, stream_failed.
+    """
+
+
+def mark_established(connection, established):
+    """Set the event when the device has accepted the stream.
+
+    syslog() in pymobiledevice3 11.61 reads a 1-byte record marker only after the
+    device answered StartActivity with success. An idle stream then stays silent.
+    """
+    recvall = connection.recvall
+
+    async def watched(size):
+        if size == 1:
+            established.set()
+        return await recvall(size)
+
+    connection.recvall = watched
 
 
 async def process_pid(rsd, name=PROCESS):
@@ -98,6 +138,7 @@ class ButtonWatch:
         self.task = None
         self.state = None
         self.delay = RETRY_MIN_S
+        self.lag = float("inf")  # Lag baseline, kept across reconnects.
         self.unmatched = []
 
     def start(self):
@@ -127,7 +168,7 @@ class ButtonWatch:
                 self.report("unavailable", str(exc))
             except Exception as exc:  # noqa: BLE001 - Any stream failure leads to a retry.
                 logging.info("Button watch stopped (%s). Retrying in %.1f s.", type(exc).__name__, self.delay)
-                self.report("unavailable", type(exc).__name__)
+                self.report("unavailable", "stream_failed")
             await asyncio.sleep(self.delay)
             self.delay = min(self.delay * 2, RETRY_MAX_S)
 
@@ -138,28 +179,39 @@ class ButtonWatch:
             raise Unavailable("pairing_in_progress")
         if not observer.record.is_file():
             raise Unavailable("screen_not_paired")
-        async with asyncio.timeout(20):
-            rsd = await observer.tunnel.aopen()
+        try:
+            # Requests share this open. A request never waits for a second connect.
+            async with asyncio.timeout(OPEN_TIMEOUT_S):
+                rsd = await observer.open_tunnel()
+        except Exception as exc:  # noqa: BLE001 - The reason code tells the app what failed.
+            invalid = type(exc).__name__ == "ScreenPairingInvalid"
+            raise Unavailable("screen_pairing_invalid" if invalid else "tv_unreachable") from exc
         if OsTraceService.RSD_SERVICE_NAME not in rsd.peer_info.get("Services", {}):
             raise Unavailable("service_missing")
         pid = await process_pid(rsd)
         async with OsTraceService(lockdown=rsd) as service:
-            fresh = Freshness(time.time())
+            established = asyncio.Event()
+            mark_established(service.service, established)
+            fresh = Freshness(time.monotonic(), self.lag)
             reader = asyncio.create_task(self._read(service.syslog(pid=pid, stream_flags=STREAM_FLAGS), fresh))
+            accepted = asyncio.create_task(established.wait())
             try:
-                # A refused stream fails at once. An idle stream is silent, which is normal.
-                wait, failures = 1, 0
+                # Report "active" only after the device accepted the stream.
+                done, _ = await asyncio.wait({reader, accepted}, timeout=ESTABLISH_TIMEOUT_S, return_when=asyncio.FIRST_COMPLETED)
+                if reader in done:
+                    reader.result()
+                if not established.is_set():
+                    raise ConnectionError("The device did not accept the log stream")
+                logging.info("Button watch active (pid %d, flags %#x)", pid, STREAM_FLAGS)
+                self.report("active")
+                self.delay = RETRY_MIN_S
+                # An idle stream is silent, which is normal.
+                wait, failures = PROBE_INTERVAL_S, 0
                 while True:
                     done, _ = await asyncio.wait({reader}, timeout=wait)
                     if done:
                         reader.result()
                         raise ConnectionError("The log stream ended")
-                    if self.state != ("active", None):
-                        logging.info("Button watch active (pid %d, flags %#x)", pid, STREAM_FLAGS)
-                        self.report("active")
-                        self.delay = RETRY_MIN_S
-                        wait = PROBE_INTERVAL_S
-                        continue
                     # Liveness does not depend on log traffic. The probe also sees a new pid.
                     try:
                         current = await process_pid(rsd)
@@ -171,11 +223,13 @@ class ButtonWatch:
                         await self._reset_tunnel(rsd)
                         raise
                     if current != pid:
-                        raise ConnectionError("The watched process restarted")
+                        raise Unavailable("process_restarted")
                     wait, failures = PROBE_INTERVAL_S, 0
             finally:
+                self.lag = fresh.lag
                 reader.cancel()
-                await asyncio.gather(reader, return_exceptions=True)
+                accepted.cancel()
+                await asyncio.gather(reader, accepted, return_exceptions=True)
 
     async def _reset_tunnel(self, rsd):
         # Wait for a request in flight. Its own failure handling may already have closed the tunnel.
@@ -189,7 +243,7 @@ class ButtonWatch:
         async for entry in stream:
             now = time.time()
             device = entry.timestamp.timestamp()
-            stale = fresh.stale(device, now)
+            stale = fresh.stale(device, time.monotonic())
             key, known = match_press(
                 os.path.basename(entry.filename), entry.label.category if entry.label else None, entry.message
             )
@@ -198,7 +252,7 @@ class ButtonWatch:
             if key and not stale:
                 self.emit({"event": "button", "key": key, "device_time": device, "received": now})
             elif key:
-                logging.info("Dropped a stale %s press (%.1f s behind)", key, now - device - fresh.lag)
+                logging.info("Dropped a stale %s press", key)
 
     def _unmatched(self, message, now):
         self.unmatched = [at for at in self.unmatched if now - at < UNMATCHED_WINDOW_S]

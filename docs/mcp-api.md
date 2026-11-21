@@ -134,10 +134,26 @@ The show result has `data.remote` with `mode`, `state` and, when unavailable, `r
 | Field | Contents |
 |---|---|
 | `mode` | `keys` or `focus` |
-| `state` | `active`, `starting` (the watch is connecting or reconnecting) or `unavailable` |
-| `reason` | Why the state is `unavailable`. `screen_not_paired` needs `tv_pair {"kind":"screen"}`. `not_mirrored` means the page plays as a recording, which has no browser to receive keys. Other values name a connection error. The bridge keeps retrying. |
+| `state` | `active`, `starting` (the observer process is starting or restarting the watch) or `unavailable` |
+| `reason` | Why the state is `unavailable`. See the table below. |
 | `presses` | Number of presses received for this page |
 | `last` | `key` (`left`, `right`, `up`, `down` or `select`) and `at` (UTC time) of the last press, or null |
+
+| `reason` | Meaning |
+|---|---|
+| `screen_not_paired` | No screen pairing. Run `tv_pair {"kind":"screen"}`. |
+| `screen_pairing_invalid` | The TV rejected the screen pairing. Pair the screen again. |
+| `pairing_in_progress` | A screen PIN exchange is running. The watch starts after it. |
+| `not_mirrored` | The page plays as a recording, which has no browser to receive keys. |
+| `mirror_failed` | The mirror stopped with an error. Show the page again. |
+| `tv_unreachable` | The bridge cannot open its connection to the TV. |
+| `service_missing` | The TV does not offer the log service. |
+| `process_not_found` | The TV process that logs presses was not found. |
+| `process_restarted` | That process restarted. The watch reconnects at once. |
+| `stream_failed` | The log stream ended or did not start. |
+| `observer_unavailable` | The bridge's observer process did not answer. |
+
+Except for `not_mirrored` and `mirror_failed`, the bridge keeps retrying, with up to 30 s between tries. The state is `active` only after the TV accepted the log stream.
 
 Poll `tv_look` and compare `presses` to learn that someone pressed a key. To react in the page, listen for `keydown`. The bridge also keeps a press log in the content document. Read it with `tv_page_run {"script":"window.__tvRemote"}`. It has `count` and `last` (the last key name), and it starts again after a navigation. If the bridge sends a key and the page does not get it, the app log has a warning.
 

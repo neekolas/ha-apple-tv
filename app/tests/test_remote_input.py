@@ -68,16 +68,46 @@ def test_stream_flags_never_replay_history():
 
 
 def test_stale_lines_are_dropped():
+    # now is the host's monotonic clock. device is the TV's wall clock.
     fresh = buttons.Freshness(now=1000.0)
     # Right after a connect nothing counts as a press.
     assert fresh.stale(device=950.0, now=1000.2)
-    # The TV clock is 50 s behind in this example. That alone is not stale.
     assert not fresh.stale(device=951.5, now=1001.6)
     # A line that took 3 s longer than the baseline arrives too late.
     assert fresh.stale(device=952.0, now=1005.1)
     # A line from before the newest one seen is a replay.
     assert not fresh.stale(device=960.0, now=1010.1)
     assert fresh.stale(device=957.0, now=1010.1)
+
+
+def test_a_replayed_backlog_after_a_reconnect_is_dropped():
+    first = buttons.Freshness(now=1000.0)
+    # On the first connection, a short burst of old lines falls in the grace period.
+    assert all(first.stale(device=900.0 + step * 0.3, now=1000.0 + step * 0.01) for step in range(60))
+    assert not first.stale(device=1003.0, now=1003.4)
+    assert first.stale(device=990.0, now=1003.5)
+    # A reconnect keeps the lag baseline. A long replay is then late from its first line to its last.
+    again = buttons.Freshness(now=2000.0, lag=first.lag)
+    assert all(again.stale(device=1900.0 + step * 0.3, now=2000.0 + step * 0.02) for step in range(300))
+    assert not again.stale(device=2010.0, now=2010.4)
+
+
+@pytest.mark.parametrize("step", [5.0, -5.0, 3600.0, -3600.0])
+def test_presses_resume_after_a_clock_step(step):
+    """Reviewer case: after a clock step every press was dropped while the state stayed active."""
+    fresh = buttons.Freshness(now=1000.0)
+    assert not fresh.stale(device=1009.9, now=1010.0)
+    # The TV clock steps. One press logs several lines within a few milliseconds.
+    first = [fresh.stale(device=1020.0 - 0.1 + offset - step, now=1020.0 + offset) for offset in (0, 0.004, 0.008)]
+    later = [fresh.stale(device=at - 0.1 - step, now=at) for at in (1030.0, 1100.0, 5000.0)]
+    if step < 0:
+        # The TV clock moved forward: the lag only shrinks, which is never stale.
+        assert first == [False] * 3 and later == [False] * 3
+    else:
+        # The first press may be lost. A steady new lag is then accepted for good.
+        assert first == [True] * 3 and later == [False] * 3
+    # A late line is still dropped after the new baseline.
+    assert fresh.stale(device=5001.0 - step - 4.0, now=5001.0)
 
 
 # --- Observer watch --------------------------------------------------------
@@ -100,8 +130,11 @@ class FakeTrace:
     streams = []
     pid_error = None
 
+    accept = True
+
     def __init__(self, lockdown):
         self.rsd = lockdown
+        self.service = SimpleNamespace(recvall=AsyncMock(return_value=b"\x02"))
 
     async def __aenter__(self):
         return self
@@ -117,7 +150,11 @@ class FakeTrace:
     async def syslog(self, pid, stream_flags):
         lines = asyncio.Queue()
         FakeTrace.streams.append(SimpleNamespace(pid=pid, flags=stream_flags, lines=lines))
+        if not FakeTrace.accept:
+            await asyncio.Event().wait()  # The device never answers StartActivity.
         while True:
+            # Like pymobiledevice3: the first 1-byte read follows the accepted StartActivity.
+            await self.service.recvall(1)
             item = await lines.get()
             if isinstance(item, Exception):
                 raise item
@@ -126,7 +163,7 @@ class FakeTrace:
 
 @pytest.fixture
 def watch(monkeypatch, tmp_path):
-    FakeTrace.streams, FakeTrace.pid_error = [], None
+    FakeTrace.streams, FakeTrace.pid_error, FakeTrace.accept = [], None, True
     FakeTrace.pids = {"68": {"ProcessName": "backboardd"}, "70": {"ProcessName": "rapportd"}}
     monkeypatch.setattr(buttons, "OsTraceService", FakeTrace)
     monkeypatch.setattr(buttons, "CONNECT_GRACE_S", 0)
@@ -134,9 +171,10 @@ def watch(monkeypatch, tmp_path):
     record = tmp_path / "remote.plist"
     record.touch()
     rsd = SimpleNamespace(peer_info={"Services": {FakeTrace.RSD_SERVICE_NAME: {}}})
-    tunnel = SimpleNamespace(rsd=rsd, aopen=AsyncMock(return_value=rsd))
+    tunnel = SimpleNamespace(rsd=rsd)
     observer = SimpleNamespace(
         tunnel=tunnel, record=record, busy=asyncio.Lock(), close_channels=AsyncMock(), pairing=False,
+        open_tunnel=AsyncMock(return_value=rsd),
     )
     observer.pairing_active = lambda: observer.pairing
     events = []
@@ -175,7 +213,7 @@ async def test_watch_restarts_after_a_channel_reset_and_reads_the_pid_again(watc
         await until(lambda: len(FakeTrace.streams) == 2)
         assert FakeTrace.streams[1].pid == 91
         await until(lambda: [e["state"] for e in events if e["event"] == "buttons"] == ["active", "unavailable", "active"])
-        assert events[1]["reason"] == "ConnectionResetError"
+        assert events[1]["reason"] == "stream_failed"
         FakeTrace.streams[1].lines.put_nowait(entry(LEFT))
         await until(lambda: events[-1].get("key") == "left")
         # The watch never closes a tunnel that requests may be using.
@@ -203,24 +241,55 @@ async def test_watch_probes_liveness_without_log_traffic(watch, monkeypatch):
         await watch.stop()
 
 
-@pytest.mark.parametrize("case,reason", [("unpaired", "screen_not_paired"), ("pairing", "pairing_in_progress"),
-                                        ("no_service", "service_missing"), ("no_process", "process_not_found")])
-async def test_watch_reports_why_it_cannot_run(watch, case, reason):
+class ScreenPairingInvalid(Exception):
+    pass
+
+
+async def hang():
+    await asyncio.sleep(5)
+
+
+async def refused(self, pid, stream_flags):
+    raise ConnectionError("The device refused to start the log stream")
+    yield  # An async generator, like OsTraceService.syslog.
+
+
+@pytest.mark.parametrize("case,reason", [
+    ("unpaired", "screen_not_paired"), ("pairing", "pairing_in_progress"), ("no_service", "service_missing"),
+    ("no_process", "process_not_found"), ("unreachable", "tv_unreachable"), ("slow", "tv_unreachable"),
+    ("rejected", "screen_pairing_invalid"), ("refused", "stream_failed"), ("silent", "stream_failed"),
+])
+async def test_watch_reports_why_it_cannot_run(watch, monkeypatch, case, reason):
     watch, observer, events = watch
     if case == "unpaired":
         observer.record.unlink()
     elif case == "pairing":
         observer.pairing = True
     elif case == "no_service":
-        observer.tunnel.aopen.return_value.peer_info["Services"].clear()
-    else:
+        observer.open_tunnel.return_value.peer_info["Services"].clear()
+    elif case == "no_process":
         FakeTrace.pids = {}
+    elif case == "unreachable":
+        observer.open_tunnel.side_effect = ConnectionError("no route")
+    elif case == "slow":
+        monkeypatch.setattr(buttons, "OPEN_TIMEOUT_S", 0.02)
+        observer.open_tunnel.side_effect = hang
+    elif case == "rejected":
+        observer.open_tunnel.side_effect = ScreenPairingInvalid()
+    elif case == "refused":
+        FakeTrace.pid_error = None
+        monkeypatch.setattr(FakeTrace, "syslog", refused)
+    else:
+        # The device never answers the stream request. The watch must not report "active".
+        FakeTrace.accept = False
+        monkeypatch.setattr(buttons, "ESTABLISH_TIMEOUT_S", 0.05)
     watch.start()
     try:
         await until(lambda: events)
+        await asyncio.sleep(0.05)
         assert events == [{"event": "buttons", "state": "unavailable", "reason": reason}]
         if case in ("unpaired", "pairing"):
-            observer.tunnel.aopen.assert_not_awaited()
+            observer.open_tunnel.assert_not_awaited()
     finally:
         await watch.stop()
 
@@ -257,6 +326,153 @@ async def test_observer_requests_work_while_the_watch_fails(monkeypatch, tmp_pat
         await observer.close()
 
 
+# --- Tunnel sharing with the real pymobiledevice3 lifecycle ------------------
+
+
+@pytest.fixture
+def real_tunnel(monkeypatch, tmp_path):
+    """An Observer on the real UserspaceRsdTunnel. Only the network parts are replaced."""
+    import contextlib
+
+    import pymobiledevice3.remote.userspace_tunnel as userspace
+    from pymobiledevice3.services.accessibilityaudit import AccessibilityAudit
+    from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
+
+    for key, value in {"ATV_BRIDGE_HOST": "192.0.2.1", "ATV_CONTROLLER_ID": "test", "ATV_BRIDGE_DATA": str(tmp_path)}.items():
+        monkeypatch.setenv(key, value)
+    link = SimpleNamespace(handshake=0.2, connects=0, hang=False)
+
+    class Service:
+        async def close(self):
+            pass
+
+        @contextlib.asynccontextmanager
+        async def start_tcp_tunnel(self):
+            link.connects += 1
+            await asyncio.sleep(3600 if link.hang else link.handshake)
+            tun = SimpleNamespace(set_peer=lambda address: None)
+            yield SimpleNamespace(client=SimpleNamespace(tun=tun), address="fd00::1", port=1, auxiliary_metadata={})
+
+    class Dial:
+        def __init__(self, *_):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def dial(self, *_):
+            pass
+
+    class Rsd:
+        peer_info = {"Services": {name: {} for name in (
+            FakeTrace.RSD_SERVICE_NAME, DvtProvider.RSD_SERVICE_NAME, AccessibilityAudit.RSD_SERVICE_NAME)}}
+
+        def __init__(self, *_, **__):
+            pass
+
+        async def connect(self):
+            pass
+
+        async def close(self):
+            pass
+
+    async def never(self, client):
+        await asyncio.Event().wait()
+
+    async def provider(self):
+        return SimpleNamespace(service=Service(), lockdown=None)
+
+    monkeypatch.setattr(userspace, "UserspaceDialPlane", Dial)
+    monkeypatch.setattr(userspace, "RemoteServiceDiscoveryService", Rsd)
+    monkeypatch.setattr(userspace.UserspaceRsdTunnel, "_watch_transport_closed", never)
+    monkeypatch.setattr(observer_module.Observer, "provider", provider)
+    FakeTrace.streams, FakeTrace.pid_error, FakeTrace.accept = [], None, True
+    FakeTrace.pids = {"68": {"ProcessName": "backboardd"}}
+    monkeypatch.setattr(buttons, "OsTraceService", FakeTrace)
+    monkeypatch.setattr(buttons, "RETRY_MIN_S", 0.01)
+    events = []
+    monkeypatch.setattr(observer_module, "emit", events.append)
+    observer = observer_module.Observer()
+    observer.record.touch()
+    return observer, link, events
+
+
+async def test_two_plain_opens_collide_in_pymobiledevice3(real_tunnel):
+    """The defect that open_tunnel() prevents: a second aopen() during the first one raises."""
+    observer, link, _ = real_tunnel
+    try:
+        first = asyncio.create_task(observer.tunnel.aopen())
+        await asyncio.sleep(0.05)
+        with pytest.raises(Exception, match="already active"):
+            await observer.tunnel.aopen()
+        await first
+    finally:
+        await observer.close()
+
+
+async def test_watch_and_requests_share_one_tunnel_open(real_tunnel):
+    observer, link, events = real_tunnel
+    try:
+        # The watch starts the connect. Requests arrive while it runs.
+        assert await observer.call({"method": "buttons_start"}) == {}
+        await asyncio.sleep(0.05)
+        assert link.connects == 1 and observer.tunnel.rsd is None
+        started = time.monotonic()
+        results = await asyncio.gather(
+            observer.call({"method": "health", "verify": True}),
+            observer.open_tunnel(),
+            observer.open_tunnel(),
+        )
+        # They joined the running connect. Nobody failed and nobody connected again.
+        assert results[0] == {"paired": True, "tunnel": True} and results[1] is results[2] is observer.tunnel.rsd
+        assert link.connects == 1 and time.monotonic() - started < link.handshake + 0.2
+        await until(lambda: {"event": "buttons", "state": "active"} in events)
+        # After a channel reset both sides reopen through the same path.
+        await observer.close_channels()
+        assert observer.tunnel.rsd is None
+        FakeTrace.streams[0].lines.put_nowait(ConnectionResetError())  # A closed tunnel ends the stream.
+        await asyncio.sleep(0.03)  # The watch is reconnecting now.
+        assert await observer.call({"method": "health", "verify": True}) == {"paired": True, "tunnel": True}
+        await until(lambda: len(FakeTrace.streams) == 2 and events[-1] == {"event": "buttons", "state": "active"})
+        assert link.connects == 2
+    finally:
+        await observer.close()
+    assert observer.tunnel.rsd is None
+
+
+async def test_slow_watch_connect_does_not_hold_requests_or_the_tunnel(real_tunnel, monkeypatch):
+    """With an unreachable TV the watch gives up fast and its connect never blocks a close."""
+    observer, link, events = real_tunnel
+    link.hang = True
+    monkeypatch.setattr(buttons, "OPEN_TIMEOUT_S", 0.3)
+    try:
+        await observer.call({"method": "buttons_start"})
+        await asyncio.sleep(0.05)
+        # A request fails by its own deadline, not the watch's.
+        started = time.monotonic()
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.05):
+                await observer.open_tunnel()
+        # A close does not wait for the watch's connect.
+        await observer.close_channels()
+        assert time.monotonic() - started < 0.25
+        # The watch survives the cancelled connect, reports it and tries again.
+        await until(lambda: {"event": "buttons", "state": "unavailable", "reason": "tv_unreachable"} in events)
+        await until(lambda: link.connects >= 2)
+        assert not observer.buttons.task.done()
+        # When nobody waits any more, the connect is cancelled and the tunnel is free again.
+        await observer.buttons.stop()
+        await asyncio.sleep(0.01)
+        assert observer.opening[0].done()
+        link.hang = False
+        assert await observer.call({"method": "health", "verify": True}) == {"paired": True, "tunnel": True}
+    finally:
+        await observer.close()
+
+
 # --- Pipe demux ------------------------------------------------------------
 
 SCRIPT = """import json, sys
@@ -269,6 +485,32 @@ for line in sys.stdin:
     print(json.dumps({"ok": True, "method": method}), flush=True)
     print(json.dumps({"event": "button", "key": "select"}), flush=True)
 """
+
+
+async def test_a_stray_output_line_does_not_stall_later_requests(tmp_path):
+    script = """import json, sys
+for line in sys.stdin:
+    method = json.loads(line)["method"]
+    if method == "garbled":
+        print("not json", flush=True)
+        continue
+    print(json.dumps({"ok": True, "method": method}), flush=True)
+    print("a stray line while idle", flush=True)
+    print("[1, 2]", flush=True)
+"""
+    client = ObserverClient("192.0.2.1", State(tmp_path), [sys.executable, "-c", script])
+    try:
+        assert (await client.call("first"))["ok"]
+        await asyncio.sleep(0.2)
+        started = time.monotonic()
+        assert (await client.call("second"))["method"] == "second"
+        # An unreadable response fails its request at once, not after the 35 s deadline.
+        with pytest.raises(Fault) as failure:
+            await client.call("garbled")
+        assert failure.value.code == "observer_unavailable" and time.monotonic() - started < 5
+        assert (await client.call("third"))["method"] == "third"
+    finally:
+        await client.close()
 
 
 async def test_client_separates_events_from_responses(tmp_path):
@@ -436,6 +678,8 @@ async def test_show_reports_remote_input(remote):
 async def test_show_succeeds_when_remote_input_cannot_start(remote, case, reason):
     service, observer, control = remote
     present_as(service, "play_url" if case == "video" else "mirror")
+    if case == "video":
+        service.operations.presenter = SimpleNamespace(mode="play_url", stop=AsyncMock())
     if case == "unpaired":
         observer.failure = Fault("pairing_required", "Remote Pairing is required.", "Pair the observer.")
     elif case == "crash":
@@ -447,7 +691,7 @@ async def test_show_succeeds_when_remote_input_cannot_start(remote, case, reason
     assert result["data"]["remote"] == {"mode": "keys", "state": "unavailable", "reason": reason}
     assert result["screen"]["presenting"]["remote"]["reason"] == reason
     if case == "video":
-        await until(lambda: observer.count("buttons_stop") == observer.count("buttons_start"))
+        assert observer.calls.count("buttons_start") == 0
 
 
 async def test_show_does_not_wait_long_for_a_slow_watch(remote, monkeypatch):
@@ -462,10 +706,37 @@ async def test_show_does_not_wait_long_for_a_slow_watch(remote, monkeypatch):
 
 async def test_video_only_bridge_never_starts_the_watch(remote):
     service, observer, control = remote
-    service.operations.sender = SimpleNamespace(mode="play_url")
+    service.operations.presenter = SimpleNamespace(mode="play_url")
     await service.stage.show("a", "/c/a/index.html", remote="keys")
     await asyncio.sleep(0.02)
     assert observer.calls == [] and control.status()["reason"] == "not_mirrored"
+
+
+@pytest.mark.parametrize("case,reason", [("recording", "not_mirrored"), ("failed", "mirror_failed")])
+async def test_watch_stops_when_the_mirror_falls_back_or_fails(remote, caplog, case, reason):
+    """After the show, auto mode can fall back to a recording, or the mirror can fail for good."""
+    service, observer, control = remote
+    mirror = SimpleNamespace(mode="mirror", started=True, status=lambda: {"ok": True})
+    presenter = service.operations.presenter = SimpleNamespace(mode="auto", active=mirror, stop=AsyncMock())
+    control.interaction.binding = AsyncMock(side_effect=AssertionError("no dispatch without a mirror"))
+    await service.stage.show("a", "/c/a/index.html", remote="keys")
+    await until(lambda: control.state == "active")
+    assert control.wanted()
+    if case == "recording":
+        presenter.active = SimpleNamespace(mode="play_url")
+    else:
+        mirror.status = lambda: {"ok": False, "error": {"code": "sender_failed"}}
+    # Senders announce every status change.
+    service.operations.sender.events.emit({"ok": True})
+    await until(lambda: observer.count("buttons_stop") == 1)
+    assert control.status() == {"mode": "keys", "state": "unavailable", "reason": reason, "presses": 0, "last": None}
+    observer.emit({"event": "button", "key": "left"})
+    await asyncio.sleep(0.02)
+    assert control.presses == 0 and control.queue.empty() and "not delivered" not in caplog.text
+    # The mirror comes back.
+    presenter.active = SimpleNamespace(mode="mirror", started=True)
+    service.operations.sender.events.emit({"ok": True})
+    await until(lambda: observer.count("buttons_start") == 2 and control.status()["state"] == "active")
 
 
 def test_show_schema_accepts_the_remote_option():
@@ -533,8 +804,8 @@ async def test_forwarding_needs_no_tool_lock_and_survives_a_lost_key(remote):
     control.interaction.binding = AsyncMock(side_effect=[failure, (frame, frame.url, False), (frame, frame.url, False)])
     await service.stage.show("a", "/c/a/index.html", remote="keys")
     await until(lambda: control.state == "active")
-    # tv_remote holds the tool lock and a screen read holds the observer lock.
-    async with service.tools.lock, service.observer.lock:
+    # tv_remote holds the tool lock for seconds.
+    async with service.tools.lock:
         for key in ("left", "right", "select"):
             observer.emit({"event": "button", "key": key, "received": time.time(), "device_time": time.time()})
         await until(lambda: frame.page.keyboard.press.await_count == 2)
@@ -542,6 +813,52 @@ async def test_forwarding_needs_no_tool_lock_and_survives_a_lost_key(remote):
     assert control.presses == 3 and control.status()["last"]["key"] == "select"
     observer.emit({"event": "button", "key": "home"})
     assert control.presses == 3
+
+
+EVENT_SCRIPT = """import json, sys, threading, time
+def press():
+    time.sleep(0.3)
+    print(json.dumps({"event": "button", "key": "left"}), flush=True)
+for line in sys.stdin:
+    if json.loads(line)["method"] == "buttons_start":
+        print(json.dumps({"event": "buttons", "state": "active"}), flush=True)
+        threading.Thread(target=press, daemon=True).start()
+    print(json.dumps({"ok": True}), flush=True)
+"""
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+async def test_forwarding_does_not_wait_for_the_observer_request_lock(service, tmp_path, wrapped):
+    """A screen read holds the observer lock for seconds. The event pipe must stay independent."""
+    from atv_bridge_app.observer import ReceiverObserver
+
+    client = ObserverClient("192.0.2.1", State(tmp_path), [sys.executable, "-c", EVENT_SCRIPT])
+    observer = client
+    if wrapped:
+        # The production wrapper has its own lock on top of the client's.
+        service.state.receiver = lambda kind: {"path": "x"}
+        observer = ReceiverObserver(service.engine.adapter.resolver, service.state)
+        observer.transport = client
+    service.operations.observer = observer
+    service.operations.presenter = SimpleNamespace(mode="mirror", started=True)
+    control = service.tools.remote_input
+    frame = fake_frame()
+    control.interaction.binding = AsyncMock(return_value=(frame, frame.url, False))
+    try:
+        await service.stage.show("a", "/c/a/index.html", remote="keys")
+        await until(lambda: control.state == "active")
+        locks = [client.lock, service.tools.lock] + ([observer.lock] if wrapped else [])
+        for lock in locks:
+            await lock.acquire()
+        try:
+            await until(lambda: frame.page.keyboard.press.await_count == 1)
+            assert all(lock.locked() for lock in locks)
+        finally:
+            for lock in locks:
+                lock.release()
+    finally:
+        await control.close()
+        await client.close()
 
 
 async def test_queued_keys_expire(remote, monkeypatch):

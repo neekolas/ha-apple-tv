@@ -117,7 +117,7 @@ For example, `tv_show {"url":"https://example.org/","remote":"focus"}`.
 
 The show result reports `data.remote` with `mode`, `state` and `reason`. The page still shows when remote input cannot start. Later results report `screen.presenting.remote` with `state`, the number of `presses` and the `last` key with its time.
 
-Remote input needs screen pairing. The observer reads presses from the TV's log on its existing connection while such a page is shown. It stops when the page is dismissed or replaced. If the connection drops, the bridge reconnects and reports `state: "starting"` until it is back. A recorded presentation (`data.transport` equal to `"video"`) cannot receive keys and reports `reason: "not_mirrored"`.
+Remote input needs screen pairing. The observer reads presses from the TV's log on its existing connection while such a page is shown. It stops when the page is dismissed or replaced. If the connection to the TV drops, the bridge reports `state: "unavailable"` with a `reason` such as `stream_failed` or `tv_unreachable`, and retries until the state is `active` again. If the observer process restarts, the state is `starting` until the watch runs again. A recorded presentation (`data.transport` equal to `"video"`) cannot receive keys and reports `reason: "not_mirrored"`. The watch also stops when a mirror fails or falls back to a recording. [All reason values](../docs/mcp-api.md#remote-input)
 
 Limits:
 

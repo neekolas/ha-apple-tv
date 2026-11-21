@@ -93,12 +93,22 @@ class ObserverClient:
         """Split stdout into event lines and the response to the single request in flight."""
         try:
             while line := await proc.stdout.readline():
-                message = json.loads(line)
+                try:
+                    message = json.loads(line)
+                    if not isinstance(message, dict):
+                        raise ValueError("Not a JSON object")
+                except ValueError:
+                    # Keep reading, so later requests still get their responses.
+                    # A request in flight fails now instead of waiting for its deadline.
+                    observer_log.warning("Observer wrote a line that is not a JSON object")
+                    if self.pending and not self.pending.done():
+                        self.pending.set_exception(ValueError("Unreadable observer response"))
+                    continue
                 if "event" in message:
                     self._emit(message)
                 elif self.pending and not self.pending.done():
                     self.pending.set_result(message)
-        except Exception:  # noqa: BLE001 - Unreadable output ends the request below.
+        except Exception:  # noqa: BLE001 - A broken pipe ends the request below.
             observer_log.warning("Observer output could not be read")
         finally:
             if self.pending and not self.pending.done():

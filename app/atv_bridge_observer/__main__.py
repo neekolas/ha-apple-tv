@@ -148,7 +148,38 @@ class Observer:
         self.pairing = False
         # Held for each request. The button watch takes it before it closes a dead tunnel.
         self.busy = asyncio.Lock()
+        self.opening = None
         self.buttons = ButtonWatch(self, emit)
+
+    async def open_tunnel(self):
+        """Open the tunnel once for every caller.
+
+        pymobiledevice3 11.61 raises if a second aopen() starts while the first is running.
+        Requests and the button watch therefore share one open task. A caller that
+        arrives during a connect joins it and never waits for a connect of its own.
+        """
+        # aopen() returns at once when the tunnel is already open.
+        if self.opening is None or self.opening[0].done():
+            self.opening = [asyncio.create_task(self.tunnel.aopen()), 0]  # The task and its waiters.
+        opening = self.opening
+        task = opening[0]
+        opening[1] += 1
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.cancelled() and not asyncio.current_task().cancelling():
+                raise ConnectionError("The tunnel open was cancelled") from None
+            raise
+        finally:
+            opening[1] -= 1
+            # Nobody wants this connect any more. Do not let it hold the tunnel.
+            if not opening[1] and not task.done():
+                task.cancel()
+
+    async def cancel_open(self):
+        if self.opening and not self.opening[0].done():
+            self.opening[0].cancel()
+            await asyncio.gather(self.opening[0], return_exceptions=True)
 
     def pairing_active(self):
         return self.pairing or bool(self.task and not self.task.done())
@@ -279,10 +310,12 @@ class Observer:
                 audit, self.audit = self.audit, None
                 await audit.close()
         finally:
+            # A close must not wait for a connect that another caller started.
+            await self.cancel_open()
             await self.tunnel.aclose()
 
     async def _read_ax_once(self, method, maximum):
-        rsd = await self.tunnel.aopen()
+        rsd = await self.open_tunnel()
         services = rsd.peer_info.get("Services", {})
         if self.audit is None and (
             method == "ax_running_apps" or accessibility.SERVICE not in services
@@ -343,7 +376,7 @@ class Observer:
             if not self.record.is_file():
                 raise ScreenPairingInvalid("Saved screen pairing record is missing")
             async with asyncio.timeout(16):
-                rsd = await self.tunnel.aopen()
+                rsd = await self.open_tunnel()
             services = rsd.peer_info.get("Services", {})
             if DvtProvider.RSD_SERVICE_NAME not in services or not (
                 accessibility.SERVICE in services or AccessibilityAudit.RSD_SERVICE_NAME in services
@@ -371,7 +404,7 @@ class Observer:
             width = int(req["max_width"])
             try:
                 async with asyncio.timeout(25):
-                    rsd = await self.tunnel.aopen()
+                    rsd = await self.open_tunnel()
                     async with DvtProvider(rsd) as dvt:
                         data = await capture_frame(dvt)
                 with Image.open(io.BytesIO(data)) as img:
