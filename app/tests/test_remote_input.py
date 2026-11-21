@@ -478,6 +478,41 @@ def test_fast_flick_adds_momentum_arrows():
     assert recognize(stroke((0.5, 0.5), (0.8, 0.5), 0.03)) == (["right"], None)
 
 
+def test_a_finger_that_rests_before_lifting_does_not_flick():
+    """Reviewer case: a fast slide, a rest with no log lines, then a lift fired momentum arrows."""
+    flick = stroke((0.03, 0.5), (0.97, 0.5), 0.045)
+    moves, lift = flick[:-1], flick[-1][1]
+    assert recognize(moves + [(moves[-1][0] + 0.03, lift)])[1] == ("right", touch.momentum_delays(3))
+    for rest in (0.06, 0.341, 2.0):
+        assert recognize(moves + [(moves[-1][0] + rest, lift)]) == (["right"], None)
+    # Repeated lines at the same position during the rest do not count as movement.
+    still = [(moves[-1][0] + 0.015 * i, touch_line("move", 0.97, 0.5)) for i in range(1, 30)]
+    assert recognize(moves + still + [(still[-1][0] + 0.001, lift)]) == (["right"], None)
+    # A short flick after a rest at the start still counts.
+    assert recognize([(0.0, touch_line("down", 0.5, 0.5))] + [(at + 1.0, m) for at, m in stroke((0.5, 0.5), (0.8, 0.5), 0.03)[1:]]) == (["right"], None)
+
+
+def test_a_second_finger_is_ignored():
+    recognizer = touch.TouchRecognizer()
+    first, second = stroke((0.03, 0.5), (0.97, 0.5), 0.045), stroke((0.03, 0.6), (0.97, 0.6), 0.045, path=2)
+    lines = [line for pair in zip(first, second) for line in pair]
+    keys, momenta, downs = [], [], 0
+    for at, message in lines:
+        gesture = recognizer.touch(message, at)
+        keys += gesture.keys
+        downs += gesture.touch_down
+        momenta += [gesture.momentum] if gesture.momentum else []
+    # One finger's steps and one momentum plan. Each touch-down still cancels older momentum.
+    assert keys == ["right"] and momenta == [("right", touch.momentum_delays(3))] and downs == 2
+    assert recognizer.contacts == {}
+    # A lost lift-off line must not block later touches: a silent contact gives way.
+    recognize(stroke((0.1, 0.5), (0.2, 0.5), 0.05, at=0.5)[:-1], recognizer)
+    assert recognize(stroke((0.9, 0.5), (0.1, 0.5), 0.2, at=0.6, path=2), recognizer) == ([], None)
+    assert recognize(stroke((0.9, 0.5), (0.1, 0.5), 0.2, at=3.0, path=2), recognizer) == (["left"], None)
+    # The second finger can become the tracked one after the first has lifted.
+    assert recognize(stroke((0.9, 0.5), (0.1, 0.5), 0.2, at=5.0, path=2), recognizer) == (["left"], None)
+
+
 def test_click_during_a_contact_cancels_its_swipe():
     recognizer = touch.TouchRecognizer()
     lines = stroke((0.05, 0.5), (0.95, 0.5), 0.045)
@@ -516,12 +551,20 @@ async def test_watch_sends_swipes_and_momentum_and_a_new_touch_cancels_it(watch,
         feed([(0.0, touch_line("down", 0.5, 0.5, path=2))], base + 1.06)
         await asyncio.sleep(0.3)
         assert keys() == [("right", "swipe")]
+        # A new momentum plan replaces a running one. The old arrows stop.
+        del events[:]
+        watch.momentum = asyncio.create_task(watch._glide("left", [0.05, 0.1]))
+        old = watch.momentum
+        feed(flick, base + 2)
+        await until(lambda: len(keys()) == 4)
+        await asyncio.sleep(0.15)
+        assert old.cancelled() and keys() == [("right", "swipe")] + [("right", "momentum")] * 3
         # A click during a contact: Select goes through, the swipe does not.
         del events[:]
-        feed(flick[:2], base + 2)
+        feed(flick[:2], base + 3)
         FakeTrace.streams[0].lines.put_nowait(entry(
-            "Select page:0xC usage:0x80 downEvent:1 source:verifiedExternalAccessory senderID:1 down", device=base + 2.02))
-        feed(flick[2:], base + 2)
+            "Select page:0xC usage:0x80 downEvent:1 source:verifiedExternalAccessory senderID:1 down", device=base + 3.02))
+        feed(flick[2:], base + 3)
         await until(lambda: [e["key"] for e in events if e["event"] == "button"] == ["select"])
         await asyncio.sleep(0.3)
         assert [e["key"] for e in events if e["event"] == "button"] == ["select"]

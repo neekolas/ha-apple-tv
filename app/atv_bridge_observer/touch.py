@@ -31,11 +31,13 @@ STEP_DISTANCE = 0.4  # Finger travel on the dominant axis for one arrow.
 AXIS_DOMINANCE = 1.5  # The dominant axis must move this many times farther than the other.
 REVERSAL_DISTANCE = 0.08  # Moving back this far measures the next step from the turning point.
 LIFT_WINDOW_S = 0.07  # Lift-off velocity uses the move samples of this last stretch.
+LIFT_REST_MAX_S = 0.05  # A finger that rested longer than this before lifting did not flick.
 FLICK_V_MIN = 8.0  # Lift-off speed, in pad units per second, where momentum starts.
 FLICK_V_PER_STEP = 4.0  # Each further this much speed adds one momentum arrow.
 MOMENTUM_MAX_EXTRA = 4  # Most momentum arrows after one flick.
 MOMENTUM_FIRST_GAP_S = 0.04  # Wait before the first momentum arrow.
 MOMENTUM_LAST_GAP_S = 0.12  # The gaps grow to this, so the motion looks like it slows down.
+LOST_CONTACT_S = 0.5  # A tracked finger that logged nothing for this long gives way to a new touch.
 CLICK_GUARD_S = 0.3  # A contact that starts this soon after a button press belongs to the click.
 
 AXES = (("left", "right"), ("up", "down"))
@@ -73,6 +75,8 @@ class Contact:
         self.steps = 0
         self.clicked = clicked
         self.samples = deque(maxlen=16)  # (device time, x, y) of the last moves.
+        self.seen_at = None  # Device time of the last line for this contact.
+        self.moved_at = None  # Device time of the last change of position. A still finger logs nothing.
 
 
 class TouchRecognizer:
@@ -89,7 +93,7 @@ class TouchRecognizer:
     """
 
     def __init__(self):
-        self.contacts = {}
+        self.contacts = {}  # At most one entry: the first finger. More fingers are ignored.
         self.button_at = float("-inf")
 
     def reset(self):
@@ -112,15 +116,22 @@ class TouchRecognizer:
         for path, x, y, kind in PATH.findall(found[2]):
             point = (float(x), float(y))
             if kind == "down":
-                self.contacts[path] = Contact(point, at - self.button_at < CLICK_GUARD_S)
                 gesture.touch_down = True
+                # Track one finger. A second finger would double every step.
+                # A lift-off line can be lost, so a silent contact must not block the next touch.
+                if any(path != other and at - contact.seen_at < LOST_CONTACT_S for other, contact in self.contacts.items()):
+                    continue
+                self.contacts = {path: Contact(point, at - self.button_at < CLICK_GUARD_S)}
             contact = self.contacts.get(path)
             if contact is None:
                 continue
             if kind in ("up", "range (out)"):
                 del self.contacts[path]
-                self._lift(contact, gesture)
+                self._lift(contact, gesture, at)
             else:
+                contact.seen_at = at
+                if not contact.samples or contact.samples[-1][1:] != point:
+                    contact.moved_at = at
                 contact.samples.append((at, *point))
                 if key := self._step(contact, point):
                     gesture.keys.append(key)
@@ -149,8 +160,11 @@ class TouchRecognizer:
         contact.anchor, contact.lead = list(point), list(point)
         return AXES[axis][delta[axis] > 0]
 
-    def _lift(self, contact, gesture):
+    def _lift(self, contact, gesture, at):
         if contact.clicked or len(contact.samples) < 2:
+            return
+        # Velocity from old samples says nothing after the finger stopped and rested.
+        if at - contact.moved_at > LIFT_REST_MAX_S:
             return
         last = contact.samples[-1]
         window = [sample for sample in contact.samples if last[0] - sample[0] <= LIFT_WINDOW_S]

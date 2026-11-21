@@ -165,7 +165,7 @@ What each remote action becomes:
 |---|---|---|---|
 | Clickpad Siri Remote (2nd generation and later) | Click on the ring: left, right, up, down | `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` | Verified on tvOS 27.2 |
 | Clickpad Siri Remote | Click in the center | `Enter` | Verified on tvOS 27.2 |
-| Clickpad Siri Remote | Swipe on the touch surface | Arrows, as on the touch remote | Not tested |
+| Clickpad Siri Remote | Swipe on the touch surface | Arrows, as on the touch remote | Active, untested |
 | Touch-surface Siri Remote (1st generation) | Swipe | One arrow for each 0.4 of the pad that the finger travels | Recognizer checked against a real capture on tvOS 26.6.1. Not yet tested end to end. |
 | Touch-surface Siri Remote | Fast flick | Extra arrows after lift-off (momentum), up to 4. A new touch stops them. | Not tested with a real flick |
 | Touch-surface Siri Remote | Click anywhere on the surface | `Enter` | Verified on tvOS 26.6.1 |

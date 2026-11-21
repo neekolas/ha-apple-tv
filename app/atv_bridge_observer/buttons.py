@@ -55,8 +55,8 @@ def match_press(process, category, message):
 
 # Button lines are NOTICE level and need only PAYLOAD. Touch lines are DEBUG level.
 # Never add HISTORICAL: it replays old log lines as new presses.
-# Volume with the backboardd pid filter, from a full capture: under 1 line/s when idle,
-# about 60 lines/s during a touch, up to about 200 lines/s during a drag.
+# Volume of backboardd lines in a full-debug capture: under 1 line/s when idle, about
+# 65 lines/s while a finger is on the remote, and one burst of 513 lines when the remote woke.
 STREAM_FLAGS = int(OsActivityStreamFlag.PAYLOAD | OsActivityStreamFlag.DEBUG)
 STALE_S = 2.0
 CONNECT_GRACE_S = 1.0
@@ -298,6 +298,7 @@ class ButtonWatch:
         for key in gesture.keys:
             self.emit({"event": "button", "key": key, "device_time": device, "received": now, "gesture": "swipe"})
         if gesture.momentum:
+            self._cancel_momentum()
             self.momentum = asyncio.create_task(self._glide(*gesture.momentum))
 
     async def _glide(self, key, delays):

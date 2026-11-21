@@ -125,7 +125,7 @@ What each remote action becomes:
 |---|---|---|---|
 | Clickpad Siri Remote (2nd generation and later) | Click on the ring: left, right, up, down | `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` | Verified on tvOS 27.2 |
 | Clickpad Siri Remote | Click in the center | `Enter` | Verified on tvOS 27.2 |
-| Clickpad Siri Remote | Swipe on the touch surface | Arrows, as on the touch remote | Not tested |
+| Clickpad Siri Remote | Swipe on the touch surface | Arrows, as on the touch remote | Active, untested |
 | Touch-surface Siri Remote (1st generation) | Swipe | One arrow for each 0.4 of the pad that the finger travels | Recognizer checked against a real capture on tvOS 26.6.1. Not yet tested end to end. |
 | Touch-surface Siri Remote | Fast flick | Extra arrows after lift-off (momentum), up to 4. A new touch stops them. | Not tested with a real flick |
 | Touch-surface Siri Remote | Click anywhere on the surface | `Enter` | Verified on tvOS 26.6.1 |
@@ -139,7 +139,7 @@ A click during a touch sends only the key of the click, never an extra arrow. Th
 Notes:
 
 - Presses sent with `tv_remote` during the page are forwarded to the page too.
-- Swipes are read from the TV's debug log. While a finger is on the remote, the TV sends the bridge about 60 log lines per second. When nobody touches the remote, it sends less than one.
+- Swipes are read from the TV's debug log. In a capture, the TV logged about 65 lines per second while a finger was on the remote, one burst of 513 lines when the remote woke, and less than one line per second otherwise.
 - Set the app's log level to `debug` to log each forwarded key with its delay, and button lines that the bridge did not recognize. One press on the physical remote then shows what the TV logs for it.
 
 ### Presentation mode
