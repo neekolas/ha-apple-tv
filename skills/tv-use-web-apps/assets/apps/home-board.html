@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Home board</title>
+<!-- Home board: a calm room display that stays up for hours. A large clock, the weather as a temperature
+     curve, the day's agenda as a timeline, notes, and one quiet row of home status. The clock and date come
+     from the page. Everything else arrives by patch. A section that changes fades in.
+
+     The app fetches nothing. Each section comes from one source that you read first:
+       weather <- the weather forecast   agenda <- today's calendar   notes <- reminders or the to-do list
+       status  <- home states: locks, doors, garage, temperature, appliances
+     A section you have not sent shows a pending phrase ("Forecast on its way", "Reading the calendar",
+     "Gathering notes", "Checking on the house"). Send real values only. If you cannot read a source, leave its
+     key out and send the others. Never send {}: it changes nothing, so app.apply refuses it. Never copy the
+     sample values in this comment or in SAMPLE: they are made up. Send {"demo":true} only when the user asks for a demo.
+
+     app.apply(patch) -> app.state(). Keys left out keep their value. A patch with one bad value throws and
+     changes nothing. null sets weather, agenda, notes or status back to pending. A field with ? is optional.
+       demo        {"demo":true}                            sample data, timed from the current hour (also ?demo in the URL)
+       title       {"title":"The Lake House"}               null brings back the greeting
+       timezone    {"timezone":"America/Chicago"}           IANA name; null uses the system zone
+       dim         {"dim":true}                             dims the board for the night; false undoes it
+       weather     {"weather":{"now":{"temp":48,"condition":"Partly cloudy","high":54,"low":41},"hours":[{"time":"9 PM","temp":46,"condition":"Cloudy"}],"unit":"F"}}
+                   now {temp?, condition?, high?, low?} merges field by field; a field set to null is cleared (temp
+                   null hides the big number). hours [{time, temp, condition?}] replaces; 6 show. unit "F" or "C".
+                   condition is plain words ("Rain") or an HA state ("rainy"); both show "Rain".
+       agenda      {"agenda":[{"time":"7:00 PM","title":"Family dinner","where":"Kitchen","now":true}]}
+                   [{time, title, where?, now?}] replaces the list. Today only. time is "8:15 PM" or "20:15".
+                   Mark the event on now, or else the next one, with "now": true. 4 rows show, from that one.
+       notes       {"notes":["Library books are due Friday"]}   replaces the list; 3 show; [] shows "Nothing to remember"
+       status      {"status":[{"label":"Front door","value":"Locked"},{"label":"Laundry","value":"Done","alert":true}]}
+                   [{label, value, alert?}] replaces the row; up to 5 show. alert is false unless sent. Use it for
+                   what needs doing (unlocked, open, done). The first alert goes first, in amber.
+       add_event   {"add_event":{"time":"8:15 PM","title":"Pick up dry cleaning"}}   adds one agenda item in time order
+       add_note    {"add_note":"Call Mom"}                  puts one note first
+       set_status  {"set_status":{"label":"Garage","value":"Open","alert":true}}   replaces the item with that label, or adds it, and puts it first
+       updated_at  {"updated_at":"2026-11-20T18:10:00Z"}     optional; leave it out unless the data was read earlier
+
+     Rules:
+       - add_event, add_note and set_status never make a copy. The same time and title, the same note, or the same
+         status label (any letter case) is there once. Sending the same patch twice is safe.
+       - Each section a patch changes is stamped with updated_at, or with now. Old data shows its age ("as of 6:10 PM",
+         or "as of Thu 11:10 PM" from before 4 AM today) after 30 minutes for weather and status, and after 6 hours
+         for agenda and notes.
+       - "tonight" and "this evening" mean PM. "this morning" means AM.
+       - When the user corrects themselves ("A... no, B"), send only B.
+
+     Voice turns:
+       "Put the home board up"         -> read all four sources, then send what you read in one patch, shaped like this
+                                          (the values come from your reads, not from here):
+         {"weather":{"now":{"temp":48,"condition":"Partly cloudy","high":54,"low":41},"unit":"F",
+                     "hours":[{"time":"8 PM","temp":47,"condition":"Cloudy"},{"time":"9 PM","temp":45,"condition":"Rain"}]},
+          "agenda":[{"time":"7:00 PM","title":"Family dinner","where":"Kitchen","now":true},{"time":"8:30 PM","title":"Call Grandma"}],
+          "notes":["Library books are due Friday","Water the fern"],
+          "status":[{"label":"Front door","value":"Locked"},{"label":"Laundry","value":"Done","alert":true}]}
+       "Show me a demo"                -> {"demo":true}
+       "It's raining now, 46 degrees"  -> {"weather":{"now":{"temp":46,"condition":"Rain"}}}
+       "Add dentist at 4:30 tomorrow... no, add 'Pick up dry cleaning' at 8:15 tonight"
+                                       -> {"add_event":{"time":"8:15 PM","title":"Pick up dry cleaning"}}
+       "Remind me to call Mom"         -> {"add_note":"Call Mom"}
+       "Clear the reminders"           -> {"notes":[]}
+       "The laundry is done"           -> {"set_status":{"label":"Laundry","value":"Done","alert":true}}
+       "The garage is open"            -> {"set_status":{"label":"Garage","value":"Open","alert":true}}
+       "It's late, dim the board"      -> {"dim":true}           "Brighten it"  -> {"dim":false}
+
+     Script order: SAMPLE, state, helpers, chart(), SECTION (one HTML builder per data-slot), VIEWS.board,
+     value checks (str, num, bool, list, obj), PATCH, apply, window.app.
+     To add a patch key, for example "key":
+       1. A key line above with an example and what null does, and a voice turn.
+       2. state.key = null in the state object (null while unknown).
+       3. A PATCH handler named after the key. It checks the value with str(), num() or bool() and changes state only:
+            key(v) { state.key = v == null ? null : str(v, "key", '"an example"'); },
+          It may throw at any point: apply() then undoes the whole patch.
+       4. A value in SAMPLE, so {"demo":true} shows it. demo runs PATCH.key(SAMPLE.key) for every SAMPLE key.
+       5. Draw it in VIEWS.board, and hide it when null. 6. Report it in app.state(): key: state.key.
+     The head column is full. A new line under the date goes in #sub, which makes room for itself. In VIEWS.board:
+            $("sub").hidden = state.key == null; if (state.key != null) show($("sub"), esc(state.key));
+     Render with preview.py and check that blocks keep 32px between them. The board moves up to 3px against
+     burn-in, so content starts 84px from the sides and 64px from the top and bottom. -->
+<style>
+  /* Tokens. Three levels of light: --hi for the current item, --text for words, --soft for labels. */
+  @font-face { font-family: "Inter"; src: url(fonts/inter.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "Fraunces"; font-style: italic; src: url(fonts/fraunces-italic.woff2) format("woff2"); font-weight: 100 900; }
+  :root { --bg: #0a0d10; --ink: #0f1419; --hi: #dfe3e3; --text: #b8bfc2; --soft: #9da6ab; --rule: #242d34; --accent: #e0a96c;
+    --sans: "Inter", "Noto Sans", system-ui; --serif: "Fraunces", Georgia, "Noto Serif", system-ui; }
+
+  /* Layout */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
+  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0;
+    color: var(--text); font: 500 34px/1.3 var(--sans);
+    background: radial-gradient(1500px 950px at 20% 24%, #18212a, rgba(24, 33, 42, 0) 72%),
+      radial-gradient(1000px 520px at 22% 104%, rgba(224, 169, 108, .075), rgba(224, 169, 108, 0) 70%),
+      linear-gradient(160deg, #10161b, var(--bg)); }
+  /* The status line is a quiet sentence in the home row's place, not a pill */
+  #stage #tv-status { left: 84px; bottom: 80px; padding: 0; border-radius: 0; background: none; color: var(--soft);
+    font: italic 500 36px/1.2 var(--serif); }
+  .num { font-variant-numeric: tabular-nums; }
+  .it { font-family: var(--serif); font-style: italic; font-weight: 500; }
+  [data-lines] { display: block; overflow: hidden; overflow-wrap: anywhere; }
+
+  /* View: board */
+  #board { position: absolute; inset: 0; transition: opacity 300ms; }
+  #board.dim { opacity: .45; }
+  #board [hidden] { display: none !important; }
+  #board section { position: absolute; }
+  #board .label { display: flex; align-items: baseline; gap: 24px; height: 36px; margin: 0;
+    font-size: 28px; font-weight: 700; line-height: 36px; letter-spacing: .16em; text-transform: uppercase; color: var(--soft); }
+  /* The small words beside a label: "1 more", or the age of old data */
+  #board .x { font: italic 500 28px/36px var(--serif); letter-spacing: 0; text-transform: none; color: var(--soft);
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #board .x:empty { display: none; }
+
+  /* Head: greeting, the clock, the date */
+  #head { position: absolute; left: 84px; top: 64px; width: 1040px; }
+  #title { margin: 0; font-size: 56px; line-height: 64px; color: var(--soft); }
+  #title.long { font-size: 48px; }
+  #time { display: flex; align-items: baseline; gap: 26px; width: max-content; margin: 32px 0 0 -14px; color: #b4bcbf;
+    font-size: 320px; font-weight: 400; line-height: .8; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+  /* The colon: two squares as wide as the stems */
+  #hm b { display: inline-block; position: relative; top: -.165em; width: .088em; height: .088em; margin: 0 .07em 0 .115em;
+    background: currentColor; box-shadow: 0 -.31em 0 currentColor; opacity: .62; }
+  #ampm { font-size: 36px; font-weight: 600; letter-spacing: .12em; color: var(--soft); text-transform: uppercase; }
+  #date { margin: 32px 0 0; font-size: 44px; font-weight: 500; line-height: 1.2; color: var(--soft); }
+  #dow { color: var(--text); }
+  /* A spare line under the date for an extension (see the header). Only 39px is free above WEATHER,
+     so a shown #sub moves the clock and date up to keep a 32px gap. */
+  #sub { margin: 8px 0 0; font-size: 28px; line-height: 36px; color: var(--soft); }
+  #head:has(#sub:not([hidden])) #time { margin-top: 12px; }
+  #head:has(#sub:not([hidden])) #date { margin-top: 15px; }
+
+  /* Weather: the temperature now, and a curve across the coming hours */
+  #weather { left: 84px; top: 540px; width: 1000px; }
+  #weather [data-slot] { height: 304px; margin-top: 8px; }
+  .wx { display: grid; grid-template-columns: 250px 750px; height: 304px; }
+  .wx-now { padding-top: 26px; min-width: 0; }
+  .wx-temp { display: flex; align-items: flex-start; height: 112px; font-size: 112px; font-weight: 400; line-height: 1;
+    letter-spacing: -.045em; color: var(--hi); }
+  .wx[data-len="4"] .wx-temp { font-size: 92px; }
+  .wx[data-len="5"] .wx-temp { font-size: 76px; }
+  .wx-u { margin: .13em 0 0 10px; font-size: 30px; font-weight: 600; line-height: 1; letter-spacing: .04em; color: var(--soft); }
+  .wx-c { margin-top: 12px; font-size: 36px; line-height: 42px; color: var(--text); }
+  .wx-c.long { margin-top: 8px; font-size: 32px; line-height: 38px; }
+  /* High and low stay on one line. They may run past the column: the chart's axis starts at its first point */
+  .wx-hl { display: flex; flex-wrap: wrap; gap: 0 18px; width: 274px; margin-top: 10px; font-size: 28px; color: var(--soft); white-space: nowrap; }
+  .wx-g { display: block; width: 750px; height: 304px; overflow: visible; }
+  .wx-g text { text-anchor: middle; font-variant-numeric: tabular-nums; }
+  .wx-g .v { font: 600 32px var(--sans); fill: var(--hi); }
+  .wx-g .h { font: 500 28px var(--sans); fill: var(--soft); }
+  .wx-g .h.n { font-weight: 700; fill: var(--accent); }
+  .wx-g .a { font: italic 500 28px var(--serif); fill: var(--soft); }
+  /* wide: no temperature, the curve takes the width. solo: no curve, the temperature is large. */
+  .wx.wide, .wx.solo { grid-template-columns: 1fr; }
+  .wx.wide .wx-now, .wx.solo .wx-g, .wx.bare .wx-temp { display: none; }
+  .wx.wide .wx-g { width: 1000px; }
+  .wx.solo .wx-now { display: flex; align-items: center; gap: 56px; padding-top: 0; }
+  .wx.solo .wx-temp { height: auto; font-size: 208px; }
+  .wx.solo .wx-u { font-size: 40px; }
+  .wx.solo .wx-c { max-width: 640px; margin-top: 0; font-size: 56px; line-height: 64px; }
+  .wx.solo .wx-hl { width: auto; font-size: 32px; }
+
+  /* Agenda: a timeline. Times hang left of the rail; every title starts at x = 1340 */
+  #agenda { left: 1156px; top: 64px; width: 680px; }
+  #ag-top { display: flex; align-items: baseline; justify-content: space-between; height: 64px; margin: 0 0 2px; padding-left: 184px; }
+  #ag-h { margin: 0; font-size: 56px; line-height: 64px; color: var(--soft); }
+  /* "1 more later" over the age of old data: two short lines, the last one beside the heading */
+  #board #x-agenda { align-self: flex-end; margin-bottom: 7px; line-height: 30px; text-align: right; white-space: pre; }
+  .ag { list-style: none; margin: 0; padding: 0; }
+  .ag li { position: relative; display: grid; grid-template-columns: 124px 60px minmax(0, 1fr); align-items: center; height: 84px; }
+  .ag li::before { content: ""; position: absolute; left: 152.5px; top: 42px; width: 3px; height: 100%; background: var(--rule); }
+  .ag li.end::before { display: none; }
+  .ag .t { text-align: right; font-size: 28px; font-weight: 600; color: var(--soft); white-space: nowrap; }
+  .ag .nd { position: relative; justify-self: center; box-sizing: border-box; width: 20px; height: 20px; border-radius: 50%;
+    border: 4px solid #5d6970; background: var(--ink); }
+  .ag .what { min-width: 0; }
+  .ag .ti { font-size: 36px; line-height: 40px; }
+  .ag .wh { font-size: 28px; line-height: 36px; color: var(--soft); }
+  .ag .wh:empty { display: none; }
+  .ag.few li { height: 116px; }
+  .ag.few li::before { top: 58px; }
+  .ag.few .ti { font-size: 44px; line-height: 50px; }
+  .ag.few .t { font-size: 32px; }
+  .ag li.now { padding-bottom: 44px; }
+  .ag li.now .t, .ag li.now .ti { color: var(--hi); }
+  .ag li.now .ti { font-weight: 600; }
+  .ag li.now .nd { background: var(--hi); border-color: var(--hi); }
+  /* The now-line: an amber dot on the rail and a line that fades out. The one amber mark in the column */
+  .ag li.now::after { content: ""; position: absolute; left: 143px; bottom: 12px; width: 300px; height: 22px;
+    background: radial-gradient(circle at 11px 11px, var(--accent) 0 9px, rgba(224, 169, 108, 0) 10px),
+      linear-gradient(to right, var(--accent), rgba(224, 169, 108, 0)) 11px 9px / 100% 4px no-repeat; }
+  #agenda .empty { position: relative; margin: 132px 0 0 184px; font-size: 56px; line-height: 64px; color: var(--soft); }
+  #agenda .empty::before { content: ""; position: absolute; left: -31.5px; top: 4px; width: 3px; height: 56px; background: #33404a; }
+
+  /* Notes: set like handwriting. The dash hangs on the rail line */
+  #notes { left: 1156px; top: 540px; width: 680px; }
+  #notes .label { padding-left: 184px; justify-content: space-between; }
+  #notes [data-slot] { margin-top: 8px; }
+  .nt { list-style: none; margin: 0; padding: 0 0 0 184px; display: grid; gap: 10px; }
+  .nt li { position: relative; font-size: 38px; line-height: 46px; }
+  .nt li::before { content: "\2013"; position: absolute; left: -52px; top: 0; width: 44px; text-align: center; color: #6f7b81; }
+  #notes .empty { margin: 0 0 0 184px; font-size: 38px; line-height: 46px; color: var(--soft); }
+
+  /* Home status: one quiet row of glyphs and words. It gives way to the status line while the agent works */
+  #home { left: 84px; right: 84px; top: 940px; height: 76px; display: flex; align-items: center; gap: 60px; transition: opacity 250ms; }
+  #home [data-slot] { min-width: 0; }
+  #home [data-slot].tv-pending { flex: 1; }
+  /* The age of old data follows the last item, on the line of the labels */
+  #home:has(.hm) #x-status { align-self: flex-end; }
+  #board.busy #home { opacity: 0; }
+  .hm { list-style: none; margin: 0; padding: 0; height: 76px; display: flex; align-items: center; gap: 60px; }
+  .hm li { position: relative; flex: none; display: flex; align-items: center; gap: 18px; max-width: 420px; }
+  .hm .ic { flex: none; width: 48px; height: 48px; color: var(--soft); fill: none; stroke: currentColor; stroke-width: 3.5;
+    stroke-linecap: round; stroke-linejoin: round; }
+  .hm .cx { min-width: 0; }
+  .hm .cv { line-height: 42px; }
+  .hm .cl { font-size: 28px; line-height: 34px; color: var(--soft); }
+  .hm li.alert .cv { color: var(--accent); font-weight: 600; }
+  .hm li.alert::before { content: ""; position: absolute; left: 66px; top: -8px; width: 48px; height: 4px; background: var(--accent); }
+  #home .empty { margin: 0; font-size: 36px; line-height: 76px; color: var(--soft); }
+
+  /* Pending: each place keeps its shape, with one quiet phrase. --m1 and --m2 draw the marks */
+  #board [data-slot].tv-pending { --m1: #46525a; --m2: #333e46; box-sizing: border-box; font: italic 500 36px/44px var(--serif); color: #8a9499; }
+  /* A dimmed board would lose the marks, so they start brighter */
+  #board.dim [data-slot].tv-pending { --m1: #8d989e; --m2: #6c787f; --rule: #55616a; color: #aab2b6; }
+  #board [data-slot].tv-pending::after { display: none; }
+  #board [data-slot="weather"].tv-pending { padding-top: 40px;
+    background: radial-gradient(circle, var(--m2) 0 6px, transparent 7px) 41px 199px / 152px 14px repeat-x,
+      linear-gradient(var(--rule), var(--rule)) 0 204.5px / 100% 3px no-repeat; }
+  #board [data-slot="agenda"].tv-pending { height: 336px; padding: 20px 0 0 184px;
+    background: radial-gradient(circle, var(--ink) 0 5px, var(--m1) 6px 9px, transparent 10px) 142.5px 0 / 22px 84px repeat-y,
+      linear-gradient(var(--rule), var(--rule)) 152.5px 42px / 3px 252px no-repeat; }
+  #board [data-slot="notes"].tv-pending { height: 140px; padding: 1px 0 0 184px;
+    background: linear-gradient(var(--m1), var(--m1)) 144px 23px / 20px 3px no-repeat,
+      linear-gradient(var(--m2), var(--m2)) 144px 79px / 20px 3px no-repeat, linear-gradient(var(--m2), var(--m2)) 144px 135px / 20px 3px no-repeat; }
+  #board [data-slot="status"].tv-pending { --r: radial-gradient(circle, transparent 0 16px, var(--m2) 17px 20px, transparent 21px);
+    height: 76px; padding-left: 66px; line-height: 76px;
+    background: radial-gradient(circle, transparent 0 16px, var(--m1) 17px 20px, transparent 21px) 0 14px / 48px 48px no-repeat,
+      var(--r) 500px 14px / 48px 48px no-repeat, var(--r) 780px 14px / 48px 48px no-repeat,
+      var(--r) 1060px 14px / 48px 48px no-repeat, var(--r) 1340px 14px / 48px 48px no-repeat; }
+</style>
+<body>
+<!-- Home status glyphs. To add one, add a symbol here and a test in homeIcon(). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-lock" viewBox="0 0 48 48"><rect x="11" y="21" width="26" height="20" rx="4"/><path d="M16 21v-5a8 8 0 0 1 16 0v5M24 29v4"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 48 48"><rect x="11" y="21" width="26" height="20" rx="4"/><path d="M16 21v-5a8 8 0 0 1 15.4-3M24 29v4"/></symbol>
+  <symbol id="i-door" viewBox="0 0 48 48"><path d="M13 41V8h22v33M8 41h32"/><circle cx="29" cy="25" r="1.6" fill="currentColor"/></symbol>
+  <symbol id="i-temp" viewBox="0 0 48 48"><path d="M19.5 28.5V10a4.5 4.5 0 0 1 9 0v18.5a8 8 0 1 1-9 0z"/><path d="M24 20v14"/></symbol>
+  <symbol id="i-laundry" viewBox="0 0 48 48"><rect x="9" y="6" width="30" height="36" rx="5"/><circle cx="24" cy="27" r="8.5"/><path d="M9 14h30M15 10h.1M20 10h.1"/></symbol>
+  <symbol id="i-light" viewBox="0 0 48 48"><path d="M19 35h10M20 41h8M18 29a11 11 0 1 1 12 0c-1.3 1-2 2.2-2 4h-8c0-1.8-.7-3-2-4z"/></symbol>
+  <symbol id="i-garage" viewBox="0 0 48 48"><path d="M6 41V19L24 8l18 11v22"/><path d="M13 41V26h22v15M13 31.5h22M13 36.5h22"/></symbol>
+  <symbol id="i-window" viewBox="0 0 48 48"><rect x="9" y="7" width="30" height="34" rx="3"/><path d="M24 7v34M9 24h30"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 6l15 6v10c0 10-6.5 17-15 20-8.5-3-15-10-15-20V12z"/><path d="M18 24l4.5 4.5L31 20"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 48 48"><path d="M24 7c6 8 12 14.5 12 21a12 12 0 0 1-24 0c0-6.5 6-13 12-21z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 48 48"><path d="M27 5 12 27h11l-3 16 16-23H25z"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 48 48"><circle cx="24" cy="24" r="13"/><circle cx="24" cy="24" r="4" fill="currentColor" stroke="none"/></symbol>
+</svg>
+<div id="stage">
+  <section id="board" data-view="board">
+    <header id="head">
+      <h1 id="title" class="it" data-lines="1"></h1>
+      <div id="time"><span id="hm"></span><span id="ampm"></span></div>
+      <p id="date"><span id="dow"></span> <span id="dmy" class="num"></span></p>
+      <p id="sub" data-lines="1" hidden></p>
+    </header>
+    <section id="weather" aria-label="Weather">
+      <p class="label"><span>Weather</span><span class="x" id="x-weather"></span></p>
+      <div data-slot="weather"></div>
+    </section>
+    <section id="agenda" aria-label="Agenda">
+      <div id="ag-top"><h2 id="ag-h" class="it"></h2><span class="x" id="x-agenda"></span></div>
+      <div data-slot="agenda"></div>
+    </section>
+    <section id="notes" aria-label="Notes">
+      <p class="label"><span>Notes</span><span class="x" id="x-notes"></span></p>
+      <div data-slot="notes"></div>
+    </section>
+    <section id="home" aria-label="Home status">
+      <div data-slot="status"></div>
+      <span class="x" id="x-status"></span>
+    </section>
+  </section>
+</div>
+<script>
+  const stage = document.getElementById("stage");
+  const fit = () => { const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `translate(${(innerWidth - 1920 * s) / 2}px, ${(innerHeight - 1080 * s) / 2}px) scale(${s})`; };
+  new ResizeObserver(fit).observe(document.documentElement);
+</script>
+<!-- tv-kit:start v1 — copy this block unchanged into every TV app, just before </body>. -->
+<style>
+  #tv-status { position: absolute; left: 80px; bottom: 60px; z-index: 50; display: flex; align-items: center; gap: 18px;
+    padding: 14px 28px 14px 22px; border-radius: 40px; background: rgba(20, 23, 31, .92); color: #c9ccd6;
+    font: 500 32px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; transition: opacity 250ms; }
+  #tv-status[hidden] { display: flex; opacity: 0; }
+  #tv-status i { width: 18px; height: 18px; border-radius: 50%; background: var(--accent, #5b8cff);
+    animation: tv-beat 2s steps(2, jump-none) infinite; }
+  @keyframes tv-beat { from { opacity: 1; } to { opacity: .3; } }
+  [data-slot].tv-pending { color: #8a8e9a; }
+  [data-slot].tv-pending::after { content: ""; display: block; width: min(60%, 900px); height: 28px; margin-top: 14px;
+    border-radius: 14px; background: #262a34; }
+</style>
+<script>
+  (() => {
+    const host = document.getElementById("stage") || document.body;
+    const status = document.createElement("div");
+    status.id = "tv-status";
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    status.innerHTML = "<i></i><span></span>";
+    host.append(status);
+    const slot = name => {
+      let el = document.querySelector(`[data-slot="${CSS.escape(name)}"]`);
+      if (!el) {
+        const list = document.querySelector("[data-slots]");
+        if (!list) throw new Error(`No element has data-slot="${name}". Use one of: ` +
+          [...document.querySelectorAll("[data-slot]")].map(e => e.dataset.slot).join(", "));
+        el = document.createElement("section");
+        el.dataset.slot = name;
+        list.append(el);
+      }
+      return el;
+    };
+    const state = () => ({
+      working: status.hidden ? null : status.lastChild.textContent,
+      pending: [...document.querySelectorAll("[data-slot].tv-pending")].map(el => el.dataset.slot),
+    });
+    window.tv = {
+      working(text) { status.lastChild.textContent = String(text); status.hidden = false; return state(); },
+      pending(name, label = "") { const el = slot(name); el.classList.add("tv-pending"); el.textContent = label; return state(); },
+      fill(name, html) { const el = slot(name); el.classList.remove("tv-pending"); el.innerHTML = html; return state(); },
+      done() { status.hidden = true; return state(); },
+      state,
+    };
+  })();
+</script>
+<!-- tv-kit:end -->
+<script>
+// One function scope, so the page adds only window.app beside the kit's window.tv.
+(() => {
+// Demo data for {"demo":true}, and the shape of each section. Made up: never send it as real data.
+// The times are written for the 7 PM hour. PATCH.demo moves them to the current hour.
+const SAMPLE = {
+  weather: { now: { temp: 48, condition: "partlycloudy", high: 54, low: 41 }, unit: "F", hours: [
+    { time: "8 PM", temp: 49, condition: "partlycloudy" }, { time: "9 PM", temp: 47, condition: "cloudy" },
+    { time: "10 PM", temp: 45, condition: "rainy" }, { time: "11 PM", temp: 44, condition: "rainy" },
+    { time: "12 AM", temp: 45, condition: "cloudy" }, { time: "1 AM", temp: 42, condition: "clear-night" }] },
+  agenda: [
+    { time: "7:00 PM", title: "Piano practice", where: "Living room", now: true },
+    { time: "7:45 PM", title: "Walk the dog", where: "Riverside path" },
+    { time: "8:30 PM", title: "Call Grandma" },
+    { time: "9:00 PM", title: "Fold the laundry", where: "Upstairs" },
+    { time: "10:15 PM", title: "Bins out to the curb" }],
+  notes: ["Library books due Friday", "Water the fern", "Soccer cleats are in the trunk"],
+  status: [
+    { label: "Front door", value: "Locked" }, { label: "Garage", value: "Closed" }, { label: "Indoor", value: "70°" },
+    { label: "Laundry", value: "Done", alert: true }, { label: "Lights", value: "3 on" }],
+};
+
+// Everything on screen comes from state. A section is null while it is pending. at: when each section's data was read.
+const state = { title: null, timezone: null, dim: false, weather: null, agenda: null, notes: null, status: null, at: {} };
+const PENDING = { weather: "Forecast on its way", agenda: "Reading the calendar", notes: "Gathering notes", status: "Checking on the house" };
+const SHOW = { hours: 6, agenda: 4, notes: 3, status: 5 };   // how many fit on screen
+const KEEP = 12;                                             // how many each list holds
+const STALE = { weather: 30, status: 30, agenda: 360, notes: 360 };   // minutes before "as of" shows
+let ignored = [], stamp = 0, booted = false, statusShown = 0;
+
+// Helpers
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const cut = (s, n = 28) => s.length > n ? s.slice(0, n - 1) + "…" : s;
+const deg = v => v == null ? "" : String(Math.round(v)).replace("-", "−") + "°";
+const fade = el => el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: "cubic-bezier(.2, .7, .2, 1)" });
+// Cut the text of each [data-lines] element at a word until it fits that many lines, and end it with "…".
+const clamp = root => {
+  for (const el of [root, ...root.querySelectorAll("[data-lines]")]) {
+    if (!el.dataset.lines) continue;
+    const max = Math.round(parseFloat(getComputedStyle(el).lineHeight) * el.dataset.lines), words = el.textContent.split(" ");
+    el.style.maxHeight = max + "px";
+    while (el.scrollHeight > max + 2 && words.length > 1) {
+      words.pop();
+      el.textContent = words.join(" ").replace(/[\s,;:.!?–—-]+$/, "") + "…";
+    }
+  }
+};
+// Fill a data-slot or the title, and fit its text. Fade it in only when the HTML changed.
+const show = (el, html) => {
+  const changed = el.dataset.html !== html;
+  if (el.dataset.slot) tv.fill(el.dataset.slot, html); else el.innerHTML = html;
+  el.dataset.html = html;
+  clamp(el);
+  if (changed && booted) fade(el);
+};
+// A section with no data keeps its place with a pending phrase.
+const slot = (name, html) => {
+  const el = document.querySelector(`[data-slot="${name}"]`);
+  if (html != null) return show(el, html);
+  delete el.dataset.html;
+  if (!el.classList.contains("tv-pending")) tv.pending(name, PENDING[name]);
+};
+
+// Time
+const fmt = opts => new Intl.DateTimeFormat(undefined, { timeZone: state.timezone || undefined, ...opts });
+const parts = opts => Object.fromEntries(fmt(opts).formatToParts(new Date()).map(p => [p.type, p.value]));
+const hourNow = () => +parts({ hour: "numeric", hourCycle: "h23" }).hour % 24;
+const dayPart = () => { const h = hourNow(); return h < 5 ? "night" : h < 12 ? "morning" : h < 17 ? "afternoon" : h < 22 ? "evening" : "night"; };
+// The clock follows the locale: "7:53 PM" or "19:53".
+const clock = () => { const p = parts({ hour: "numeric", minute: "2-digit" }); return { h: p.hour, m: p.minute, ampm: p.dayPeriod || "" }; };
+const age = k => Math.round((Date.now() - state.at[k]) / 60000);   // minutes since a section's data was read
+// The board's day starts at 4 AM. Data read before that also names its day: "as of Thu 11:10 PM".
+const dayMin = () => { const p = parts({ hour: "numeric", minute: "numeric", hourCycle: "h23" }); return (p.hour % 24 * 60 + +p.minute + 1200) % 1440; };
+const asOf = k => { const a = state[k] ? age(k) : 0; return a <= STALE[k] ? "" : "as of " + fmt(a >= 8640 ? { month: "short", day: "numeric" }
+  : { ...(a > dayMin() && { weekday: "short" }), hour: "numeric", minute: "2-digit" }).format(state.at[k]).replace(",", ""); };
+// "8 PM" or "8:30 PM", d hours later
+const later = (t, d) => { const m = /^(\d+)(:\d\d)? (.)M$/.exec(t), h = (m[1] % 12 + (m[3] === "P" ? 12 : 0) + d + 24) % 24;
+  return `${(h + 11) % 12 + 1}${m[2] || ""} ${h < 12 ? "AM" : "PM"}`; };
+// Minutes after 4 AM, so an evening that runs past midnight sorts in order. NaN for a time unlike "8:15 PM" or "20:15".
+const minutes = t => { const m = /^(\d{1,2})(?::(\d\d))?\s*([ap])?/i.exec(t); if (!m) return NaN;
+  const h = m[3] ? m[1] % 12 + (/p/i.test(m[3]) ? 12 : 0) : +m[1]; return (h * 60 + +(m[2] || 0) + 1200) % 1440; };
+
+// Words and glyphs
+const HA = { "clear-night": "Clear", cloudy: "Cloudy", exceptional: "Unusual weather", fog: "Fog", hail: "Hail",
+  lightning: "Lightning", "lightning-rainy": "Thunderstorms", partlycloudy: "Partly cloudy", pouring: "Heavy rain",
+  rainy: "Rain", snowy: "Snow", "snowy-rainy": "Sleet", sunny: "Sunny", windy: "Windy", "windy-variant": "Windy and cloudy" };
+const condLabel = c => HA[c.toLowerCase()] || c;
+const kind = c => { c = c.toLowerCase();
+  return /thunder|lightning|storm/.test(c) ? "storm" : /snow|sleet|flurr|hail|ice|blizzard/.test(c) ? "snow"
+    : /rain|shower|drizzle|pour/.test(c) ? "rain" : /fog|mist|haze|smoke/.test(c) ? "fog"
+    : /wind|breez|gust/.test(c) ? "wind" : /partly|partial|mostly (sunny|clear)|few|scattered|broken/.test(c) ? "partly"
+    : /cloud|overcast/.test(c) ? "cloud" : /clear|sun|fair/.test(c) ? "clear" : "cloud"; };
+const WORD = { storm: "Storms", snow: "Snow", rain: "Rain", fog: "Fog", wind: "Windy", partly: "Partly cloudy", cloud: "Cloudy", clear: "Clear" };
+const homeIcon = c => { const s = `${c.label} ${c.value}`.toLowerCase();
+  return /unlock/.test(s) ? "unlock" : /lock/.test(s) ? "lock" : /garage/.test(s) ? "garage" : /\bdoors?\b/.test(s) ? "door"
+    : /window/.test(s) ? "window" : /temp|thermo|°|heat|cool|climate|indoor|outdoor/.test(s) ? "temp"
+    : /laundry|wash|dryer/.test(s) ? "laundry" : /light|lamp/.test(s) ? "light"
+    : /alarm|secur|\barmed\b/.test(s) ? "shield" : /leak|water|humid/.test(s) ? "drop"
+    : /power|energy|battery|solar|charg/.test(s) ? "bolt" : "dot"; };
+
+// The weather curve: even steps, monotone so it never overshoots a label
+const chart = (w, W) => {
+  const pts = w.hours.map(h => ({ t: h.temp, time: h.time, c: h.condition }));
+  if (w.now.temp != null && pts.length) pts.unshift({ t: w.now.temp, time: "Now", c: w.now.condition || "", now: true });
+  const n = pts.length;
+  if (n < 2) return "";
+  const X0 = 48, X1 = W - 48, TOP = 48, BOT = 160, BASE = 222, step = (X1 - X0) / (n - 1), r = v => Math.round(v * 10) / 10;
+  const ts = pts.map(p => p.t), lo = Math.min(...ts), hi = Math.max(...ts), span = Math.max(hi - lo, 6), mid = (hi + lo) / 2;
+  pts.forEach((p, i) => { p.x = r(X0 + i * step); p.y = r((TOP + BOT) / 2 - (p.t - mid) / span * (BOT - TOP)); });
+  const d = [], m = [];
+  for (let i = 0; i < n - 1; i++) d[i] = (pts[i + 1].y - pts[i].y) / step;
+  m[0] = d[0]; m[n - 1] = d[n - 2];
+  for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (!d[i]) { m[i] = m[i + 1] = 0; continue; }
+    const a = m[i] / d[i], b = m[i + 1] / d[i], s = a * a + b * b;
+    if (s > 9) { const t = 3 / Math.sqrt(s); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
+  }
+  let line = `M${pts[0].x} ${pts[0].y}`;
+  for (let i = 0, k = step / 3; i < n - 1; i++) { const a = pts[i], b = pts[i + 1];
+    line += `C${r(a.x + k)} ${r(a.y + m[i] * k)} ${r(b.x - k)} ${r(b.y - m[i + 1] * k)} ${b.x} ${b.y}`; }
+  // Numbers: the high, the last hour, the low, each turn of the curve, then the middle. Never two side by side, four at most.
+  // The big temperature already says the "Now" value. A low gets its number under the point.
+  const want = hi === lo ? [n - 1] : [ts.indexOf(hi), n - 1, ts.lastIndexOf(lo)], tag = [];
+  for (let i = 1; i < n - 1; i++) if ((ts[i] - ts[i - 1]) * (ts[i + 1] - ts[i]) < 0) want.push(i);
+  want.push(Math.round((n - 1) / 2));
+  for (const i of want) if (!pts[i].now && tag.length < 4 && tag.every(j => Math.abs(i - j) > 1)) tag.push(i);
+  const low = i => (i === 0 || ts[i] <= ts[i - 1]) && (i === n - 1 || ts[i] <= ts[i + 1]) && ts[i] < hi;
+  const every = Math.max(...pts.map(p => p.time.length)) * 16 > step - 8 ? 2 : 1;
+  // Sky words name each change of sky. Rain and snow are marked on the baseline.
+  let prev = pts[0].now && pts[0].c ? kind(pts[0].c) : null, right = -1e9, marks = "", run = null; const wet = [];
+  pts.forEach((p, i) => {
+    const k = p.c ? kind(p.c) : null;
+    const wk = k === "snow" ? "snow" : k === "rain" || k === "storm" ? "rain" : "", a = Math.max(pts[0].x, p.x - step / 2), b = Math.min(pts[n - 1].x, p.x + step / 2);
+    if (wk && run && run.k === wk) run.b = b; else if (wk) wet.push(run = { k: wk, a, b }); else run = null;
+    marks += p.now ? `<circle cx="${p.x}" cy="${p.y}" r="18" fill="none" stroke="#e0a96c" stroke-opacity=".32"/><circle cx="${p.x}" cy="${p.y}" r="9" fill="#e0a96c" stroke="none"/>`
+      : tag.includes(i) ? `<circle cx="${p.x}" cy="${p.y}" r="7" fill="#dfe3e3" stroke="none"/><text class="v" x="${p.x}" y="${r(low(i) ? p.y + 44 : p.y - 22)}" stroke="none">${esc(deg(p.t))}</text>`
+      : `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="#a0a8ac" stroke="none"/>`;
+    if (p.now || i % every === 0) marks += `<text class="h${p.now ? " n" : ""}" x="${p.x}" y="${BASE + 40}" stroke="none">${esc(p.time)}</text>`;
+    if (k && k !== prev && !p.now) {
+      const wd = WORD[k].length * 14, cx = Math.min(Math.max(p.x, wd / 2), W - wd / 2);
+      if (cx - wd / 2 >= right + 18) { marks += `<text class="a" x="${r(cx)}" y="${BASE + 78}" stroke="none">${WORD[k]}</text>`; right = cx + wd / 2; }
+    }
+    if (k) prev = k;
+  });
+  // The fill starts amber under "Now" and fades to nothing at the last hour.
+  const warm = pts[0].now ? "#e0a96c" : "#a0a8ac";
+  return `<defs><linearGradient id="wx-fill" gradientUnits="userSpaceOnUse" x1="${X0}" y1="${TOP}" x2="${X1}" y2="${BASE}">
+    <stop offset="0" stop-color="${warm}" stop-opacity=".17"/><stop offset=".5" stop-color="#a0a8ac" stop-opacity=".07"/>
+    <stop offset="1" stop-color="#a0a8ac" stop-opacity="0"/></linearGradient></defs>
+    <path d="${line}L${pts[n - 1].x} ${BASE}L${pts[0].x} ${BASE}Z" fill="url(#wx-fill)"/>
+    <path d="M${pts[0].x} ${BASE}H${pts[n - 1].x}" fill="none" stroke="#242d34" stroke-width="3"/>
+    <path d="${line}" fill="none" stroke="#c3cacc" stroke-width="5" stroke-linecap="round"/>
+    <g fill="none" stroke="#6f879b" stroke-width="8" stroke-linecap="round">${wet.map(s =>
+      `<path d="M${r(s.a)} ${BASE}H${r(s.b)}"${s.k === "snow" ? ' stroke-dasharray="1 16"' : ""}/>`).join("")}</g>
+    <g stroke="#e0a96c" stroke-width="3">${marks}</g>`;
+};
+
+// Sections: each returns the HTML for its data-slot
+const agendaShown = () => { const a = state.agenda, start = Math.max(0, a.findIndex(e => e.now)), shown = a.slice(start, start + SHOW.agenda);
+  return { shown, more: a.length - start - shown.length }; };
+// The first alert goes first. Only it is drawn as an alert.
+const statusOrder = () => { const s = state.status, a = s.findIndex(c => c.alert);
+  return a > 0 ? [s[a], ...s.slice(0, a), ...s.slice(a + 1)] : s; };
+const SECTION = {
+  weather() {
+    const w = state.weather, n = w.now, has = n.temp != null, t = deg(n.temp), W = has ? 750 : 1000, curve = chart(w, W);
+    const cls = [!curve && "solo", curve && !has && "wide", !has && "bare"].filter(Boolean).join(" ");
+    const cond = n.condition ? condLabel(n.condition) : has ? "" : "No reading";
+    // Long words go smaller, on three lines. A high and low too long for one line (both under -9) take one of those lines.
+    const tight = (deg(n.high) + deg(n.low)).length > 7, long = cond.length > (tight ? 13 : 16);
+    // A high or low from an older reading can disagree with a newer temperature. Then leave both out.
+    const ok = !has || ((n.high == null || n.temp <= n.high + .5) && (n.low == null || n.temp >= n.low - .5));
+    return `<div class="wx ${cls}" data-len="${Math.min(5, Math.max(3, t.length))}"><div class="wx-now">
+      <div class="wx-temp"><span class="num">${t}</span><span class="wx-u">${has ? w.unit : ""}</span></div>
+      <div><div class="wx-c it${long ? " long" : ""}" data-lines="${long && !tight ? 3 : 2}">${esc(cond)}</div><div class="wx-hl num"><span>${ok && n.high != null ? `High ${deg(n.high)}` : ""}</span><span>${ok && n.low != null ? `Low ${deg(n.low)}` : ""}</span></div></div>
+      </div><svg class="wx-g" viewBox="0 0 ${W} 304" aria-hidden="true">${curve}</svg></div>`;
+  },
+  agenda() {
+    const { shown } = agendaShown();
+    if (!shown.length) return `<p class="empty it">A clear ${dayPart()}</p>`;
+    return `<ol class="ag${shown.length < 3 ? " few" : ""}">${shown.map((e, i) =>
+      `<li class="${e.now ? "now" : ""}${i === shown.length - 1 ? " end" : ""}"><span class="t num">${esc(e.time)}</span><i class="nd"></i>` +
+      `<span class="what"><span class="ti" data-lines="${e.where ? 1 : 2}">${esc(e.title)}</span><span class="wh" data-lines="1">${esc(e.where)}</span></span></li>`).join("")}</ol>`;
+  },
+  notes() {
+    const n = state.notes, lines = n.length > 2 ? 2 : n.length === 2 ? 3 : 5;
+    if (!n.length) return `<p class="empty it">Nothing to remember</p>`;
+    return `<ul class="nt it">${n.slice(0, SHOW.notes).map(t => `<li><span data-lines="${lines}">${esc(t)}</span></li>`).join("")}</ul>`;
+  },
+  status() {
+    const s = statusOrder().slice(0, SHOW.status);
+    if (!s.length) return `<p class="empty it">All quiet at home</p>`;
+    return `<ul class="hm">${s.map((c, i) => `<li${i === 0 && c.alert ? ' class="alert"' : ""}><svg class="ic" viewBox="0 0 48 48" aria-hidden="true"><use href="#i-${homeIcon(c)}"/></svg>` +
+      `<span class="cx"><span class="cv" data-lines="1">${esc(c.value)}</span><span class="cl" data-lines="1">${esc(c.label)}</span></span></li>`).join("")}</ul>`;
+  },
+};
+
+// Views
+const VIEWS = {
+  board() {
+    const c = clock(), title = state.title ?? `Good ${dayPart()}`, hour = hourNow(), time = $("time");
+    $("hm").innerHTML = c.m == null ? esc(c.h) : `${esc(c.h)}<b></b>${esc(c.m)}`;
+    $("ampm").textContent = c.ampm;
+    $("ampm").hidden = !c.ampm;
+    // A wider fallback font or a long hour must not reach the agenda column.
+    time.style.fontSize = "";
+    if (time.scrollWidth > 1040) time.style.fontSize = Math.floor(320 * 1040 / time.scrollWidth) + "px";
+    $("dow").textContent = fmt({ weekday: "long" }).format(new Date());
+    $("dmy").textContent = fmt({ month: "long", day: "numeric" }).format(new Date());
+    $("ag-h").textContent = hour >= 17 || hour < 4 ? "Tonight" : "Today";
+    $("title").classList.toggle("long", title.length > 26);
+    show($("title"), esc(title));
+
+    const more = state.agenda ? agendaShown().more : 0, notesMore = state.notes ? state.notes.length - SHOW.notes : 0;
+    $("x-weather").textContent = asOf("weather");
+    // A count and an age can both show: the agenda on two lines, the notes on one.
+    $("x-agenda").textContent = [more > 0 && `${more} more later`, asOf("agenda")].filter(Boolean).join("\n");
+    $("x-notes").textContent = [notesMore > 0 && `${notesMore} more`, asOf("notes")].filter(Boolean).join(" · ");
+    $("x-status").textContent = asOf("status");
+    for (const k in SECTION) slot(k, state[k] && SECTION[k]());
+
+    // Status items keep their natural width. Drop from the end until the row fits.
+    const row = document.querySelector(".hm"), items = row ? [...row.children] : [];
+    statusShown = items.length;
+    while (statusShown > 1 && row.scrollWidth > row.clientWidth + 1) items[--statusShown].hidden = true;
+
+    // Burn-in care: move the whole board a few pixels every ten minutes, without animation.
+    const [x, y] = [[0, 0], [3, 2], [-2, 3], [-3, -2], [2, -3]][Math.floor(Date.now() / 600000) % 5];
+    $("board").style.transform = x ? `translate(${x}px, ${y}px)` : "";
+    $("board").classList.toggle("dim", state.dim);
+  },
+};
+
+// Value checks for the PATCH handlers. Each throws an Error that says what to send instead.
+const fail = msg => { throw new Error(msg); };
+const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
+const EX = {
+  weather: '{"now":{"temp":48,"condition":"Partly cloudy","high":54,"low":41},"hours":[{"time":"9 PM","temp":46,"condition":"Cloudy"}],"unit":"F"}',
+  now: '{"temp":48,"condition":"Partly cloudy","high":54,"low":41}', hour: '{"time":"9 PM","temp":46,"condition":"Cloudy"}',
+  event: '{"time":"7:00 PM","title":"Family dinner","where":"Kitchen","now":true}',
+  status: '{"label":"Front door","value":"Locked","alert":false}',
+};
+// A bad value names what was sent, and says to send a real one or leave the patch key out.
+const bad = (path, want, v) => fail(`${path} must be ${want}; got ${v === undefined ? "nothing" : cut(JSON.stringify(v), 40)}. ` +
+  `Send a real value, or leave "${path.split(/[.[]/)[0]}" out of the patch.`);
+// Text is trimmed, and longer than max it is cut at a word with "…". A number is taken as text.
+// Placeholder text like "<hour>", "{...}" or "..." is refused.
+const str = (v, path, ex, max = 80) => {
+  if (typeof v === "number" && isFinite(v)) v = String(v);
+  if (typeof v !== "string" || !v.trim() || /^\s*(<[^<>]*>|\{[^{}]*\}|\[[^[\]]*\]|\.\.\.|…)\s*$/.test(v)) bad(path, `real text, like ${ex}`, v);
+  v = v.trim().replace(/\s+/g, " ");
+  if (v.length <= max) return v;
+  const sp = v.lastIndexOf(" ", max - 1);
+  return v.slice(0, sp > max * .6 ? sp : max - 1).replace(/[\s,;:.!?–—-]+$/, "") + "…";
+};
+const num = (v, path) => {
+  if (typeof v === "string" && v.trim() && isFinite(v)) v = Number(v);
+  return typeof v === "number" && isFinite(v) ? v : bad(path, "a number, like 48", v);
+};
+const bool = (v, path) => typeof v === "boolean" ? v : fail(`${path} must be true or false.`);
+const list = (v, path, ex) => Array.isArray(v) ? v.slice(0, KEEP) : bad(path, `a list like [${ex}]`, v);
+// An object. Unknown fields are reported in the ignored list.
+const obj = (v, path, ex, fields) => {
+  if (!isObj(v)) bad(path, `an object like ${ex}`, v);
+  for (const k in v) if (!fields.includes(k)) ignored.push(`${path}.${k}`);
+  return v;
+};
+const agendaItem = (v, p) => {
+  obj(v, p, EX.event, ["time", "title", "where", "now"]);
+  return { time: str(v.time, `${p}.time`, '"7:00 PM"', 12), title: str(v.title, `${p}.title`, '"Family dinner"'),
+    where: v.where ? str(v.where, `${p}.where`, '"Kitchen"', 40) : "", now: v.now == null ? false : bool(v.now, `${p}.now`) };
+};
+const note = (v, p) => str(v, p, '"Library books are due Friday"', 140);
+const statusItem = (v, p) => {
+  obj(v, p, EX.status, ["label", "value", "alert"]);
+  return { label: str(v.label, `${p}.label`, '"Front door"', 30), value: str(v.value, `${p}.value`, '"Locked"', 30),
+    alert: v.alert == null ? false : bool(v.alert, `${p}.alert`) };
+};
+const set = (k, v) => { state[k] = v; state.at[k] = stamp; };
+const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+
+// Handlers run in this order, so timezone, demo and updated_at come before the sections they affect.
+const PATCH = {
+  timezone(v) {
+    if (v == null) { state.timezone = null; return; }
+    const z = str(v, "timezone", '"America/Chicago"', 64);
+    try { new Intl.DateTimeFormat(undefined, { timeZone: z }); } catch { fail(`timezone must be an IANA name like "America/Chicago", or null for the system zone. "${z}" is not one.`); }
+    state.timezone = z;
+  },
+  // The sample's "now" event started this hour, and its forecast starts with the next hour.
+  demo(v) {
+    if (!bool(v, "demo")) return;
+    const s = structuredClone(SAMPLE), d = hourNow() - 19;
+    for (const e of [...s.agenda, ...s.weather.hours]) e.time = later(e.time, d);
+    for (const k in s) PATCH[k](s[k]);
+  },
+  updated_at(v) {
+    if (v == null) return;
+    const t = typeof v === "number" ? (v < 1e11 ? v * 1000 : v) : typeof v === "string" ? Date.parse(v) : NaN;
+    stamp = isFinite(t) ? t : fail('updated_at must be an ISO time like "2026-11-20T19:05:00Z", or epoch seconds or milliseconds.');
+  },
+  title(v) { state.title = v == null ? null : str(v, "title", '"The Lake House", or null for the greeting', 40); },
+  dim(v) { state.dim = bool(v, "dim"); },
+  weather(v) {
+    if (v == null) { state.weather = null; return; }
+    obj(v, "weather", `${EX.weather}, or null to show it as pending`, ["now", "hours", "unit"]);
+    const w = state.weather || { now: {}, hours: [], unit: "F" };
+    if (v.now != null) {
+      obj(v.now, "weather.now", EX.now, ["temp", "condition", "high", "low"]);
+      for (const k of ["temp", "high", "low"]) if (k in v.now) w.now[k] = v.now[k] == null ? null : num(v.now[k], `weather.now.${k}`);
+      if ("condition" in v.now) w.now.condition = v.now.condition == null ? "" : str(v.now.condition, "weather.now.condition", '"Partly cloudy"', 40);
+    }
+    if (v.hours != null) w.hours = list(v.hours, "weather.hours", EX.hour).slice(0, SHOW.hours).map((h, i) => {
+      const p = `weather.hours[${i}]`; obj(h, p, EX.hour, ["time", "temp", "condition"]);
+      return { time: str(h.time, `${p}.time`, '"9 PM"', 8), temp: num(h.temp, `${p}.temp`),
+        condition: h.condition == null ? "" : str(h.condition, `${p}.condition`, '"Cloudy"', 40) };
+    });
+    if (v.unit != null) {
+      w.unit = String(v.unit).replace("°", "").trim().toUpperCase();
+      if (w.unit !== "F" && w.unit !== "C") fail('weather.unit must be "F" or "C".');
+    }
+    set("weather", w);
+  },
+  agenda(v) { if (v == null) state.agenda = null; else set("agenda", list(v, "agenda", EX.event).map((e, i) => agendaItem(e, `agenda[${i}]`))); },
+  notes(v) { if (v == null) state.notes = null; else set("notes", list(v, "notes", '"Water the fern"').map((t, i) => note(t, `notes[${i}]`))); },
+  status(v) { if (v == null) state.status = null; else set("status", list(v, "status", EX.status).map((c, i) => statusItem(c, `status[${i}]`))); },
+  add_event(v) {
+    const e = agendaItem(v, "add_event"), a = state.agenda || [], m = minutes(e.time);
+    if (!a.some(x => x.time === e.time && same(x.title, e.title))) {
+      const i = a.findIndex(x => minutes(x.time) > m);
+      a.splice(i < 0 ? a.length : i, 0, e);
+    }
+    set("agenda", a.slice(0, KEEP));
+  },
+  add_note(v) {
+    const t = note(v, "add_note"), n = state.notes || [];
+    set("notes", n.some(x => same(x, t)) ? n : [t, ...n].slice(0, KEEP));
+  },
+  set_status(v) {
+    const c = statusItem(v, "set_status");
+    set("status", [c, ...(state.status || []).filter(x => !same(x.label, c.label))].slice(0, KEEP));
+  },
+};
+
+function apply(patch) {
+  if (!isObj(patch)) fail('app.apply takes an object, like {"demo":true} or {"add_note":"Call Mom"}.');
+  if (!Object.keys(patch).length) fail('An empty patch changes nothing. Send the sections you read, like ' +
+    '{"weather":{"now":{"temp":48,"condition":"Rain"}}}, and leave out the ones you could not read. To read the board, call app.state().');
+  const before = structuredClone(state);
+  ignored = Object.keys(patch).filter(k => !Object.hasOwn(PATCH, k));
+  stamp = Date.now();
+  try { for (const k in PATCH) if (k in patch) PATCH[k](patch[k]); }
+  catch (e) { Object.assign(state, before); ignored = []; throw e; }
+  VIEWS.board();
+  return app.state();
+}
+
+window.app = {
+  apply,
+  state() {
+    // Lists show what is on screen, cut short. age_min: minutes since the section's data was read.
+    const c = clock(), w = state.weather, a = state.agenda && agendaShown(), n = state.notes, s = state.status;
+    return {
+      view: "board", title: state.title ?? `Good ${dayPart()}`, time: `${c.h}:${c.m} ${c.ampm}`.trim(),
+      timezone: state.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, dim: state.dim,
+      weather: w && { temp: w.now.temp ?? null, condition: w.now.condition ? condLabel(w.now.condition) : null,
+        hours: w.hours.length, unit: w.unit, age_min: age("weather") },
+      agenda: a && { shown: a.shown.map(e => cut(`${e.time} ${e.title}`)), more: a.more, age_min: age("agenda") },
+      notes: n && { shown: n.slice(0, SHOW.notes).map(t => cut(t)), more: Math.max(0, n.length - SHOW.notes), age_min: age("notes") },
+      status: s && { shown: statusOrder().slice(0, statusShown).map(x => cut(`${x.label}: ${x.value}`, 24)),
+        alerts: s.filter(x => x.alert).map(x => cut(x.label, 20)), more: s.length - statusShown, age_min: age("status") },
+      pending: tv.state().pending, ignored,
+    };
+  },
+};
+
+// The bottom band holds one line: the home status row, or the status line while the agent works.
+const line = $("tv-status");
+new MutationObserver(() => $("board").classList.toggle("busy", !line.hidden)).observe(line, { attributes: true, attributeFilter: ["hidden"] });
+// Text was fitted with the fallback font. Fit it again when the real fonts arrive.
+document.fonts.addEventListener("loadingdone", VIEWS.board);
+const tick = () => { VIEWS.board(); setTimeout(tick, 60000 - Date.now() % 60000 + 40); };
+tick();
+if (/[?&]demo\b/.test(location.search)) apply({ demo: true });
+booted = true;
+})();
+</script>
+</body>
+</html>

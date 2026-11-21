@@ -9,7 +9,7 @@ Rules every TV web app in this skill follows. The reference apps in `assets/apps
 - Fonts come from `fonts/` beside the file: `inter`, `fraunces`, `newsreader`, `bricolage` and `instrument-serif` (`.woff2`, latin, variable where available; see `assets/apps/fonts/`). Declare them with `@font-face { src: url(fonts/inter.woff2) }`. `upload-bundle.sh` includes the folder.
 - End every font stack with `"Noto Sans"` or `"Noto Serif"`, then `system-ui`. The HA host has only Noto, and a page sent inline has no `fonts/`. Check that the design still holds with `preview.py --no-fonts`.
 - The page runs in a sandbox with an opaque origin. `localStorage`, cookies and IndexedDB fail. Keep state in memory.
-- Start the file with a comment: what the app is for, every patch key with an example, and three typical voice turns mapped to patches.
+- Keep the file small: every rule, function and comment earns its place. Generate repeated markup in JS rather than copying it.
 
 ## Canvas
 
@@ -79,6 +79,27 @@ Each returns `{working, pending}`.
 - Do not put instructions on the screen, such as "Say next to continue". If the next action is not obvious, a short hint in the footer is acceptable.
 - Show the current item or selection with the accent color and a visible outline or marker, not color alone.
 - When a view is waiting for data, show its layout with pending places, not an empty screen or a spinner.
+
+## Code layout
+
+Every app uses the same layout, in this order, so you can find and extend any part without reading the rest.
+
+1. **Header comment.** What the app is for, every patch key with an example, and the likely voice turns mapped to patches.
+2. **`<style>`.** Tokens first (`:root` colors, fonts, sizes), then the layout, then one block per view.
+3. **Markup.** `#stage` with one `<section data-view="name">` per view.
+4. **Fit script and tv kit,** unchanged.
+5. **App script:**
+
+   ```js
+   const SAMPLE = {...};          // demo data, also the data shape
+   const state = {...};           // everything on screen comes from this
+   const VIEWS = { name() {...} };  // one render function per view, reads state only
+   const PATCH = { key(value) {...} };  // one handler per patch key, changes state only
+   function apply(patch) { /* runs PATCH handlers in order, then renders */ }
+   window.app = { apply, state: () => ({...}) };
+   ```
+
+To add a patch key, add one `PATCH` entry and one header line. To add a view, add one `<section>`, one `VIEWS` entry and its CSS block. Name handlers after their keys. No frameworks and no clever indirection. Comment only where someone will extend the app.
 
 ## Markup
 

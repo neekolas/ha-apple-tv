@@ -43,11 +43,15 @@ def serve(app: pathlib.Path, fonts: bool):
             path = self.path.split("?")[0]
             body = root.get("/index.html" if path == "/" else path)
             if body is None:
-                self.send_error(404)
+                self.send_response(404)  # with the CORS header, so a missing font logs a 404, not a CORS error
+                self.send_header("Content-Length", "0")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
                 return
             self.send_response(200)
             self.send_header("Content-Type", TYPES.get(pathlib.PurePath(path).suffix, "text/html; charset=utf-8"))
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")  # as the bridge sends; sandboxed fonts need it
             self.end_headers()
             self.wfile.write(body)
 

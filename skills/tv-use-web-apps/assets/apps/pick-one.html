@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Pick one</title>
+<!--
+  Pick one: choose between numbered options by voice. A poster wall for films, restaurants,
+  trips or recipes. Each poster is drawn from its hue, so no images are needed.
+  Views: grid (the wall, five posters a page), detail (one option), chosen (the pick).
+
+  Patch keys for app.apply(patch). They run in this order. Numbers are the ones on screen and
+  run across pages; state().numbers maps them to ids.
+    demo    {"demo": true}            load 18 sample films
+    data    {"data": {"title": "Movie night", "subtitle": "Rainy Friday", "kicker": "Tonight",
+              "items": [{"id": "tide", "title": "Northbound Tide", "meta": "2021 · 1h 58m",
+              "tags": ["Drama"], "score": 8.4, "hue": 200, "description": "Up to 40 words.",
+              "facts": [{"label": "Rated", "value": "PG-13"}]}]}}
+            Only id and title are required. Up to 64 items, 2 tags, 4 facts. kicker (up to
+            16 characters) sits above the chosen title. New items reset subtitle and kicker,
+            unless sent with them, and all the keys below.
+    remove  {"remove": ["tide"]}      drop options by id, for good
+    only    {"only": "Comedy"}        show one tag; {"only": ["tide", "bloom"]} shows these ids;
+            {"only": null} shows all
+    sort    {"sort": "score"}         highest score first; "title" sorts A to Z; null keeps data order
+    page    {"page": 2}               show page 2 of the wall
+    focus   {"focus": 3}              mark number 3 on the wall; null clears it
+    item    {"item": 3}               open number 3 in detail; null goes back to the wall
+    chosen  {"chosen": 5}             show number 5 as the pick; null clears the pick
+    view    {"view": "grid"}          "grid", "detail" or "chosen"; detail and chosen use the open or focused item
+
+  state(): {view, ready, title, page, pages, total, numbers: {"1": "tide", ...}, focus, item,
+    chosen: {id, number, title}, only, sort, removed, tags}
+
+  Voice turns:
+    "Show me what you found"        {"data": {"title": "...", "items": [...]}}
+    "Tell me more about number 3"   {"item": 3}
+    "Go back to all of them"        {"view": "grid"}
+    "Next page"                     {"page": <state().page + 1>}
+    "Only the comedies"             {"only": "Comedy"}  (a name from state().tags)
+    "Clear that filter"             {"only": null}
+    "Not number 2, get rid of it"   {"remove": ["<state().numbers["2"]>"]}
+    "Sort them by rating"           {"sort": "score"}
+    "Let's do number 5"             {"chosen": 5}
+-->
+<style>
+  /* ---------- Tokens ---------- */
+  @font-face { font-family: "Instrument Serif"; src: url(fonts/instrument-serif.woff2) format("woff2"); font-weight: 400; font-style: normal; }
+  @font-face { font-family: "Instrument Serif"; src: url(fonts/instrument-serif-italic.woff2) format("woff2"); font-weight: 400; font-style: italic; }
+  @font-face { font-family: "Inter"; src: url(fonts/inter.woff2) format("woff2"); font-weight: 100 900; font-style: normal; }
+  @font-face { font-family: "Newsreader"; src: url(fonts/newsreader-italic.woff2) format("woff2"); font-weight: 200 800; font-style: italic; }
+  /* Digits in the serif come from Newsreader. Its 1 has a flag and a foot; Instrument Serif's is a bare stroke. */
+  @font-face { font-family: "Instrument Serif"; src: url(fonts/newsreader.woff2) format("woff2"); font-weight: 400; font-style: normal; unicode-range: U+30-39; }
+  @font-face { font-family: "Instrument Serif"; src: url(fonts/newsreader-italic.woff2) format("woff2"); font-weight: 400; font-style: italic; unicode-range: U+30-39; }
+  :root { --bg: #0e0c0a; --text: #f3ede1; --muted: #b9af9f; --rule: #2f2922; --ghost: #1b1713; --accent: #ffc247;
+    --fall: "Iowan Old Style", Georgia, "Times New Roman", "Noto Serif", system-ui;
+    --serif: "Instrument Serif", var(--fall); --quote: "Newsreader", var(--fall);
+    --sans: "Inter", "Noto Sans", system-ui; --ease: cubic-bezier(.2, .7, .2, 1); }
+
+  /* ---------- Layout ---------- */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
+  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden;
+    background: var(--bg); color: var(--text); font: 500 32px/1.3 var(--sans); font-synthesis: none;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  h1, p, ol, dl, dd, blockquote { margin: 0; padding: 0; }
+  ol { list-style: none; }
+  h1 { font-weight: 400; }
+  .p-tags span, .top p, #title, .slot .m, .crumb .caps, #detail-meta, .facts dt, .facts dd, .lb p, #chosen-meta {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .caps { font: 600 28px/1.25 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  /* A wash of the current poster's hue in two corners. */
+  #ambient { position: absolute; inset: 0; --h: 30; transition: opacity 300ms var(--ease);
+    background: radial-gradient(1500px 900px at 8% -20%, hsl(var(--h) 46% 24% / .5), transparent 72%),
+      radial-gradient(1200px 800px at 108% 118%, hsl(var(--h) 40% 18% / .4), transparent 70%); }
+  #ambient.dim { opacity: .4; }
+  [data-view] { position: absolute; inset: 60px 80px; opacity: 0; visibility: hidden;
+    transition: opacity 280ms var(--ease), visibility 0s 280ms; }
+  [data-view].on { opacity: 1; visibility: visible; transition: opacity 280ms var(--ease), visibility 0s; }
+
+  /* Poster: 20em by 30em, colored by --field, --ink, --ink2, --type and --credit. */
+  .poster { position: relative; width: 20em; height: 30em; overflow: hidden; background: var(--field); color: var(--type); }
+  .poster svg, .emblem svg { position: absolute; left: 0; top: 5.8em; width: 20em; height: 12.8em; }
+  .a { fill: var(--ink); } .b { fill: var(--ink2); } .f { fill: var(--field); }
+  .s { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; }
+  .p-init { position: absolute; left: 0; right: 0; top: 5.2em; height: 13.4em; overflow: hidden; text-align: center;
+    color: var(--ink); }
+  .p-init b { font: italic 400 15em/.96 var(--serif); }
+  .p-tags { position: absolute; left: 1.2em; right: 1.2em; top: 1.15em; color: var(--credit); }
+  .p-tags span { display: block; font: 600 1.71em/1.22 var(--sans); letter-spacing: .1em; text-transform: uppercase;
+ }
+  .p-title { position: absolute; left: 1.2em; right: 1.2em; bottom: .55em; height: 11em; display: flex; align-items: flex-end; }
+  .tt { display: block; width: 100%; padding-bottom: .14em; font: 400 4.4em/.98 var(--serif); letter-spacing: -.012em; }
+  .tt.sm { font-weight: 600; letter-spacing: 0; }
+  /* A title that fits at no size breaks long words and stops at three lines. No padding, or a fourth line shows in it. */
+  [data-fit] { hyphens: none; }
+  .brk { overflow-wrap: anywhere; hyphens: manual; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+  :is(.tt, #detail-title, #chosen-title).brk { padding-bottom: 0; line-height: 1.06; }
+  /* Accents need more room between lines. Letters the bundled serif lacks put the whole title in the fallback serif. */
+  :is(.tt, #detail-title, #chosen-title).acc { line-height: 1.04; }
+  :is(.tt, #title, #detail-title, #chosen-title).alt { font-family: var(--fall); letter-spacing: 0; }
+  :is(.tt, #detail-title, #chosen-title).alt { line-height: 1.12; }
+
+  /* ---------- Grid ---------- */
+  .top { display: flex; justify-content: space-between; gap: 80px; height: 36px; }
+  #count { flex: none; max-width: 1240px; }
+  #count i { display: inline-block; width: 18px; height: 18px; margin-right: 18px; background: var(--accent); }
+  #count b { font-weight: 600; color: var(--text); }
+  #title { margin-top: -6px; height: 164px; font: italic 400 128px/164px var(--serif); letter-spacing: -.018em; }
+  #title.brk { display: block; }
+  #title.tv-pending { color: #8f8677; }
+  #title.tv-pending::after, #subtitle.tv-pending::after { display: none; }
+  .wall { position: absolute; left: 0; top: 226px; display: flex; gap: 30px; }
+  .slot { position: relative; width: 328px; font-size: 16.4px; }
+  .slot .poster { transition: transform 240ms var(--ease); }
+  /* Posters beside the focused one dim under a wash. Their titles sit above it and stay at full strength. */
+  .slot .poster::after { content: ""; position: absolute; inset: 0; background: var(--bg); opacity: 0; transition: opacity 240ms var(--ease); }
+  .slot .p-title { z-index: 1; }
+  .slot .mark { display: block; height: 8px; margin-top: 12px; background: var(--accent); transform: scaleX(0); transform-origin: 0 50%;
+    transition: transform 240ms var(--ease); }
+  .cap { display: flex; align-items: baseline; justify-content: space-between; margin-top: 6px; height: 78px; }
+  .cap .n { font: 400 74px/78px var(--serif); letter-spacing: -.02em; transition: color 240ms; }
+  .cap .sc { display: flex; align-items: center; gap: 10px; font: 700 32px/1 var(--sans); font-variant-numeric: tabular-nums; }
+  .cap .sc svg { width: 24px; height: 24px; color: var(--muted); }
+  .slot .m { height: 36px; letter-spacing: .08em; }
+  .slot .m.pick { color: var(--accent); }
+  .slot .m.pick i { display: inline-block; width: 16px; height: 16px; margin-right: 14px; background: var(--accent); }
+  .wall.has-focus .slot:not(.focus) .poster::after { opacity: .42; }
+  .slot.focus .poster { transform: translateY(-14px); }
+  .slot.focus .mark { transform: none; }
+  .slot.focus .n { color: var(--accent); }
+  .ghost .poster { background: var(--ghost); }
+  .ghost .p-init { top: 7em; color: #332c24; }
+  .ghost .p-init b { font-style: normal; font-size: 11.6em; line-height: 1.24; }
+  .ghost .cap i { align-self: center; width: 56px; height: 6px; background: var(--rule); }
+  .ghost .m { margin-top: 14px; width: 190px; height: 6px; background: var(--ghost); }
+  .aside { position: absolute; right: 0; padding-right: 10px; top: 226px; height: 492px; display: flex; flex-direction: column;
+    justify-content: flex-end; text-align: right; }
+  .aside b { font: italic 400 168px/.9 var(--serif); letter-spacing: -.02em; white-space: nowrap; display: block; }
+  .aside.fin b { color: #6f675b; font-size: 120px; }
+  .aside span { margin-top: 18px; }
+  .empty { width: 1760px; margin-top: 150px; white-space: nowrap; }
+  .empty b { display: block; padding-bottom: .1em; font: 400 148px/1 var(--serif); letter-spacing: -.02em; }
+  .empty b i { color: var(--accent); }
+  .empty .mark { display: block; width: 328px; height: 8px; margin-bottom: 44px; background: var(--accent); }
+  .empty span { display: block; margin-top: 36px; }
+  .pager { position: absolute; right: 0; bottom: 0; display: flex; align-items: center; gap: 28px; height: 36px; }
+  .pager[hidden] { display: none; }
+  .pager b { color: var(--text); font-weight: 600; }
+  .segs { display: flex; gap: 8px; }
+  .segs i { width: 44px; height: 6px; background: #3a342c; }
+  .segs i.on { background: var(--accent); }
+
+  /* ---------- Detail ---------- */
+  #detail-art { position: absolute; left: 0; top: 48px; font-size: 27.5px; }
+  .info { position: absolute; left: 650px; right: 0; top: 48px; height: 825px; display: flex; flex-direction: column; }
+  .info > * { flex: none; }
+  .info.bare { justify-content: center; }
+  .info.bare .lower { display: none; }
+  .crumb { display: flex; align-items: baseline; gap: 26px; height: 84px; }
+  .crumb .n, .crumb .score b { font: 400 92px/84px var(--serif); letter-spacing: -.02em; }
+  .crumb .n { color: var(--accent); }
+  .crumb > .caps { flex: 1; min-width: 0; margin-right: 40px; }
+  .crumb .score { display: flex; align-items: baseline; gap: 22px; }
+  .crumb .score[hidden] { display: none; }
+  .t-box { margin-top: 36px; max-height: 268px; }
+  #detail-title { padding-bottom: .12em; font: 400 176px/.96 var(--serif); letter-spacing: -.022em; }
+  #detail-meta { margin-top: 8px; }
+  /* The quote starts 96 px under the meta line and the facts end level with the poster. The first row is the
+     spare part of that gap: it closes when a long title leaves no room. */
+  .lower { flex: 1 1 0; min-height: 0; margin-top: 36px; display: grid; grid-template: minmax(0, 60px) 1fr / 1fr 350px; column-gap: 60px; }
+  .lower.nofacts, .lower.noquote { grid-template-columns: 1fr; }
+  .q { position: relative; grid-row: 2; align-self: start; }
+  .facts { grid-row: 2; align-self: end; }
+  .q::before { content: "\201C"; position: absolute; right: 100%; margin-right: 14px; top: -6px; font: 400 132px/1 var(--serif); color: var(--accent); }
+  .desc { font: italic 500 40px/54px var(--quote); font-variation-settings: "opsz" 40; color: #ebe4d6;
+    max-height: 378px; overflow: hidden; }
+  /* Shorter quotes are set larger, so the block stays about as tall as the facts beside it. */
+  .desc.mid { font-size: 46px; line-height: 60px; max-height: 360px; }
+  .desc.big { font-size: 56px; line-height: 72px; max-height: 360px; }
+  .lower.nofacts .q { max-width: 900px; }
+  .lower.noquote .q, .facts:empty { display: none; }
+  .facts div { padding: 10px 0 12px; border-top: 3px solid var(--rule); }
+  .facts div:last-child { padding-bottom: 0; }
+  .facts dt { line-height: 32px; }
+  .facts dd { font: 600 34px/38px var(--sans); }
+  .facts dd.wrap { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .lower.noquote .facts { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: 70px; }
+
+  /* ---------- Chosen: a letterboxed title card ---------- */
+  [data-view=chosen] { inset: 0; background: var(--bg); }
+  .band { position: absolute; left: 0; right: 0; top: 150px; height: 780px; overflow: hidden; background: var(--field); }
+  .emblem { position: absolute; right: -24px; top: -147px; font-size: 44px; width: 20em; height: 30em; }
+  .emblem svg { overflow: visible; }
+  .emblem .p-init { top: 4.6em; height: 16.4em; }
+  .lb { position: absolute; left: 80px; right: 80px; display: flex; justify-content: space-between; gap: 80px; }
+  .lb.t { top: 60px; } .lb.b { bottom: 60px; justify-content: flex-end; }
+  .lb b { color: var(--accent); font-weight: 600; }
+  /* The text column stops before the emblem, which starts at about 1000px. */
+  .ct { position: absolute; left: 80px; top: 0; bottom: 0; width: 880px; display: flex; flex-direction: column; justify-content: center; }
+  #chosen-kicker { font: italic 400 104px/1 var(--serif); color: var(--accent); }
+  .c-box { margin-top: 18px; max-height: 424px; }
+  #chosen-title { padding-bottom: .12em; font: 400 208px/.95 var(--serif); letter-spacing: -.024em; color: var(--type); }
+  #chosen-meta { margin-top: 14px; color: var(--credit); }
+  #chosen-meta:empty { display: none; }
+</style>
+<body>
+<div id="stage">
+  <div id="ambient"></div>
+
+  <section data-view="grid" aria-labelledby="title">
+    <header>
+      <div class="top"><p id="count" class="caps"></p><p id="subtitle" class="caps" data-slot="subtitle"></p></div>
+      <h1 id="title" data-slot="title" data-fit="128px,112px,96px,80px"></h1>
+    </header>
+    <ol id="wall" class="wall"></ol>
+    <div id="aside"></div>
+    <nav id="pager" class="pager caps" aria-label="Pages" hidden></nav>
+  </section>
+
+  <section data-view="detail" aria-labelledby="detail-title">
+    <div id="detail-art"></div>
+    <article class="info" id="detail-info">
+      <p class="crumb"><span class="n" id="detail-number"></span><span class="caps" id="detail-crumb"></span>
+        <span class="score" id="detail-score"><span class="caps">Score</span><b></b></span></p>
+      <div class="t-box"><h1 id="detail-title" data-fit="176px,152px,128px,108px,88px,72px"></h1></div>
+      <p id="detail-meta" class="caps"></p>
+      <div class="lower" id="detail-lower">
+        <blockquote class="q"><p id="detail-desc" class="desc"></p></blockquote>
+        <dl id="detail-facts" class="facts"></dl>
+      </div>
+    </article>
+  </section>
+
+  <section data-view="chosen" aria-labelledby="chosen-title">
+    <div class="lb t"><p class="caps" id="chosen-program"></p><p class="caps" id="chosen-number"></p></div>
+    <div class="band" id="chosen-band">
+      <div class="emblem" id="chosen-art"></div>
+      <div class="ct">
+        <p id="chosen-kicker"></p>
+        <div class="c-box"><h1 id="chosen-title" data-fit="208px,176px,152px,128px,104px,88px,72px"></h1></div>
+        <p id="chosen-meta" class="caps"></p>
+      </div>
+    </div>
+    <div class="lb b"><p class="caps" id="chosen-tags"></p></div>
+  </section>
+</div>
+<script>
+  const stage = document.getElementById("stage");
+  const fit = () => { const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `translate(${(innerWidth - 1920 * s) / 2}px, ${(innerHeight - 1080 * s) / 2}px) scale(${s})`; };
+  new ResizeObserver(fit).observe(document.documentElement);
+</script>
+<!-- tv-kit:start v1 — copy this block unchanged into every TV app, just before </body>. -->
+<style>
+  #tv-status { position: absolute; left: 80px; bottom: 60px; z-index: 50; display: flex; align-items: center; gap: 18px;
+    padding: 14px 28px 14px 22px; border-radius: 40px; background: rgba(20, 23, 31, .92); color: #c9ccd6;
+    font: 500 32px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; transition: opacity 250ms; }
+  #tv-status[hidden] { display: flex; opacity: 0; }
+  #tv-status i { width: 18px; height: 18px; border-radius: 50%; background: var(--accent, #5b8cff);
+    animation: tv-beat 2s steps(2, jump-none) infinite; }
+  @keyframes tv-beat { from { opacity: 1; } to { opacity: .3; } }
+  [data-slot].tv-pending { color: #8a8e9a; }
+  [data-slot].tv-pending::after { content: ""; display: block; width: min(60%, 900px); height: 28px; margin-top: 14px;
+    border-radius: 14px; background: #262a34; }
+</style>
+<script>
+  (() => {
+    const host = document.getElementById("stage") || document.body;
+    const status = document.createElement("div");
+    status.id = "tv-status";
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    status.innerHTML = "<i></i><span></span>";
+    host.append(status);
+    const slot = name => {
+      let el = document.querySelector(`[data-slot="${CSS.escape(name)}"]`);
+      if (!el) {
+        const list = document.querySelector("[data-slots]");
+        if (!list) throw new Error(`No element has data-slot="${name}". Use one of: ` +
+          [...document.querySelectorAll("[data-slot]")].map(e => e.dataset.slot).join(", "));
+        el = document.createElement("section");
+        el.dataset.slot = name;
+        list.append(el);
+      }
+      return el;
+    };
+    const state = () => ({
+      working: status.hidden ? null : status.lastChild.textContent,
+      pending: [...document.querySelectorAll("[data-slot].tv-pending")].map(el => el.dataset.slot),
+    });
+    window.tv = {
+      working(text) { status.lastChild.textContent = String(text); status.hidden = false; return state(); },
+      pending(name, label = "") { const el = slot(name); el.classList.add("tv-pending"); el.textContent = label; return state(); },
+      fill(name, html) { const el = slot(name); el.classList.remove("tv-pending"); el.innerHTML = html; return state(); },
+      done() { status.hidden = true; return state(); },
+      state,
+    };
+  })();
+</script>
+<!-- tv-kit:end -->
+<script>
+// Sample films, all invented. Each item is {id, title, meta, tags, score, hue, description, facts}.
+const film = (id, title, year, time, tags, score, hue, rated, mood, best, description) =>
+  ({ id, title, meta: `${year} · ${time}`, tags, score, hue, description,
+    facts: [{ label: "Runtime", value: time }, { label: "Rated", value: rated }, { label: "Mood", value: mood }, { label: "Best with", value: best }] });
+const SAMPLE = { title: "Movie night", subtitle: "Something for a rainy Friday", kicker: "Tonight", items: [
+  film("northbound-tide", "Northbound Tide", 2021, "1h 58m", ["Drama", "Coastal"], 8.4, 200, "PG-13", "Bittersweet", "Two people",
+    "A ferry captain on her final season carries one last passenger who seems to know more about her past than he should. Quiet, salt-stung and beautifully shot."),
+  film("lantern-keeper", "The Lantern Keeper", 2019, "2h 06m", ["Adventure", "Fantasy"], 7.9, 32, "PG", "Wonder", "Family",
+    "In a valley where light is rationed, a young keeper steals a lantern that never goes out and sets off to find where it was made."),
+  film("pocket-thunder", "Pocket Full of Thunder", 2023, "1h 41m", ["Comedy", "Road trip"], 7.6, 48, "PG-13", "Warm and loud", "Friends",
+    "Two estranged brothers drive a borrowed food truck across three states to cook at their grandmother's ninetieth birthday. Nothing goes to plan, least of all the menu."),
+  film("static-bloom", "Static Bloom", 2022, "2h 12m", ["Sci-fi", "Mystery"], 8.1, 278, "PG-13", "Cerebral", "Night owls",
+    "A botanist on an orbital greenhouse notices the plants are growing in patterns that look like a message. The crew cannot agree on whether to answer."),
+  film("marmalade", "Midnight at the Marmalade", 2020, "1h 36m", ["Comedy", "Romance"], 7.2, 14, "PG", "Cozy", "Date night",
+    "A night-shift waiter and a sleepless architect keep meeting at the same all-night diner. Each visit, the specials board gets a little stranger."),
+  film("glass-orchard", "Glass Orchard", 2018, "1h 49m", ["Thriller", "Mystery"], 7.8, 158, "R", "Tense", "Two people",
+    "When the oldest orchard in town is sold overnight, a local reporter follows the paperwork into a much older secret. A slow burn with a sharp last act."),
+  film("long-quiet", "The Long Quiet", 2024, "1h 32m", ["Documentary", "Nature"], 8.6, 214, "G", "Calm", "Anyone",
+    "A year inside a remote mountain valley where the loudest sound is snowfall. Patient, gorgeous and oddly gripping."),
+  film("saltwater-saints", "Saltwater Saints", 2017, "2h 01m", ["Drama", "Sports"], 7.4, 186, "PG-13", "Uplifting", "Family",
+    "A washed-up swim coach takes on a team of harbor kids nobody else wanted, and slowly remembers why she started."),
+  film("orbit-small", "Orbit of Small Things", 2022, "1h 28m", ["Animation", "Family"], 8.3, 326, "G", "Gentle", "Kids",
+    "A lost toy satellite drifts through a child's bedroom universe, meeting moons made of marbles and a lonely nightlight sun."),
+  film("two-left-shoes", "Two Left Shoes", 2021, "1h 39m", ["Comedy"], 6.9, 58, "PG-13", "Silly", "Friends",
+    "A wedding dance instructor with no rhythm fakes his way through the biggest booking of his life. Physical comedy that earns its big finish."),
+  film("ember-line", "Ember Line", 2023, "1h 54m", ["Thriller", "Action"], 7.3, 6, "R", "Edge of seat", "Night owls",
+    "A night train, a missing courier and nine passengers who each had a reason. Tight, fast and set almost entirely in one carriage."),
+  film("atlas-of-rain", "Atlas of Rain", 2020, "1h 18m", ["Documentary", "Travel"], 8.0, 228, "G", "Curious", "Anyone",
+    "Following storms across four continents, this film maps how rain shapes cities, farms and the people who wait for it."),
+  film("kite-season", "Kite Season", 2019, "1h 34m", ["Family", "Comedy"], 7.5, 138, "PG", "Breezy", "Family",
+    "A friendly rivalry between two neighboring families grows into the most competitive kite festival their small town has ever seen."),
+  film("low-tide-radio", "Low Tide Radio", 2022, "1h 47m", ["Comedy", "Drama"], 7.7, 172, "PG-13", "Wry", "Two people",
+    "The last station on the coast has one listener left, maybe. Its two hosts decide to throw the farewell broadcast of the decade."),
+  film("cartographer", "The Cartographer's Daughter", 2016, "2h 14m", ["Drama", "Period"], 8.2, 36, "PG", "Sweeping", "Two people",
+    "Finishing her father's map of the northern islands, a young woman sails into storms, rumors and a family argument over who owns the coast."),
+  film("neon-fjord", "Neon Fjord", 2024, "2h 03m", ["Sci-fi", "Noir"], 7.1, 300, "R", "Moody", "Night owls",
+    "In a flooded future city, a water-taxi pilot takes a fare to an address that has not existed for twenty years."),
+  film("butter-brass", "Butter & Brass", 2021, "1h 52m", ["Comedy", "Musical"], 7.0, 44, "PG", "Joyful", "Family",
+    "A failing bakery and a failing marching band share one building, one budget and one very loud summer."),
+  film("second-sun", "Second Sun", 2023, "2h 09m", ["Sci-fi", "Drama"], 8.5, 252, "PG-13", "Awe", "Anyone",
+    "When a second sun appears on the horizon, a small observatory crew has three days to decide what to tell the world."),
+] };
+
+const PER_PAGE = 5;
+const state = {
+  ready: false,                         // true once items arrive
+  title: "", subtitle: "", kicker: "Tonight",
+  items: [],                            // as in SAMPLE, plus n: the item's place in data, which picks its poster
+  removed: [],                          // ids dropped for good
+  only: null,                           // a tag, an array of ids, or null for all
+  sort: null,                           // "score", "title" or null for data order
+  page: 1,
+  focus: null, item: null, chosen: null,  // item ids
+  view: "grid",                         // "grid", "detail" or "chosen"
+};
+
+// ---------- Helpers ----------
+const $ = id => document.getElementById(id);
+const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+// Typographer's quotes, dashes and ellipses for text that arrives as plain ASCII.
+const typo = s => s.replace(/(^|[\s(\[—–])"/g, "$1“").replace(/"/g, "”")
+  .replace(/(^|[\s(\[—–])'/g, "$1‘").replace(/'/g, "’").replace(/ - /g, " – ").replace(/\.\.\./g, "…");
+// Small words in titles go italic, as on a title card.
+const SMALL = /^(the|a|an|of|at|in|on|and|for|to|with|&)$/i;
+// Long words carry soft hyphens before each consonant and vowel pair. Only a .brk title breaks at them.
+const shy = w => w.length < 14 ? w : w.replace(/([aeiouy])(?=[^aeiouy\W\d_][aeiouy])/gi, "$1\u00ad");
+const titleHTML = t => typo(t).split(/\s+/).map(w => SMALL.test(w) ? `<i>${esc(w)}</i>` : esc(shy(w))).join(" ");
+const WORDS = "No One Two Three Four Five Six Seven Eight Nine Ten Eleven Twelve Thirteen Fourteen Fifteen Sixteen Seventeen Eighteen Nineteen Twenty".split(" ");
+const word = n => WORDS[n] || String(n);
+
+// The visible list, in screen order. Numbers on screen are positions in it, from 1.
+function visible() {
+  const only = state.only;
+  const list = state.items.filter(i => !state.removed.includes(i.id) && (!only ||
+    (typeof only === "string" ? i.tags.includes(only) : only.includes(i.id))));
+  if (state.sort === "score") list.sort((a, b) => (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0));
+  if (state.sort === "title") list.sort((a, b) => a.title.localeCompare(b.title));
+  return list;
+}
+const numberOf = id => visible().findIndex(i => i.id === id) + 1;  // 0 when not visible
+const pages = () => Math.max(1, Math.ceil(visible().length / PER_PAGE));
+const pageOf = id => Math.ceil(numberOf(id) / PER_PAGE);
+const onPage = () => visible().slice((state.page - 1) * PER_PAGE, state.page * PER_PAGE);
+const byId = id => state.items.find(i => i.id === id);
+const allTags = () => [...new Set(state.items.filter(i => !state.removed.includes(i.id)).flatMap(i => i.tags))];
+
+// ---------- Posters ----------
+// Flat two-ink motifs. Filled shapes and thick strokes only, so the video mirror keeps them.
+const svg = body => `<svg viewBox="0 0 100 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${body}</svg>`;
+const dots = Array.from({ length: 24 }, (_, i) => i === 10 ? "" :  // a 6 by 4 grid with one dot left out
+  `<circle cx="${15 + i % 6 * 14}" cy="${11 + Math.floor(i / 6) * 14}" r="4.6"/>`).join("");
+const MOTIFS = [
+  svg('<circle class="a" cx="50" cy="32" r="26"/><path class="f" d="M20 33h60v2.6H20zM20 39.5h60v3.8H20zM20 47h60v5.4H20z"/>'),
+  svg('<circle class="s" cx="50" cy="32" r="26"/><circle class="s" cx="50" cy="32" r="16.5"/><circle class="b" cx="50" cy="32" r="7"/>'),
+  svg('<path class="b" d="M26 40a24 24 0 0 1 48 0z"/><path class="a" d="M12 45h76v4.5H12zM24 54h52v4.5H24z"/>'),
+  svg('<circle class="a" cx="44" cy="33" r="25"/><circle class="f" cx="57" cy="26" r="22"/><circle class="b" cx="82" cy="12" r="5"/>'),
+  svg('<path class="a" d="M10 64V50h16V38h16V26h16V14h16V2h16v62z"/><circle class="b" cx="24" cy="20" r="8"/>'),
+  svg(`<g class="a">${dots}</g><circle class="b" cx="71" cy="25" r="6.4"/>`),
+  svg('<path class="a" d="M24 64V32a26 26 0 0 1 52 0v32z"/><path class="f" d="M36 64V34a14 14 0 0 1 28 0v30z"/><circle class="b" cx="50" cy="36" r="6.5"/>'),
+  svg('<path class="a" d="M-6 64L30 0h16L10 64z"/><path class="b" d="M24 64L60 0h10L34 64z"/><path class="a" d="M52 64L88 0h16L68 64z"/>'),
+  svg('<path class="s" d="M-4 22q13-13 26 0t26 0 26 0 26 0 26 0M-4 38q13-13 26 0t26 0 26 0 26 0 26 0M-4 54q13-13 26 0t26 0 26 0 26 0 26 0"/><circle class="b" cx="76" cy="6.5" r="5"/>'),
+  svg('<path class="a" d="M14 32A22 22 0 0 1 36 10v22zM86 32A22 22 0 0 1 64 54V32z"/><path class="b" d="M40 10h20v20a20 20 0 0 1-20-20z"/><path class="a" d="M38 34h22v20a22 20 0 0 1-22-20z"/>'),
+];
+const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>';
+// Relative luminance of an hsl color, to keep poster credits at 7:1 on any hue.
+const lum = (h, s, l) => { const a = s * Math.min(l, 1 - l), f = n => { const k = (n + h / 30) % 12,
+  c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; };
+  return .2126 * f(0) + .7152 * f(8) + .0722 * f(4); };
+// Four color schemes from one hue, dealt in a fixed rhythm so neighbors differ. Yellows to cyans
+// read bright, so their fields sit lower. Returns the poster's CSS custom properties.
+const BONE = "#f3ede1", INK = "#16120e", RHYTHM = [0, 3, 0, 6, 5, 3, 0];
+function scheme(item, k = RHYTHM[item.n % 7]) {
+  const h = item.hue, hot = h >= 25 && h <= 195;
+  let c;
+  if (k < 3) c = { field: `hsl(${h} 46% ${hot ? 16 : 20}%)`, ink: `hsl(${h} 60% ${hot ? 50 : 60}%)`, ink2: BONE, type: BONE, credit: "#e9e1d2" };
+  else if (k < 5) {
+    let mid = 38;
+    while (.95 / (lum(h, .5, mid / 100) + .05) < 7) mid--;
+    c = { field: `hsl(${h} 50% ${mid}%)`, ink: BONE, ink2: `hsl(${h + 24} 55% 12%)`, type: "#f8f3e7", credit: "#f8f3e7" };
+  } else if (k < 6) c = { field: "#e3d9c4", ink: `hsl(${h} 58% ${hot ? 34 : 42}%)`, ink2: INK, type: INK, credit: "#3a332a" };
+  else c = { field: `hsl(${h} 28% 12%)`, ink: `hsl(${h} 62% ${hot ? 52 : 62}%)`, ink2: `hsl(${h + 40} 50% 74%)`, type: `hsl(${h} 50% 86%)`, credit: `hsl(${h} 30% 76%)` };
+  return Object.entries(c).map(([key, value]) => `--${key}:${value}`).join(";");
+}
+const initial = text => `<span class="p-init" aria-hidden="true"><b>${esc(text)}</b></span>`;
+// Ten motifs, and three in thirteen posters show the title's first letter instead.
+function motif(item) {
+  const m = (item.n * 5 + 8) % (MOTIFS.length + 3);
+  return m < MOTIFS.length ? MOTIFS[m] : initial(Array.from(item.title.replace(/^(the|a|an)\s+/i, ""))[0].toUpperCase());
+}
+const poster = item => `<div class="poster" style="${scheme(item)}">${motif(item)}` +
+  (item.tags.length ? `<p class="p-tags">${item.tags.map(t => `<span>${esc(t)}</span>`).join("")}</p>` : "") +
+  `<div class="p-title"><span class="tt" data-fit="4.4em,3.9em,3.42em" data-spare="2.93em,2.5em,2.1em">${titleHTML(item.title)}</span></div></div>`;
+
+// Step text down through its data-fit sizes until it fits its parent; else break long words.
+// Instrument Serif has one weight, so poster titles stop at 56 px with it. Their data-spare
+// sizes are for the wider fallback serif only, and go semibold.
+const serifLoaded = () => document.fonts.check('400 72px "Instrument Serif"');
+const ACCENT = /[\u00c0-\u024f]/, MISSING = /[^\u0000-\u00ff\u0131\u0152\u0153\u2000-\u206f\u20ac\u2122]/;  // MISSING: not in the bundled latin fonts
+function fitText(t) {
+  const box = t.parentElement, main = t.dataset.fit.split(","), alt = MISSING.test(t.textContent);
+  const sizes = t.dataset.spare && (alt || !serifLoaded()) ? [...main, ...t.dataset.spare.split(",")] : main;
+  t.classList.remove("brk", "sm");
+  t.classList.toggle("alt", alt);
+  t.classList.toggle("acc", ACCENT.test(t.textContent));
+  for (const size of sizes) {
+    t.style.fontSize = size;
+    t.classList.toggle("sm", !main.includes(size));
+    if (t.scrollWidth <= box.clientWidth + 1 && t.offsetHeight <= box.clientHeight + 1) return;
+  }
+  t.classList.add("brk");
+}
+function fitAll(root) {
+  root.querySelectorAll("[data-fit]").forEach(fitText);
+  // The kicker stays smaller than the title under it, and at 56 px or more.
+  $("chosen-kicker").style.fontSize = Math.max(56, Math.min(104, parseFloat($("chosen-title").style.fontSize) * .6 || 104)) + "px";
+  // Long fact values wrap to two lines, one row at a time, while the column has room.
+  const info = $("detail-info"), values = [...info.querySelectorAll("dd")];
+  for (const dd of values) dd.classList.remove("wrap");
+  for (const dd of values) if (dd.scrollWidth > dd.clientWidth) {
+    dd.classList.add("wrap");
+    if (info.scrollHeight > info.clientHeight) dd.classList.remove("wrap");
+  }
+}
+
+// ---------- Views: each reads state and returns true when it redrew ----------
+const drawn = {};  // what each view last drew; an unchanged view keeps its DOM, so focus can animate
+function changed(view, data) {
+  const key = JSON.stringify(data);
+  if (drawn[view] === key) return false;
+  drawn[view] = key;
+  return true;
+}
+const slot = (item, n) => `<li class="slot" data-id="${esc(item.id)}">${poster(item)}<i class="mark"></i>` +
+  `<p class="cap"><span class="n">${n}</span>${item.score ? `<span class="sc">${STAR}${esc(item.score)}</span>` : ""}</p>` +
+  (state.chosen === item.id ? `<p class="m caps pick"><i></i>${esc(state.kicker)}</p>` : `<p class="m caps">${esc(typo(item.meta))}</p>`) + "</li>";
+const ghost = n => `<li class="slot ghost"><div class="poster">${initial(n)}</div><i class="mark"></i><p class="cap"><i></i></p><p class="m"></p></li>`;
+
+const VIEWS = {
+  grid() {
+    for (const key of ["title", "subtitle"]) if (state.ready || state[key]) {
+      $(key).classList.remove("tv-pending");
+      $(key).textContent = typo(state[key]);
+    }
+    if (!$("title").classList.contains("tv-pending")) fitText($("title"));
+    const list = visible(), shown = onPage(), first = (state.page - 1) * PER_PAGE, total = pages();
+    const left = state.items.length - state.removed.length, wall = $("wall"), aside = $("aside");
+    // The count names the filter and the sort, so people can see why the wall changed.
+    const by = { score: "By score", title: "A to Z" }[state.sort];
+    $("count").innerHTML = !state.items.length ? "" : (state.only || by ? "<i></i>" : "") + [
+      state.only ? `<b>${esc(typeof state.only === "string" ? state.only : "Shortlist")} · ${list.length ? word(list.length) : "None"} of ${word(left).toLowerCase()}</b>`
+        : `${word(list.length)} option${list.length === 1 ? "" : "s"}`, by && `<b>${by}</b>`].filter(Boolean).join(" · ");
+    $("pager").hidden = total < 2;
+    $("pager").innerHTML = `<span>Page <b>${state.page}</b> of ${total}</span><span class="segs">` +
+      (total > 13 ? "" : Array.from({ length: total }, (_, p) => p + 1 === state.page ? '<i class="on"></i>' : "<i></i>").join("")) + "</span>";
+    const redraw = changed("grid", [state.ready, shown, first, total, left, state.items.length, state.chosen, state.kicker, state.only]);
+    if (redraw) {
+      aside.className = "";
+      aside.innerHTML = "";
+      aside.style.width = "";
+      if (!state.ready) wall.innerHTML = [1, 2, 3, 4, 5].map(ghost).join("");
+      else if (!shown.length) {
+        const n = state.items.length, [head, note] = !n ? ["Nothing to choose from <i>yet.</i>", "The list is empty"]
+          : left ? ["Nothing left <i>on the shortlist.</i>", `${word(left)} more on the full list`]
+          : ["Nothing left <i>on the list.</i>", [, "The only option was removed", "Both options removed"][n] || `All ${word(n).toLowerCase()} options removed`];
+        wall.innerHTML = `<li class="empty"><i class="mark"></i><b data-fit="148px,128px,108px,92px,76px">${head}</b><span class="caps">${note}</span></li>`;
+      }
+      else {
+        wall.innerHTML = shown.map((item, i) => slot(item, first + i + 1)).join("");
+        // A short row leaves room for a closing line, so the wall never looks unfinished.
+        if (shown.length < PER_PAGE && total === 1) {
+          aside.className = "aside";
+          aside.style.width = 1750 - shown.length * 358 + "px";
+          aside.innerHTML = `<b data-fit="168px,144px,120px,100px,84px">${word(list.length)}</b>` +
+            `<span class="caps">${state.only || state.removed.length ? "on the shortlist" : "to choose from"}</span>`;
+        } else if (shown.length < PER_PAGE) {
+          aside.className = "aside fin";
+          aside.innerHTML = "<b>Fin.</b>";
+        }
+      }
+    }
+    for (const li of wall.children) li.classList.toggle("focus", li.dataset.id === state.focus);
+    wall.classList.toggle("has-focus", shown.some(i => i.id === state.focus));
+    return redraw;
+  },
+  detail() {
+    const item = byId(state.item), total = visible().length;
+    if (!changed("detail", [item, numberOf(item.id), total, state.title])) return false;
+    $("detail-art").innerHTML = poster(item);
+    $("detail-number").textContent = numberOf(item.id);
+    $("detail-crumb").textContent = `of ${total}` + (state.title && state.title.length < 29 ? ` — ${typo(state.title)}` : "");
+    $("detail-score").hidden = !item.score;
+    $("detail-score").lastChild.textContent = item.score || "";
+    $("detail-title").innerHTML = titleHTML(item.title);
+    $("detail-meta").textContent = [typo(item.meta), ...item.tags].filter(Boolean).join(" · ");
+    const words = item.description.split(/\s+/).length;
+    $("detail-desc").textContent = item.description ? typo(item.description) + "”" : "";
+    $("detail-desc").className = "desc" + (words < 15 ? " big" : words < 31 ? " mid" : "");
+    $("detail-facts").innerHTML = item.facts.map(f => `<div><dt class="caps">${esc(f.label)}</dt><dd>${esc(typo(f.value))}</dd></div>`).join("");
+    $("detail-lower").className = "lower" + (item.description ? "" : " noquote") + (item.facts.length ? "" : " nofacts");
+    $("detail-info").classList.toggle("bare", !item.description && !item.facts.length);
+    return true;
+  },
+  chosen() {
+    const item = byId(state.item), total = visible().length;
+    if (!changed("chosen", [item, numberOf(item.id), total, state.title, state.kicker])) return false;
+    // The band keeps the poster's own colors. A cream field would light the whole room, so a
+    // cream poster turns to its dark scheme: the field takes the hue of the poster's ink.
+    const k = RHYTHM[item.n % 7];
+    $("chosen-band").style.cssText = scheme(item, k === 5 ? 0 : k);
+    $("chosen-art").innerHTML = motif(item);
+    $("chosen-program").textContent = typo(state.title);
+    $("chosen-number").innerHTML = `No. <b>${numberOf(item.id)}</b> of ${total}`;
+    $("chosen-kicker").textContent = typo(state.kicker);
+    $("chosen-title").innerHTML = titleHTML(item.title);
+    $("chosen-meta").textContent = typo(item.meta);
+    $("chosen-tags").textContent = [...item.tags, item.score ? `Score ${item.score}` : ""].filter(Boolean).join(" · ");
+    return true;
+  },
+};
+
+function render() {
+  const section = document.querySelector(`[data-view="${state.view}"]`);
+  if (VIEWS[state.view]()) {
+    fitAll(section);
+    // A new item in a view already on screen fades in. Switching views fades by CSS.
+    if (state.view !== "grid" && section.classList.contains("on"))
+      section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: "ease-out" });
+  }
+  for (const s of document.querySelectorAll("[data-view]")) s.classList.toggle("on", s === section);
+  const lit = byId(state.view === "grid" ? state.focus : state.item);
+  $("ambient").style.setProperty("--h", lit ? lit.hue : 30);
+  $("ambient").classList.toggle("dim", !lit);
+}
+
+// ---------- Reading patch values ----------
+const text = (v, name) => {
+  if (v == null) return "";
+  if (typeof v === "number") return String(v);
+  if (typeof v !== "string") throw new Error(`${name} must be text, such as "Movie night".`);
+  return v.trim();
+};
+const seed = s => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.codePointAt(0), 16777619); return h >>> 0; };
+const ITEM_KEYS = ["id", "title", "meta", "tags", "score", "hue", "description", "facts"];
+function readItems(list) {
+  if (!Array.isArray(list) || list.length > 64)
+    throw new Error('data.items must be an array of up to 64 items like {"id":"a","title":"First option"}.');
+  // One number of decimals for every score, so 8 sits beside 8.4 as 8.0.
+  const places = list.some(r => typeof r?.score === "number" && !Number.isInteger(r.score)) ? 1 : 0;
+  const ids = new Set();
+  return list.map((raw, n) => {
+    const at = `data.items[${n}]`;
+    if (!isObj(raw)) throw new Error(`${at} must be an object like {"id":"a","title":"First option"}.`);
+    for (const key in raw) if (!ITEM_KEYS.includes(key)) ignored.push(`${at}.${key}`);
+    const id = text(raw.id, at + ".id"), title = text(raw.title, at + ".title");
+    if (!id || !title) throw new Error(`${at} needs an id and a title, such as {"id":"item-${n + 1}","title":"First option"}.`);
+    if (ids.has(id)) throw new Error(`${at}.id "${id}" is used twice. Ids must be unique.`);
+    ids.add(id);
+    const tags = raw.tags ?? [], facts = raw.facts ?? [], description = text(raw.description, at + ".description");
+    if (!Array.isArray(tags) || tags.length > 2) throw new Error(`${at}.tags must be an array of up to 2 short words, such as ["Comedy","Family"].`);
+    if (!Array.isArray(facts) || facts.length > 4 || !facts.every(isObj))
+      throw new Error(`${at}.facts must be an array of up to 4 objects like {"label":"Runtime","value":"1h 52m"}.`);
+    if (description.split(/\s+/).length > 40) throw new Error(`${at}.description has more than 40 words. Send 40 or fewer.`);
+    let score = raw.score ?? null, hue = raw.hue ?? seed(id) % 360;
+    if (typeof score === "number" && isFinite(score)) score = score.toFixed(places);
+    else if (typeof score === "string" && score.trim().length <= 6) score = score.trim() || null;
+    else if (score !== null) throw new Error(`${at}.score must be a number or short text such as 8.4 or "92%", or null.`);
+    if (typeof hue !== "number" || !isFinite(hue)) throw new Error(`${at}.hue must be a number from 0 to 360, such as 210.`);
+    return { id, title, meta: text(raw.meta, at + ".meta"), description, score, n,
+      hue: (Math.round(hue) % 360 + 360) % 360,
+      tags: tags.map(t => text(t, at + ".tags")).filter(Boolean),
+      facts: facts.map(f => ({ label: text(f.label, at + ".facts"), value: text(f.value, at + ".facts") })).filter(f => f.label && f.value) };
+  });
+}
+function readNumber(v, key) {
+  const list = visible();
+  if (!Number.isInteger(v) || v < 1 || v > list.length)
+    throw new Error(`${key} must be a number from 1 to ${list.length}, as shown on screen.`);
+  return list[v - 1].id;
+}
+function readIds(v, key) {
+  if (!Array.isArray(v) || !v.length) throw new Error(`${key} takes an array of item ids, such as {"${key}": ["tide"]}` +
+    (key === "only" ? ', or one tag, such as {"only": "Comedy"}.' : "."));
+  const ids = v.map(String);
+  for (const id of ids) if (!byId(id))
+    throw new Error(`${key}: "${id}" is not an item id. Map numbers to ids first; on screen now: ${JSON.stringify(snapshot().numbers)}.`);
+  return ids;
+}
+
+// Open one item in the detail or chosen view.
+function show(id, view) {
+  state.item = state.focus = id;
+  state.page = pageOf(id);
+  if (view === "chosen") state.chosen = id;
+  state.view = view;
+}
+// After the list changes, show the wall at the focused poster's page, or page 1.
+function backToWall() {
+  state.page = numberOf(state.focus) ? pageOf(state.focus) : 1;
+  state.view = "grid";
+}
+
+// ---------- Patch handlers: one per key, in the order they run ----------
+const PATCH = {
+  demo(v) {
+    if (v === false) return;
+    if (v !== true) throw new Error('demo must be true, as in {"demo": true}.');
+    PATCH.data(SAMPLE);
+  },
+  data(d) {
+    if (!isObj(d)) throw new Error('data must be an object like {"title":"Movie night","items":[{"id":"a","title":"First option"}]}.');
+    for (const key in d) if (!["title", "subtitle", "kicker", "items"].includes(key)) ignored.push("data." + key);
+    // A new list starts clean, so an old subtitle or kicker never sits over new items.
+    if ("items" in d) Object.assign(state, { items: readItems(d.items), ready: true, subtitle: "", kicker: "Tonight",
+      removed: [], only: null, sort: null, page: 1, focus: null, item: null, chosen: null, view: "grid" });
+    if ("title" in d) state.title = text(d.title, "data.title");
+    if ("subtitle" in d) state.subtitle = text(d.subtitle, "data.subtitle");
+    if ("kicker" in d) state.kicker = text(d.kicker, "data.kicker") || "Tonight";
+    if (state.kicker.length > 16) throw new Error('data.kicker must be 16 characters or fewer, such as "Tonight".');
+  },
+  remove(v) {
+    for (const id of readIds(v, "remove")) if (!state.removed.includes(id)) state.removed.push(id);
+  },
+  only(v) {
+    if (typeof v === "string") {
+      const tag = allTags().find(t => t.toLowerCase() === v.trim().toLowerCase());
+      if (!tag) throw new Error(`No option has the tag "${v}". Tags: ${allTags().join(", ")}.`);
+      state.only = tag;
+    } else state.only = v === null ? null : readIds(v, "only");
+    backToWall();
+  },
+  sort(v) {
+    if (![null, "score", "title"].includes(v)) throw new Error('sort must be "score", "title" or null.');
+    state.sort = v;
+    backToWall();
+  },
+  page(v) {
+    if (!Number.isInteger(v) || v < 1 || v > pages()) throw new Error(`page must be a number from 1 to ${pages()}.`);
+    state.page = v;
+    if (state.focus && pageOf(state.focus) !== v) state.focus = null;
+    state.view = "grid";
+  },
+  focus(v) {
+    state.focus = v === null ? null : readNumber(v, "focus");
+    if (state.focus) state.page = pageOf(state.focus);
+    state.view = "grid";
+  },
+  item(v) {
+    if (v !== null) return show(readNumber(v, "item"), "detail");
+    state.item = null;
+    state.view = "grid";
+  },
+  chosen(v) {
+    if (v !== null) return show(readNumber(v, "chosen"), "chosen");
+    state.chosen = null;
+    state.view = "grid";
+  },
+  view(v) {
+    if (!["grid", "detail", "chosen"].includes(v)) throw new Error('view must be "grid", "detail" or "chosen".');
+    const id = state.item || state.focus;
+    if (v === "grid") state.view = "grid";
+    else if (numberOf(id)) show(id, v);
+    else throw new Error(`view "${v}" needs an item. Send {"item": 3, "view": "${v}"}.`);
+  },
+};
+
+let ignored = [];  // unknown keys found by the current apply
+function apply(patch) {
+  if (!isObj(patch)) throw new Error('apply takes an object, such as {"item": 3} or {"demo": true}.');
+  ignored = Object.keys(patch).filter(key => !Object.hasOwn(PATCH, key));
+  const before = structuredClone(state);
+  try {
+    for (const key in PATCH) {
+      if (!Object.hasOwn(patch, key)) continue;
+      if (!state.ready && !["demo", "data", "view"].includes(key))
+        throw new Error(`There are no options yet, so "${key}" cannot apply. Send {"data": {"items": [...]}} or {"demo": true} first.`);
+      PATCH[key](patch[key]);
+    }
+  } catch (error) {
+    Object.assign(state, before);  // a failed patch changes nothing
+    throw error;
+  }
+  // Keep every id pointing at a visible item.
+  for (const key of ["focus", "item"]) if (!numberOf(state[key])) state[key] = null;
+  if (state.removed.includes(state.chosen)) state.chosen = null;
+  if (state.view === "chosen" && state.item !== state.chosen) state.view = "detail";
+  if (!state.item) state.view = "grid";
+  if (state.view === "grid") state.item = null;  // item is the one open in detail or chosen
+  state.page = Math.min(state.page, pages());
+  render();
+  return { ignored, ...snapshot() };
+}
+
+function snapshot() {
+  const numbers = {}, first = (state.page - 1) * PER_PAGE, pick = byId(state.chosen);
+  onPage().forEach((item, i) => { numbers[first + i + 1] = item.id; });
+  return { view: state.view, ready: state.ready, title: state.title, page: state.page, pages: pages(), total: visible().length,
+    numbers, focus: numberOf(state.focus) || null, item: numberOf(state.item) || null,
+    chosen: pick ? { id: pick.id, number: numberOf(pick.id) || null, title: pick.title } : null,
+    only: state.only, sort: state.sort, removed: state.removed, tags: allTags() };
+}
+
+window.app = { apply, state: snapshot };
+
+tv.pending("title", "Finding options");
+render();
+// Titles are fitted by measuring, so fit again as each bundled font arrives.
+for (const font of ['400 72px "Instrument Serif"', 'italic 400 72px "Instrument Serif"', '600 28px "Inter"', 'italic 500 40px "Newsreader"'])
+  document.fonts.load(font, "a1").then(() => fitAll(document), () => {});
+if (/[?&]demo\b/.test(location.search)) apply({ demo: true });
+</script>
+</body>
+</html>
