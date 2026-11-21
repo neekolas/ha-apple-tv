@@ -38,10 +38,10 @@ The trade-off: the computer that runs the container must stay on and awake. When
    docker volume create tv-use-data
    ```
 
-3. Start the container. Replace the TV name and address with your own.
+3. Start the container. Replace the TV name and address with your own. Give each TV a name, because the name lets the bridge find the TV's records again after a mistake in its address. See [Keep each TV's pairings](#keep-each-tvs-pairings).
 
    ```sh
-   docker run -d --name tv-use --restart unless-stopped --network host \
+   docker run -d --name tv-use --restart unless-stopped -p 127.0.0.1:8765:8765 \
      -v tv-use-data:/data \
      -v "$HOME/.config/tv-use/token:/run/secrets/tv-use-token:ro" \
      -e TV_USE_TOKEN_FILE=/run/secrets/tv-use-token \
@@ -49,17 +49,17 @@ The trade-off: the computer that runs the container must stay on and awake. When
      ghcr.io/neekolas/tv-use-bridge:latest
    ```
 
-   With `--network host`, the container uses the network of the OrbStack virtual machine, and OrbStack forwards its ports to the Mac. See [Networking](#networking). After you pair the TV, add its ID to `TV_USE_TVS`. See [Keep each TV's ID](#keep-each-tvs-id).
+   The container uses Docker's default bridge network. `-p 127.0.0.1:8765:8765` publishes only the MCP port, and only to this Mac. The container's other ports stay on its own loopback, which no program on the Mac can reach. See [Networking](#networking). After you pair the TV, add its ID to `TV_USE_TVS`.
 
-4. Check the container. The first command needs no token. It reports only that the app runs. The second reports the TV and its pairings. `GET /api/health` on port 8765, with the token, reports the TV connection and pairings in short form.
+4. Check the container. The first command reports the TV connection and pairings in short form. The second reports the TV and its pairings in full.
 
    ```sh
-   curl -sS http://127.0.0.1:8766/api/health
+   curl -sS -H "Authorization: Bearer $(cat "$HOME/.config/tv-use/token")" http://127.0.0.1:8765/api/health
    curl -sS -H "Authorization: Bearer $(cat "$HOME/.config/tv-use/token")" \
      -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8765/api/tool/tv_status
    ```
 
-   The log line `tv-use standalone: MCP at http://0.0.0.0:8765/mcp with a bearer token` shows that standalone mode started. Read it with `docker logs tv-use`.
+   Read the log with `docker logs tv-use`. The line `Starting in standalone mode because TV_USE_TOKEN_FILE is set and Supervisor supplied no token` names the mode and the reason. The line `tv-use standalone: MCP at http://0.0.0.0:8765/mcp with a bearer token` shows that the server listens.
 
 ## Settings
 
@@ -76,11 +76,12 @@ docker run ... ghcr.io/neekolas/tv-use-bridge:latest \
 | --- | --- | --- | --- |
 | `TV_USE_TOKEN` | `--token` | none | Bearer token that clients must send. At least 16 characters. A variable or flag value is visible in `docker inspect`. Prefer a token file. |
 | `TV_USE_TOKEN_FILE` | `--token-file` | none | File that holds the token. Use this or `TV_USE_TOKEN`, not both. |
-| `TV_USE_INSECURE_LOCAL` | `--insecure-local` | off | Accept requests without a token. The server then listens on loopback only and accepts only the host names `localhost`, `127.0.0.1` and `::1`. Any program on the computer can then control the TV. Use it only for a short test on a computer you trust. |
-| `TV_USE_TVS` | `--tv` | none | The TVs. Write each TV as `host=IP,id=ID,name=NAME` with any of the three keys, or as a bare IPv4 address. Separate TVs with semicolons in the variable. Repeat the flag for more TVs. The ID is the TV's advertised identifier from `tv://tvs`. [Keep the ID in the list.](#keep-each-tvs-id) |
-| `TV_USE_LISTEN` | `--listen` | `0.0.0.0` | Address for MCP and REST. `127.0.0.1` with `--insecure-local`. |
+| `TV_USE_INSECURE_LOCAL` | `--insecure-local` | off | Accept requests without a token. The server then listens on the container's loopback only and accepts only the host names `localhost`, `127.0.0.1` and `::1`. `-p` cannot reach the container's loopback, so this works only with `--network host`, where any program on the computer can then control the TV. Use it only for a short test on a computer you trust. |
+| `TV_USE_TVS` | `--tv` | none | The TVs. Write each TV as `host=IP,id=ID,name=NAME` with any of the three keys, or as a bare IPv4 address. A name cannot contain a comma, and in the variable it cannot contain a semicolon. Separate TVs with semicolons in the variable. Repeat the flag for more TVs. A flag replaces the whole list from the variable. The ID is the TV's advertised identifier from `tv://tvs`. The container refuses to start with an empty list unless `TV_USE_DISCOVER` is on. [Keep each TV's pairings.](#keep-each-tvs-pairings) |
+| `TV_USE_DISCOVER` | `--discover` | off | Allow an empty `TV_USE_TVS` and add TVs that Bonjour discovery finds. Discovery does not work on a Mac. |
+| `TV_USE_LISTEN` | `--listen` | `0.0.0.0` | Address for MCP and REST in the container. `127.0.0.1` with `--insecure-local`. |
 | `TV_USE_PORT` | `--port` | `8765` | Port for MCP and REST. It cannot be 8766. |
-| `TV_USE_STAGE_LISTEN` | `--stage-listen` | `127.0.0.1` | Address of the stage on port 8766. See [Networking](#networking). |
+| `TV_USE_STAGE_LISTEN` | `--stage-listen` | `127.0.0.1` | Address of the stage on port 8766: `127.0.0.1` or `0.0.0.0`. See [Networking](#networking). |
 | `TV_USE_PRESENTATION_MODE` | `--presentation-mode` | `mirror` | `mirror`, `play_url` or `auto`. |
 | `TV_USE_MIRROR_SIZE` | `--mirror-size` | `1920x1080` | `1920x1080` or `1280x720`. |
 | `TV_USE_MIRROR_FPS` | `--mirror-fps` | `10` | 1 through 60. |
@@ -96,17 +97,30 @@ docker run ... ghcr.io/neekolas/tv-use-bridge:latest \
 | `TV_USE_LOG_LEVEL` | `--log-level` | `info` | `debug`, `info`, `warning` or `error`. |
 | `ATV_BRIDGE_DATA` | none | `/data` | State directory inside the container. |
 
-The settings match the [Home Assistant app options](SETUP.md#app-options). A bad value stops the container with a message in `docker logs`.
+The settings match the [Home Assistant app options](SETUP.md#app-options). A bad value stops the container with a message in `docker logs`. A `TV_USE_` variable that is not a setting, such as a misspelled name, gets a warning in the log and has no effect.
 
-### Keep each TV's ID
+### Keep each TV's pairings
 
-Add each TV's ID to `TV_USE_TVS` after you pair it. The bridge matches an entry to its saved records by the ID, or by the address when the entry has no ID. Without an ID, a changed address counts as a new TV, and the bridge deletes the old TV's pairing records. To find the ID, read `identifiers` from `tv://tvs` or `GET /api/tvs` after pairing. Add `id=<first identifier>` to the entry, keep the same address and restart. A later address change then needs only a new `host=`.
+The bridge never deletes a TV's pairing records because of a change to the TV list. A TV can leave the list through a typo in its address, a misspelled variable, a start with one `--tv` flag, or a second container on the same volume. The bridge then keeps the TV's records in the volume and leaves the TV out of `tv://tvs`. The log names each kept TV and its ID:
 
-A TV that leaves the list loses its pairing records at the next start. An empty `TV_USE_TVS` removes every TV that the list named before.
+```text
+Kept the records of TV Living Room (ID 8fbc2b6530915fde8e449c7e72027484), which the TV list no longer names.
+```
+
+When a listed TV matches a kept record again, the bridge uses the record and its pairings. It matches the TV's stored identifier first, then its name, then its address. An entry with an ID never takes the records of a TV with other identifiers.
+
+Add each TV's ID to `TV_USE_TVS` after you pair it, because the ID is the strongest match. To find the ID, read `identifiers` from `tv://tvs` or `GET /api/tvs` after pairing. Add `id=<first identifier>` to the entry and restart. A later address change then needs only a new `host=`.
+
+To delete a TV's records, send `DELETE /api/tvs/<TV ID>` with the token. This also works for a kept TV, with the ID from the log.
 
 ### How the container chooses its mode
 
-The container uses Home Assistant mode when the Supervisor gives it a token or when `/data/options.json` exists. Otherwise it uses standalone mode. To force a mode, set `TV_USE_MODE=standalone` or `TV_USE_MODE=ha`, or pass `--standalone`. Home Assistant mode accepts no command flags.
+1. `--standalone`, or `TV_USE_MODE=standalone` or `TV_USE_MODE=ha`, chooses the mode.
+2. Otherwise, a token from the Supervisor chooses Home Assistant mode.
+3. Otherwise, any other `TV_USE_` variable chooses standalone mode, even if `/data/options.json` exists.
+4. Otherwise, `/data/options.json` chooses Home Assistant mode. Without it, the container uses standalone mode.
+
+The log names the mode and the reason. Standalone mode never contacts the Supervisor, even if `SUPERVISOR_TOKEN` is set. Home Assistant mode accepts no command flags.
 
 ## Pair a TV
 
@@ -115,7 +129,7 @@ Pair through the `tv_pair` tool. Standalone mode has no pairing panel, because a
 The TV lists the container as **Agent Bridge** under **Remote App and Devices**. The container has its own identity in the volume. A TV that is also paired with the Home Assistant app lists two **Agent Bridge** entries.
 
 1. **Control.** Call `tv_pair {"tv":"Living Room","kind":"control"}`. The TV shows a four-digit AirPlay code. Call `tv_pair` again with the same `tv` and `kind`, the returned `data.pairing_id` and `"code":"1234"`, using the digits on the TV as a string. The bridge then tests whether the AirPlay credentials also work for Companion, the remote control protocol.
-2. **Companion, if needed.** If `tv_status` still reports a control problem after step 1, pair Companion through REST. Post `{"protocol":"companion"}` to `/api/tvs/<TV ID>/pair/start`. Then post `{"pairing_id":"<returned ID>","pin":"<code on the TV>"}` to `/api/tvs/<TV ID>/pair/finish`.
+2. **Companion, if needed.** If `tv_status` still reports a control problem after step 1, pair Companion through REST, with the token and `Content-Type: application/json`. Post `{"protocol":"companion"}` to `/api/tvs/<TV ID>/pair/start`. Then post `{"pairing_id":"<returned ID>","pin":"<code on the TV>"}` to `/api/tvs/<TV ID>/pair/finish`.
 3. **Screen.** Call `tv_pair {"tv":"Living Room","kind":"screen"}`. If the state is `waiting_for_pairing_screen`, open **Settings → Remotes and Devices → Remote App and Devices** on the TV and leave it open. Poll with the same `tv`, `kind` and `pairing_id` until the state is `code_on_screen`. Then submit the six-digit code as a string.
 4. Call `tv_status {"tv":"Living Room"}`. Control and screen pairing should both be `"ok"`.
 
@@ -139,55 +153,64 @@ export TV_USE_TOKEN="$(cat "$HOME/.config/tv-use/token")"
 codex mcp add tv-use --url http://127.0.0.1:8765/mcp --bearer-token-env-var TV_USE_TOKEN
 ```
 
-An agent on another computer on the LAN uses `http://<Mac IP address>:8765/mcp`. Use the same token. Send it only over a trusted network, because plain HTTP carries the token in clear text.
+An agent on another computer on the LAN uses `http://<Mac IP address>:8765/mcp`. This needs `-p 8765:8765` instead of `-p 127.0.0.1:8765:8765`. Use the same token. Send it only over a trusted network, because plain HTTP carries the token in clear text.
 
-Scripts can POST tool arguments to `/api/tool/<name>`. Upload a ZIP to `/api/bundle`. These are the same routes that the Home Assistant integration uses, under `/api/` instead of `/api/atv_bridge/`. The tools and results are the same as in [the MCP API](mcp-api.md).
+Scripts can POST tool arguments to `/api/tool/<name>` with `Content-Type: application/json`. Upload a ZIP to `/api/bundle` with `Content-Type: application/zip`. These are the same routes that the Home Assistant integration uses, under `/api/` instead of `/api/atv_bridge/`. The tools and results are the same as in [the MCP API](mcp-api.md).
 
 ## Networking
 
 ### On a Mac with OrbStack
 
-OrbStack runs containers in a Linux virtual machine. With `--network host`, the container shares the network of that machine, not the Mac's. OrbStack forwards each TCP and UDP port that the container listens on to the Mac:
+OrbStack runs containers in a Linux virtual machine. The default bridge network gives the container its own addresses and its own loopback interface:
 
-- A port on `0.0.0.0` in the container opens on every Mac interface. Other devices on the LAN can reach it. This needs the OrbStack setting **Expose ports to LAN** (`docker.expose_ports_to_lan`), which is on by default.
-- A port on `127.0.0.1` in the container opens only on the Mac's loopback interface.
+- `-p 127.0.0.1:8765:8765` opens port 8765 on the Mac's loopback only. To accept agents from the LAN, use `-p 8765:8765`. This needs the OrbStack setting **Expose ports to LAN** (`docker.expose_ports_to_lan`), which is on by default. Docker then also opens the port on IPv6 and resets those connections, because the server listens on IPv4 only, so `localhost` can fail. Connect to `127.0.0.1`.
+- The stage on port 8766, Chromium's debugging port and the page proxy listen on the container's loopback. No program on the Mac can reach them. OrbStack also routes each container's own IP address to the Mac, but that address reaches only port 8765.
 - Connections from the container to the LAN leave through the Mac's IP address.
 
-Control, screen reading, screenshots and AirPlay mirroring with sound all work this way.
+Control, screen reading, screenshots and AirPlay mirroring with sound all work on the bridge network. In a test on 21 November 2026, one mirror session to an Apple TV 4K (2nd generation) ran for 6.5 minutes with page audio on, on a silent page:
+
+- tvpipe kept one process, and its count of frames sent rose at each of 25 samples, 15 seconds apart.
+- Seven `tv_show` calls changed the page. The first took 2.5 seconds, the others 0.6 to 1.4 seconds. After each change, a `tv_look` screenshot showed the new page.
+- Text `tv_look`, `tv_page_run` and `tv_remote` keys worked throughout.
+- From the Mac, neither `127.0.0.1` nor the container's address reached the stage or Chromium's debugging port.
 
 What does not cross the virtual machine:
 
 - **Multicast.** Bonjour discovery finds no TVs. Give each TV's IP address in `TV_USE_TVS`. Queries sent straight to a known address work.
 - **The Mac's address.** The container sees only its virtual address. `presentation_mode` `play_url` and `auto` send the TV a link to an MP4 file on that address, and the TV cannot reach it. Use `mirror`.
 
-### Without host networking
+### Host networking
 
-The container also works on Docker's default bridge network. In testing on OrbStack, control, screen reading and mirroring with sound worked. The mirror ran for about 35 seconds. Longer sessions were tested only with `--network host`. Publish only the MCP port. For example, to accept agents on this Mac only:
+With `--network host`, the container shares the network of the OrbStack virtual machine, and OrbStack forwards every port that the container opens to the Mac. A port on `0.0.0.0` opens on every Mac interface, and a port on `127.0.0.1` opens on the Mac's loopback. Control, screen reading, screenshots and mirroring with sound work this way too.
 
-```sh
-docker run -d --name tv-use --restart unless-stopped -p 127.0.0.1:8765:8765 \
-  -v tv-use-data:/data \
-  -v "$HOME/.config/tv-use/token:/run/secrets/tv-use-token:ro" \
-  -e TV_USE_TOKEN_FILE=/run/secrets/tv-use-token \
-  -e 'TV_USE_TVS=name=Living Room,host=192.168.1.20' \
-  ghcr.io/neekolas/tv-use-bridge:latest
-```
+Avoid host networking on a Mac. The container's loopback ports then open on the Mac's loopback, and every program on the Mac can reach them without the token:
 
-Use `http://127.0.0.1:8765/mcp`. The server listens on IPv4 only. With `-p 8765:8765`, which also accepts agents from the LAN, Docker opens the port on IPv6 too and resets those connections, so `localhost` can fail. Port 8766 stays inside the container, so check the container with `GET /api/health` on port 8765.
+- **Chromium's debugging port.** tvpipe starts Chromium with `--remote-debugging-port` and drives it through that port, so the bridge cannot close it or move it to a pipe. A program that connects controls the bridge's browser, and through it can read the container's files, such as the pairing records in `/data` and the token file. In testing, a program on the Mac read a file in `/data` this way.
+- **The page proxy** forwards requests under the page network rules.
+- **The stage** is reachable too, but it refuses other programs. It requires a key that changes at each start, refuses other origins on its socket and cannot be framed.
+
+Use host networking only on a computer where you trust every program and user.
 
 ### On Linux
 
-Linux was not tested. There, `--network host` gives the container the host's own network, as in Home Assistant, so Bonjour discovery should work. For `play_url` or `auto`, also set `TV_USE_STAGE_LISTEN=0.0.0.0`, so that the TV can fetch the MP4 files from port 8766.
+Linux was not tested. There, `--network host` gives the container the host's own network, as in Home Assistant, so Bonjour discovery should work, and the same loopback exposure applies to every program on the host. For `play_url` or `auto`, also set `TV_USE_STAGE_LISTEN=0.0.0.0`, so that the TV can fetch the MP4 files from port 8766.
 
 ### Security
 
-- Port 8765 needs the token for every route.
-- Port 8766, the stage, serves the bridge's own browser. It listens on `127.0.0.1` by default. With `--network host` on OrbStack, every client that OrbStack forwards appears to come from `127.0.0.1`, so the stage cannot tell the browser from a LAN device. Keep the default on a Mac.
-- Pages cannot reach the container's own addresses or loopback. On a Mac, the container cannot see the Mac's LAN address, so it cannot protect it. Grant exact `host:port` entries in `TV_USE_PAGE_NETWORK_ALLOW`, never a subnet that contains the Mac. Otherwise a page can reach every service on the Mac that listens on the LAN.
+- **Port 8765** needs the token on every route, including `/api/health` and the event socket. With `--insecure-local`, it needs a loopback host name instead.
+- **Web pages cannot use port 8765**, even with `--insecure-local`. The server refuses a request whose `Origin` is another site or `null`, and a POST body that is not `application/json`, or `application/zip` for `/api/bundle`. A web page in a browser cannot send those without the server's permission, and the server gives none.
+- **The stage**, port 8766, serves only the bridge's own browser. It requires a random key that changes at each start. Its socket also requires the stage's own origin, and no other page can frame it.
+- **Chromium's debugging port and the page proxy** accept any client on the container's loopback. Bridge networking keeps them inside the container. Host networking exposes them. See [Host networking](#host-networking).
+- **The token.** Prefer `TV_USE_TOKEN_FILE`. A `TV_USE_TOKEN` value is visible in `docker inspect` and in the container's `/proc/1/environ`. The bridge removes it from the environment of the processes that it starts, such as Chromium and tvpipe.
+- **Plain HTTP.** Send the token only over a trusted network.
+- **Pages** cannot reach the container's own addresses or loopback. On a Mac, the container cannot see the Mac's addresses, so it cannot protect them:
+  - **LAN.** Grant exact `host:port` entries in `TV_USE_PAGE_NETWORK_ALLOW`, never a subnet that contains the Mac. Otherwise a page can reach every service on the Mac that listens on the LAN.
+  - **Tailnet.** Pages may reach tailnet addresses by default. These include the Mac's own tailnet address when the Mac runs Tailscale. In testing, the container reached the Mac's AirPlay receiver ports on that address.
+  - **IPv6.** The page rules treat a global IPv6 address as public internet, because the container cannot see the LAN's IPv6 prefix. If the container has IPv6 routing, a page can reach a LAN device, including the Mac, at its global IPv6 address. The tested network had no global IPv6, and the container could not reach public IPv6 addresses.
 
 ## Measured results
 
-Measured on 21 November 2026 against an Apple TV 4K (2nd generation) on tvOS 27.2. The Mac was on Apple silicon with OrbStack 2.2.5, `--network host` and 16 virtual CPUs. The Home Assistant Green ran the app that was deployed that night. Both showed the same simple page at 1920x1080. Each value comes from one to three runs.
+Measured on 21 November 2026 against an Apple TV 4K (2nd generation) on tvOS 27.2. The Mac was on Apple silicon with OrbStack 2.2.5, `--network host` and 16 virtual CPUs. The later bridge-network test gave similar `tv_show` times. The Home Assistant Green ran the app that was deployed that night. Both showed the same simple page at 1920x1080. Each value comes from one to three runs.
 
 | Measure | Home Assistant Green | Mac, standalone |
 | --- | --- | --- |
@@ -208,18 +231,21 @@ Measured on 21 November 2026 against an Apple TV 4K (2nd generation) on tvOS 27.
 
 | Symptom | What to check |
 | --- | --- |
-| The container exits at start | Read `docker logs tv-use`. A missing or short token, a bad value or a flag in Home Assistant mode stops the container with a message. |
+| The container exits at start | Read `docker logs tv-use`. A missing or short token, an empty TV list, a bad value or a flag in Home Assistant mode stops the container with a message. |
 | `401` with `unauthorized` | Send `Authorization: Bearer <token>` with the token from `TV_USE_TOKEN` or `TV_USE_TOKEN_FILE`. With `--insecure-local`, connect to `localhost` or `127.0.0.1`. |
+| `403` with `forbidden_origin` | The request came from a web page on another site, or from a sandboxed page that sends `Origin: null`. Call the API from a program. |
+| `415` with `unsupported_media_type` | Send `Content-Type: application/json`, or `application/zip` to `/api/bundle`. |
 | Connection reset on `localhost:8765` | Without host networking, connect to `127.0.0.1`. The server listens on IPv4 only. |
 | `405` on `GET /mcp` | Expected. The server answers MCP with `POST` only. |
 | `tv_not_found` or no TV in `tv://tvs` | Add the TV to `TV_USE_TVS` with its IP address and restart the container. Discovery does not work on a Mac. |
+| A TV and its pairings are gone from `tv://tvs` after a change to `TV_USE_TVS` | Look for `Kept the records of TV` in `docker logs tv-use`. Correct the entry, or add the TV's ID or name, and restart. The bridge then uses the kept pairings. |
 | `tv_unreachable` | Wake the TV. Check that the address in `TV_USE_TVS` is current. The container does not find a TV that changed its address. |
 | `waiting_for_pairing_screen` does not change | Open **Settings → Remotes and Devices → Remote App and Devices** on the TV and leave it open. |
 | `sender_failed` on `tv_show` | Check that the TV is awake and that AirPlay **Allow Access** includes this network. Read `docker logs tv-use`. |
-| `tailnet_dns_missing` | Ignore it unless pages use tailnet names. Its fix names a Home Assistant command, which does not apply here. |
+| `tailnet_dns_missing` | Ignore it unless pages use tailnet names. To load them, give the container a DNS server that resolves them. |
 | The mirror stutters | Lower `TV_USE_MIRROR_FPS`, or set `TV_USE_MIRROR_SIZE=1280x720`. |
 
 ## Update and remove
 
 - **Update.** Run `docker pull ghcr.io/neekolas/tv-use-bridge:latest`, then `docker rm -f tv-use` and the same `docker run` command. The volume keeps the pairings.
-- **Remove.** Run `docker rm -f tv-use`. To delete the pairings, also run `docker volume rm tv-use-data`. On each TV, remove **Agent Bridge** under **Settings → Remotes and Devices → Remote App and Devices**.
+- **Remove.** Run `docker rm -f tv-use`. To delete the pairings, also run `docker volume rm tv-use-data`. To delete one TV's pairings instead, send `DELETE /api/tvs/<TV ID>` first. On each TV, remove **Agent Bridge** under **Settings → Remotes and Devices → Remote App and Devices**.
