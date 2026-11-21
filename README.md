@@ -72,6 +72,10 @@ tv-use targets **Apple TV 4K on tvOS 27 or later**, the recommended and tested b
 
 Run Claude Code, Codex or Grok Bot on a machine on the same network as Home Assistant, such as a desktop or a home server. It reaches HA directly at `homeassistant.local`, with no Tailscale. Each call skips the trip between a remote agent and the home. From a Mac on the home network, `tv_status` returned in about 0.07 seconds and a text-only `tv_look` in about 0.6 seconds. Use Tailscale only for agents that run outside the house. [Choose local or remote](docs/SETUP.md#choose-local-or-remote)
 
+### Alternative: run without Home Assistant
+
+The same app image also runs as a plain MCP server in a Docker container, for example with OrbStack on a Mac. It connects to the TVs directly and needs no Home Assistant. A Mac renders and mirrors pages much faster than a Home Assistant Green, but it must stay on and awake. You configure it with environment variables or command flags and pair with `tv_pair`. [Run without Home Assistant](docs/standalone.md)
+
 ## Operate a TV
 
 Every tool accepts an optional `tv`. Use the name or stable bridge ID from `tv://tvs`. One paired TV is the default, even if others await pairing. With several paired TVs, name the TV for actions. An untargeted `tv_status` or `tv_look` returns summaries. Use an ID when names overlap.

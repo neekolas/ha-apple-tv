@@ -2,6 +2,8 @@
 
 Install one Home Assistant app and one custom integration for all your TVs. Both are named **Apple TV Agent Bridge** in Home Assistant. The app talks to the TVs. Agents connect to the integration on your Home Assistant web address.
 
+**Alternative: run without Home Assistant.** The app image also runs as a standalone MCP server in a Docker container, such as OrbStack on a Mac. Choose it if you have no Home Assistant or want faster page rendering, and the computer can stay on. [Run without Home Assistant](standalone.md)
+
 ## What you need
 
 - **Apple TV 4K on tvOS 27 or later (recommended).** The tested setup includes an Apple TV 4K (2nd generation) on tvOS 27.2 (24K122). tvOS 26.6 also works but is less tested; an Apple TV 4K (1st generation), which cannot run tvOS 27, paired and worked on 26.6.1. No Apple Developer account is required.
