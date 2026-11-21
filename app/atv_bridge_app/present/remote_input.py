@@ -55,6 +55,18 @@ PRESS_LOG = """() => {
   return [window.__tvRemote.id, window.__tvRemote.count, Boolean(window.__tvRemoteFocus)];
 }"""
 
+# Runs in the content document at show time. Chromium blocks autofocus in a cross-origin frame, so this
+# focuses the page's first focusable [autofocus] element, unless the page has focused an element itself.
+# tvOS shows its preferred item focused in the same way, and the first press moves from it.
+AUTOFOCUS = """() => {
+  const active = document.activeElement;
+  if (active && active !== document.body && active !== document.documentElement) return;
+  for (const el of document.querySelectorAll('[autofocus]')) {
+    el.focus();
+    if (document.activeElement === el) return;
+  }
+}"""
+
 # Runs in the content document. Safe to run before every key.
 FOCUS_HELPER = r"""() => {
   if (window.__tvRemoteFocus) return;
@@ -96,9 +108,9 @@ FOCUS_HELPER = r"""() => {
     for (const [el, r] of items) {
       let score;
       if (!from) {
-        // No focus yet. Start at the first item on screen in reading order.
+        // No focus yet. Start at the page's first [autofocus] item, else at the first item on screen in reading order.
         const visible = r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
-        score = (visible ? 0 : 1e7) + Math.abs(r.top) * 4 + Math.abs(r.left);
+        score = el.hasAttribute('autofocus') ? -1 : (visible ? 0 : 1e7) + Math.abs(r.top) * 4 + Math.abs(r.left);
       } else {
         const dx = r.left + r.width / 2 - (from.left + from.width / 2);
         const dy = r.top + r.height / 2 - (from.top + from.height / 2);
@@ -278,9 +290,9 @@ TVOS_HELPER = r"""() => {
     let best = null, bestScore = Infinity, side = null, sideScore = Infinity, ahead = false;
     for (const [el, r] of items) {
       if (!from) {
-        // No focus yet. Start at the first item on screen in reading order.
+        // No focus yet. Start at the page's first [autofocus] item, else at the first item on screen in reading order.
         const visible = r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
-        const score = (visible ? 0 : 1e7) + Math.abs(r.top) * 4 + Math.abs(r.left);
+        const score = el.hasAttribute('autofocus') ? -1 : (visible ? 0 : 1e7) + Math.abs(r.top) * 4 + Math.abs(r.left);
         if (score < bestScore) [best, bestScore] = [el, score];
         continue;
       }
@@ -613,10 +625,14 @@ class RemoteInput:
         return arrived
 
     async def prime(self):
-        """Find the content document at show time, so the first press is not slow."""
+        """Find the content document at show time, so the first press is not slow. Focus its [autofocus] item."""
         with suppress(Exception):
             async with asyncio.timeout(3):
-                await self.prepare()
+                frame, _, session = await self.prepare()
+                await frame.evaluate(AUTOFOCUS)
+                # Only input gives a frame system focus. Without it, :focus does not match, and the focused item
+                # shows no ring or lift until the first press. Empty text sends the page no event.
+                await session.send("Input.insertText", {"text": ""})
 
     async def settle(self, timeout=3):
         """Give the watch a short time to report its first state."""

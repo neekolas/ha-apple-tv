@@ -1987,3 +1987,38 @@ async def test_tvos_up_and_down_stay_in_a_staggered_column(tvos):
     assert await tvos.press("up", "up") == "c10"
     # At the end of a column, the nearest tile below wins, although it lies partly beside.
     assert await tvos.press("down", start="c20") == "c10"
+
+
+# Two rows of three tiles. The page prefers the middle tile of the second row.
+AUTOFOCUS_CONTENT = """<style>body{margin:0;background:#111} button{position:absolute;width:200px;height:100px;border:0;background:#333}</style>
+<button id=a0 style='left:40px;top:40px'></button><button id=a1 style='left:300px;top:40px'></button><button id=a2 style='left:560px;top:40px'></button>
+<button id=b0 style='left:40px;top:200px'></button><button id=b1 autofocus style='left:300px;top:200px'></button><button id=b2 style='left:560px;top:200px'></button>"""
+AUTOFOCUS_PAGE = pytest.mark.parametrize("browser_frame,mode", [(AUTOFOCUS_CONTENT, "tvos"), (AUTOFOCUS_CONTENT, "focus")],
+                                         indirect=["browser_frame"])
+
+
+@AUTOFOCUS_PAGE
+async def test_the_autofocus_item_shows_focus_when_the_page_shows_and_the_first_arrow_moves_from_it(tvos, mode):
+    """Review finding: the first arrow went to the first item on screen, past the page's autofocus item.
+
+    Chromium blocks autofocus in the stage's cross-origin frame. tvOS shows its preferred item focused
+    when a view appears, and the first press moves from it.
+    """
+    frame, control = tvos.frame, tvos.control
+    control.mode = mode
+    assert await frame.evaluate("document.activeElement === document.body")
+    await control.prime()
+    # The item has focus, and the frame has system focus, before any press. Without it, :focus did not match.
+    assert await frame.evaluate("[document.activeElement.id, document.hasFocus(), window.__tvRemote.count]") == ["b1", True, 0]
+    await asyncio.sleep(0.45)
+    look = "(() => { const s = getComputedStyle(b1); return [s.scale, s.outlineStyle]; })()"
+    assert await frame.evaluate(look) == [{"tvos": "1.06", "focus": "none"}[mode], "solid"]
+    assert await tvos.press("right") == "b2"
+
+
+@AUTOFOCUS_PAGE
+async def test_with_nothing_focused_the_first_arrow_lands_on_the_autofocus_item(tvos, mode):
+    """A document that shows no focus yet, such as one after a navigation, shows it at the first arrow."""
+    tvos.control.mode = mode
+    assert await tvos.press("right") == "b1"  # Not a0, the first item on screen.
+    assert await tvos.press("up") == "a1"
