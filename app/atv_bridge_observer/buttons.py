@@ -14,7 +14,8 @@ from pymobiledevice3.services.os_trace import OsActivityStreamFlag, OsTraceServi
 # Press matcher. Change only this block when a remote logs a different line.
 # The match uses the process, the log category and the HID page and usage.
 # It must not depend on where the press came from.
-# Verified on tvOS 26.6.1 with presses sent by tv_remote.
+# tv_remote presses: generic desktop page 0x1, verified on tvOS 26.6.1.
+# Physical clickpad Siri Remote: consumer page 0xC, verified on tvOS 27.2.
 PROCESS = "backboardd"
 CATEGORY = "Button"
 PRESS = re.compile(r"\bpage:0x([0-9A-Fa-f]+) usage:0x([0-9A-Fa-f]+) downEvent:([01])\b")
@@ -25,6 +26,10 @@ USAGE_KEYS = {
     (0x01, 0x8A): "right",
     (0x01, 0x8C): "up",
     (0x01, 0x8D): "down",
+    (0x0C, 0x42): "up",
+    (0x0C, 0x43): "down",
+    (0x0C, 0x44): "left",
+    (0x0C, 0x45): "right",
     (0x0C, 0x80): "select",
 }
 

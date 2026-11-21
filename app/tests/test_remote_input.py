@@ -42,6 +42,11 @@ async def until(condition, timeout=2):
         # A physical remote reports another source and sender. The match ignores both.
         ("Unknown page:0x1 usage:0x8b downEvent:1 source:HIDDevice senderID:F00D down", ("left", True)),
         ("Select page:0x0C usage:0x80 downEvent:1", ("select", True)),
+        # Lines logged by a physical clickpad Siri Remote on tvOS 27.2.
+        ("Left page:0xC usage:0x44 downEvent:1 source:verifiedExternalAccessory senderID:100000597 down", ("left", True)),
+        ("Right page:0xC usage:0x45 downEvent:1 source:verifiedExternalAccessory senderID:100000597 down", ("right", True)),
+        ("Up page:0xC usage:0x42 downEvent:1 source:verifiedExternalAccessory senderID:100000597 down", ("up", True)),
+        ("Down page:0xC usage:0x43 downEvent:1 source:verifiedExternalAccessory senderID:100000597 down", ("down", True)),
         # Each press also logs an up line and two follow-up lines.
         (LEFT.replace("downEvent:1", "downEvent:0").replace("D02 down", "D02 up"), (None, True)),
         (" 0x1/0x8B/100003D02 began: firstDown:0s ago b0e0u0 destinations:<keyboardFocus>", (None, True)),
