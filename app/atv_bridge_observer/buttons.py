@@ -73,6 +73,8 @@ RETRY_MIN_S = 0.5
 RETRY_MAX_S = 30
 UNMATCHED_LIMIT = 6  # diagnostic lines per UNMATCHED_WINDOW_S
 UNMATCHED_WINDOW_S = 10
+ONCE_LIMIT = 12  # "first line" diagnostics per watch start
+LINE_LIMIT = 600  # characters of a log line kept in a diagnostic
 
 
 class Freshness:
@@ -161,12 +163,14 @@ class ButtonWatch:
         self.delay = RETRY_MIN_S
         self.lag = float("inf")  # Lag baseline, kept across reconnects.
         self.unmatched = []
+        self.logged = set()
         self.touch = touch.TouchRecognizer()
         self.momentum = None
 
     def start(self):
         if not self.task or self.task.done():
             self.state = None
+            self.logged = set()
             self.task = asyncio.create_task(self._run())
 
     async def stop(self):
@@ -281,18 +285,35 @@ class ButtonWatch:
                 self._cancel_momentum()
             if not known:
                 self._unmatched(entry.message, now)
+            if process == PROCESS and category != CATEGORY and touch.HINT.search(entry.message or ""):
+                # A remote may log its touches in a category that touch.py does not read.
+                self._once(("category", category), f"First line about touch in log category {category}", entry.message)
             if key and not stale:
                 self.emit({"event": "button", "key": key, "device_time": device, "received": now})
             elif key:
                 logging.info("Dropped a stale %s press", key)
 
+    def _once(self, key, what, message):
+        """Log one raw line per key and watch start. The app log then shows what a remote sends."""
+        if key not in self.logged and len(self.logged) < ONCE_LIMIT:
+            self.logged.add(key)
+            logging.info("%s: %s", what, str(message)[:LINE_LIMIT])
+
     def _touch(self, message, device, now, stale):
+        # These two do not depend on the matcher in touch.py: a remote can log another line shape.
+        self._once("touch", "First touch line of this watch", message)
+        if "down" in (message or ""):
+            self._once("down", "First touch-down line of this watch", message)
         if stale:
             # Old touch lines must not move anything, and a half-seen contact is useless.
             self.touch.reset()
             self._cancel_momentum()
             return
         gesture = self.touch.touch(message, device)
+        if gesture.unmatched:
+            self._unmatched(message, now, "touch_unmatched")
+        for report in gesture.reports:
+            self.emit({"event": "gesture", **report})
         if gesture.touch_down:
             self._cancel_momentum()
         for key in gesture.keys:
@@ -313,8 +334,8 @@ class ButtonWatch:
             self.momentum.cancel()
             self.momentum = None
 
-    def _unmatched(self, message, now):
+    def _unmatched(self, message, now, event="button_unmatched"):
         self.unmatched = [at for at in self.unmatched if now - at < UNMATCHED_WINDOW_S]
         if len(self.unmatched) < UNMATCHED_LIMIT:
             self.unmatched.append(now)
-            self.emit({"event": "button_unmatched", "message": str(message)[:300]})
+            self.emit({"event": event, "message": str(message)[:300]})

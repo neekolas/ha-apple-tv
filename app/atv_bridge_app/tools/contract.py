@@ -249,7 +249,7 @@ the item straight above or below on screen. For "tvos", put focusable items in r
 each row in a horizontal scroll container or a data-tv-group element, leave 8% spare room around
 items, use a dark background, and do not use hover-only controls or animation that runs without input.
 Clickpad remote: ring clicks are arrows and the center click is Enter (verified).
-Touch-surface remote: swipes are arrows, one per step of finger travel, a fast flick adds a few more,
+Touch-surface remote: swipes are arrows, one per step of finger travel, a brisk swipe or a flick adds up to four more,
 and any click is Enter (clicks verified, swipe tuning preliminary).
 Menu and Home stay with tvOS and end the mirror. Play/Pause and volume are not forwarded."""
 RETRYABLE = {"tv_unreachable", "page_unreachable", "screen_unavailable", "busy"}

@@ -427,8 +427,14 @@ def recognize(lines, recognizer=None):
 
 
 def test_real_touch_remote_capture_replays_to_the_expected_keys():
-    """Lines from a first-generation Siri Remote on tvOS 26.6.1: five clicks, four swipes, two slow drags, Menu."""
-    recognizer, out = touch.TouchRecognizer(), []
+    """Lines from a first-generation Siri Remote on tvOS 26.6.1: five clicks, four swipes, two slow drags, Menu.
+
+    The four swipes are ordinary brisk swipes. They lift off at 9.8, 6.6, 5.2 and 9.4 pad units per second.
+    Hardware finding: a swipe like these moved one item, and people expect it to carry focus further.
+    Momentum now starts at 4.5 pad units per second, so each of them earns one or two momentum arrows.
+    Before, it started at 12 and none of them earned any. The slow drags lift off below 1 and give only their steps.
+    """
+    recognizer, out, reports = touch.TouchRecognizer(), [], []
     for row in map(json.loads, (FIXTURES / "touch_remote.jsonl").read_text().splitlines()):
         if row["category"] == "Button":
             key, _ = buttons.match_press("backboardd", "Button", row["message"])
@@ -438,9 +444,29 @@ def test_real_touch_remote_capture_replays_to_the_expected_keys():
                 out.append(key)
         else:
             gesture = recognizer.touch(row["message"], row["t"])
+            assert not gesture.unmatched
             out += gesture.keys
-            assert gesture.momentum is None  # These were ordinary swipes, not flicks.
-    assert out == ["select"] * 5 + ["left", "right", "right", "up", "down"] + ["right"] * 4
+            if gesture.momentum:
+                out += [f"{gesture.momentum[0]} (momentum)"] * len(gesture.momentum[1])
+            reports += gesture.reports
+    assert out == (["select"] * 5
+                   + ["left"] + ["left (momentum)"] * 2
+                   + ["right", "right", "right (momentum)"]
+                   + ["up", "up (momentum)"]
+                   + ["down"] + ["down (momentum)"] * 2
+                   + ["right"] * 4)
+    # One report per contact that ended: four clicks with the finger on the surface, four swipes, two drags.
+    assert [report["no_momentum"] for report in reports] == ["clicked"] * 4 + [None] * 4 + ["below_v_min", "no_dominant_axis"]
+    assert [report["lift_v"] and max(map(abs, report["lift_v"])) for report in reports[4:]] == [9.82, 6.57, 5.19, 9.36, 0.52, 0.69]
+    assert [max(report["peak_v"]) for report in reports[4:]] == [9.82, 8.36, 8.26, 9.36, 0.99, 2.53]
+    assert reports[4] == {
+        "token": "0xB5890338", "path": 1, "samples": 10, "interval": 0.015,
+        "start": [0.9878, 0.6444], "end": [0.1951, 0.6522], "min": [0.1951, 0.5887], "max": [0.9878, 0.6522],
+        "travel": [-0.7927, 0.0078], "duration": 0.1964, "rest": 0.017, "span": 1.0,
+        "peak_v": [9.82, 0.82], "lift_v": [-9.82, 0.82], "steps": 1, "keys": ["left"], "momentum": 2, "no_momentum": None,
+    }
+    # The remote used its whole 0 to 1 range, so distances stay in fractions of that.
+    assert recognizer.span() == touch.PAD_SPAN and recognizer.swipes == 6
 
 
 def test_slow_drag_moves_one_item_per_step():
@@ -457,39 +483,106 @@ def test_slow_drag_moves_one_item_per_step():
     assert recognize(stroke((0.5, 0.5), (0.7, 0.5), 1.0)) == ([], None)
 
 
-def test_ordinary_swipe_gives_one_arrow_without_momentum():
-    # Like the captured swipes: about 0.75 of the pad in 0.2 s, 4 pad units per second.
+def test_moderate_swipe_gives_one_arrow_without_momentum():
+    # About 0.75 of the pad at 3.8 pad units per second. Momentum starts at 4.5.
     for start, end, key in [((0.9, 0.6), (0.15, 0.6), "left"), ((0.1, 0.6), (0.85, 0.6), "right"),
                             ((0.5, 0.9), (0.5, 0.15), "up"), ((0.5, 0.1), (0.5, 0.85), "down")]:
         assert recognize(stroke(start, end, 0.2)) == ([key], None)
 
 
-def test_fast_flick_adds_momentum_arrows():
+def test_brisk_swipe_adds_one_or_two_momentum_arrows():
+    # Like the captured swipes, which lift off at 5 to 10 pad units per second.
+    assert recognize(stroke((0.1, 0.6), (0.85, 0.6), 0.12)) == (["right"], ("right", touch.momentum_delays(1)))  # 6.3
+    assert recognize(stroke((0.9, 0.6), (0.15, 0.6), 0.075)) == (["left"], ("left", touch.momentum_delays(2)))  # 10
+    assert recognize(stroke((0.5, 0.9), (0.5, 0.15), 0.09)) == (["up"], ("up", touch.momentum_delays(1)))  # 8.3
+
+
+def test_hard_flick_adds_three_or_four_momentum_arrows():
+    # 0.84 of the pad in 60 ms is 14 pad units per second.
+    assert recognize(stroke((0.08, 0.5), (0.92, 0.5), 0.06)) == (["right", "right"], ("right", touch.momentum_delays(3)))
     # 0.94 of the pad in 45 ms is about 21 pad units per second.
     keys, momentum = recognize(stroke((0.03, 0.5), (0.97, 0.5), 0.045))
     assert keys == ["right"]
-    assert momentum == ("right", touch.momentum_delays(3)) and touch.momentum_count(20) == 3
+    assert momentum == ("right", touch.momentum_delays(4)) and touch.momentum_count(21) == touch.MOMENTUM_MAX_EXTRA
     # The gaps grow from 40 ms to 120 ms.
     delays = touch.momentum_delays(touch.MOMENTUM_MAX_EXTRA)
     gaps = [round(b - a, 3) for a, b in zip([0, *delays], delays)]
     assert gaps[0] == 0.04 and gaps[-1] == 0.12 and gaps == sorted(gaps)
-    assert [touch.momentum_count(speed) for speed in (0, 7.9, 11.9, 12, 16, 100)] == [0, 0, 0, 1, 2, touch.MOMENTUM_MAX_EXTRA]
-    # A short fast flick is too short for a step. It still moves one item.
-    assert recognize(stroke((0.5, 0.5), (0.8, 0.5), 0.03)) == (["right"], None)
+    assert [touch.momentum_count(speed) for speed in (0, 4.4, 4.5, 8.4, 8.5, 12.5, 16.5, 100)] == [0, 0, 1, 1, 2, 3, 4, 4]
+    # A short fast flick is too short for a step. It still moves one item, and its speed carries it on.
+    assert recognize(stroke((0.5, 0.5), (0.8, 0.5), 0.03)) == (["right"], ("right", touch.momentum_delays(2)))
+    # A sloppy tap slides a little, fast. It covers too little of the pad to be a flick.
+    tap = [(0.0, touch_line("down", 0.5, 0.5)), (0.008, touch_line("move", 0.57, 0.5)),
+           (0.016, touch_line("move", 0.64, 0.5)), (0.017, touch_line("up", 0.64, 0.5))]
+    recognizer = touch.TouchRecognizer()
+    reports = [report for at, line in tap for report in recognizer.touch(line, at).reports]
+    assert recognize(tap) == ([], None)
+    assert [(report["no_momentum"], report["lift_v"]) for report in reports] == [("too_short", [8.75, 0.0])]
 
 
 def test_a_finger_that_rests_before_lifting_does_not_flick():
     """Reviewer case: a fast slide, a rest with no log lines, then a lift fired momentum arrows."""
     flick = stroke((0.03, 0.5), (0.97, 0.5), 0.045)
     moves, lift = flick[:-1], flick[-1][1]
-    assert recognize(moves + [(moves[-1][0] + 0.03, lift)])[1] == ("right", touch.momentum_delays(3))
+    assert recognize(moves + [(moves[-1][0] + 0.03, lift)])[1] == ("right", touch.momentum_delays(4))
     for rest in (0.06, 0.341, 2.0):
         assert recognize(moves + [(moves[-1][0] + rest, lift)]) == (["right"], None)
     # Repeated lines at the same position during the rest do not count as movement.
     still = [(moves[-1][0] + 0.015 * i, touch_line("move", 0.97, 0.5)) for i in range(1, 30)]
     assert recognize(moves + still + [(still[-1][0] + 0.001, lift)]) == (["right"], None)
     # A short flick after a rest at the start still counts.
-    assert recognize([(0.0, touch_line("down", 0.5, 0.5))] + [(at + 1.0, m) for at, m in stroke((0.5, 0.5), (0.8, 0.5), 0.03)[1:]]) == (["right"], None)
+    late = [(0.0, touch_line("down", 0.5, 0.5))] + [(at + 1.0, m) for at, m in stroke((0.5, 0.5), (0.8, 0.5), 0.03)[1:]]
+    assert recognize(late) == (["right"], ("right", touch.momentum_delays(2)))
+
+
+def test_a_surface_that_reports_slowly_can_still_flick():
+    """The lift-off limits were set for a line every 15 ms. Another remote may log fewer lines."""
+    def contact(points, interval, rest):
+        lines = [(interval * i, touch_line("move" if i else "down", x, 0.5)) for i, x in enumerate(points)]
+        return lines + [(lines[-1][0] + rest, touch_line("up", points[-1], 0.5))]
+
+    # A line every 40 ms, at 5 pad units per second. A lift 60 ms after the last line is no rest there.
+    points = [0.1, 0.3, 0.5, 0.7, 0.9]
+    assert recognize(contact(points, 0.04, 0.06)) == (["right", "right"], ("right", touch.momentum_delays(1)))
+    assert recognize(contact(points, 0.04, 0.13)) == (["right", "right"], None)
+    # At 15 ms per line the same 60 ms are a rest, as before.
+    assert recognize(contact(points, 0.015, 0.06)) == (["right", "right"], None)
+    # A line every 80 ms: the lift-off window holds one sample, so the last two give the speed.
+    assert recognize(contact([0.08, 0.5, 0.92], 0.08, 0.01)) == (["right", "right"], ("right", touch.momentum_delays(1)))
+
+
+def test_distances_follow_the_range_that_the_surface_reports():
+    def swipe(at, low=0.27, high=0.73):
+        return stroke((low, 0.5), (high, 0.5), 0.3, at=at)
+
+    # A surface that reports about 0.25 to 0.75. Until four swipes were seen, the range counts as 0 to 1.
+    recognizer = touch.TouchRecognizer()
+    for number in range(touch.SPAN_MIN_SWIPES):
+        assert recognizer.span() == touch.PAD_SPAN
+        assert recognize(swipe(number * 2.0), recognizer) == (["right"], None)
+    # Then the range seen counts as the pad, but never as less than SPAN_MIN. The same swipe gives two steps.
+    assert recognizer.span() == touch.SPAN_MIN
+    assert recognize(swipe(10.0), recognizer) == (["right", "right"], None)
+    # The reports say which range was used. A reset keeps what was learned about the surface.
+    recognizer.reset()
+    reports = [report for at, line in swipe(12.0) for report in recognizer.touch(line, at).reports]
+    assert [(report["span"], report["steps"], report["min"][0], report["max"][0]) for report in reports] == [(0.5, 2, 0.27, 0.73)]
+    # A finger that goes further widens the range again.
+    recognize(swipe(14.0, 0.1, 0.9), recognizer)
+    assert recognizer.span() == pytest.approx(0.8)
+    # Lines with another digitizer token come from another surface. Learning starts again.
+    other = [(at, line.replace("0xB5890338", "0xAAAA0001")) for at, line in swipe(16.0)]
+    assert recognize(other, recognizer) == (["right"], None) and recognizer.span() == touch.PAD_SPAN
+    # A remote that uses nearly all of 0 to 1 keeps that range, however many swipes it makes.
+    full = touch.TouchRecognizer()
+    for number in range(6):
+        assert recognize(swipe(number * 2.0, 0.04, 0.96), full) == (["right", "right"], None)
+    assert full.span() == touch.PAD_SPAN
+    # A range beyond 0 to 1 is used as soon as it is seen. The first swipe teaches it.
+    large = touch.TouchRecognizer()
+    recognize(swipe(0.0, 0, 200), large)
+    assert large.span() == 200
+    assert recognize(swipe(2.0, 0, 200), large) == (["right", "right"], None)
 
 
 def test_a_second_finger_is_ignored():
@@ -503,7 +596,7 @@ def test_a_second_finger_is_ignored():
         downs += gesture.touch_down
         momenta += [gesture.momentum] if gesture.momentum else []
     # One finger's steps and one momentum plan. Each touch-down still cancels older momentum.
-    assert keys == ["right"] and momenta == [("right", touch.momentum_delays(3))] and downs == 2
+    assert keys == ["right"] and momenta == [("right", touch.momentum_delays(4))] and downs == 2
     assert recognizer.contacts == {}
     # A lost lift-off line must not block later touches: a silent contact gives way.
     recognize(stroke((0.1, 0.5), (0.2, 0.5), 0.05, at=0.5)[:-1], recognizer)
@@ -521,7 +614,7 @@ def test_click_during_a_contact_cancels_its_swipe():
     assert recognize(lines[2:], recognizer) == ([], None)
     # A contact that starts right after the click also belongs to it. A later one does not.
     assert recognize(stroke((0.05, 0.5), (0.95, 0.5), 0.2, at=0.1), recognizer) == ([], None)
-    assert recognize(stroke((0.05, 0.5), (0.95, 0.5), 0.2, at=2.0), recognizer) == (["right", "right"], None)
+    assert recognize(stroke((0.05, 0.5), (0.95, 0.5), 0.3, at=2.0), recognizer) == (["right", "right"], None)
 
 
 async def test_watch_sends_swipes_and_momentum_and_a_new_touch_cancels_it(watch, monkeypatch):
@@ -542,9 +635,13 @@ async def test_watch_sends_swipes_and_momentum_and_a_new_touch_cancels_it(watch,
         base = time.time()
         flick = stroke((0.03, 0.5), (0.97, 0.5), 0.045)
         feed(flick, base)
-        await until(lambda: len(keys()) == 4)
-        assert keys() == [("right", "swipe")] + [("right", "momentum")] * 3
-        assert not any(e["event"] == "button_unmatched" for e in events)
+        await until(lambda: len(keys()) == 5)
+        assert keys() == [("right", "swipe")] + [("right", "momentum")] * 4
+        assert not any(e["event"].endswith("unmatched") for e in events)
+        # Each contact that ends gives one report, for tuning from the app log.
+        (report,) = [e for e in events if e["event"] == "gesture"]
+        assert (report["keys"], report["momentum"], report["no_momentum"], report["samples"]) == (["right"], 4, None, 4)
+        assert report["lift_v"] == [20.89, 0.0] and report["start"] == [0.03, 0.5] and report["end"] == [0.97, 0.5]
         # A second flick, then a new touch-down before its momentum arrows go out.
         del events[:]
         feed(flick, base + 1)
@@ -556,9 +653,9 @@ async def test_watch_sends_swipes_and_momentum_and_a_new_touch_cancels_it(watch,
         watch.momentum = asyncio.create_task(watch._glide("left", [0.05, 0.1]))
         old = watch.momentum
         feed(flick, base + 2)
-        await until(lambda: len(keys()) == 4)
+        await until(lambda: len(keys()) == 5)
         await asyncio.sleep(0.15)
-        assert old.cancelled() and keys() == [("right", "swipe")] + [("right", "momentum")] * 3
+        assert old.cancelled() and keys() == [("right", "swipe")] + [("right", "momentum")] * 4
         # A click during a contact: Select goes through, the swipe does not.
         del events[:]
         feed(flick[:2], base + 3)
@@ -568,11 +665,60 @@ async def test_watch_sends_swipes_and_momentum_and_a_new_touch_cancels_it(watch,
         await until(lambda: [e["key"] for e in events if e["event"] == "button"] == ["select"])
         await asyncio.sleep(0.3)
         assert [e["key"] for e in events if e["event"] == "button"] == ["select"]
+        assert [e["no_momentum"] for e in events if e["event"] == "gesture"] == ["clicked"]
         # Stale touch lines move nothing.
         del events[:]
         feed(flick, base - 60)
         await asyncio.sleep(0.2)
         assert events == []
+    finally:
+        await watch.stop()
+
+
+ATTACHED = ("digitizer attached (sender 100004008) service:<BKIOHIDService: 0xd787c6a20; serviceStatus: matched; IOHIDService: "
+            "IOHIDService name:AppleEmbeddedBluetoothTouch id:0x100004008 primaryUsagePage:0xd primaryUsage:0x1 "
+            "transport:BluetoothLowEnergy locationID:-1735663521 reportInterval:8000; senderID: 0x100004008>")
+
+
+async def test_watch_logs_what_a_remote_sends_for_touch(watch, caplog):
+    """The clickpad remote's touch lines were never captured. The log must show them, whatever their shape."""
+    watch, observer, events = watch
+    caplog.set_level("INFO")
+
+    def feed(message, category="TouchEvents"):
+        FakeTrace.streams[-1].lines.put_nowait(entry(message, category=category))
+
+    def logged(text):
+        return [record.getMessage() for record in caplog.records if text in record.getMessage()]
+
+    watch.start()
+    try:
+        await until(lambda: {"event": "buttons", "state": "active"} in events)
+        # A line shape that the matcher does not know.
+        unknown = "pad contact 3 began x:120 y:88 down"
+        for message in ("touches:1 ranges:1 then:NO now:YES", unknown, unknown, ATTACHED):
+            feed(message)
+        feed("destinations for Digitizer event: (<keyboardFocus; token: 0xB5890338>)", "EventDelivery")
+        feed("destinations for Digitizer event: (<keyboardFocus; token: 0xB5890338>)", "EventDelivery")
+        for at, message in stroke((0.03, 0.5), (0.97, 0.5), 0.045):
+            FakeTrace.streams[-1].lines.put_nowait(entry(message, device=time.time() + at, category="TouchEvents"))
+        await until(lambda: any(e["event"] == "gesture" for e in events))
+        # The first raw line, and the first one with "down" in it, once each. Neither needs the matcher.
+        assert logged("First touch line of this watch") == ["First touch line of this watch: touches:1 ranges:1 then:NO now:YES"]
+        assert logged("First touch-down line of this watch") == [f"First touch-down line of this watch: {unknown}"]
+        # A touch line in another log category is shown once per category.
+        assert len(logged("First line about touch in log category EventDelivery")) == 1
+        # Lines of an unknown shape are reported. Known lines without a position are not.
+        assert [e["message"] for e in events if e["event"] == "touch_unmatched"] == [unknown, unknown]
+        # The report names the device that announced itself.
+        (report,) = [e for e in events if e["event"] == "gesture"]
+        assert report["devices"] == ["AppleEmbeddedBluetoothTouch 0x100004008 BluetoothLowEnergy"]
+        # A new watch logs its first lines again.
+        await watch.stop()
+        watch.start()
+        await until(lambda: len(FakeTrace.streams) == 2)
+        feed(unknown)
+        await until(lambda: len(logged("First touch-down line of this watch")) == 2)
     finally:
         await watch.stop()
 
@@ -932,6 +1078,38 @@ async def test_start_failure_retries_and_does_not_break_reads(remote):
     assert result["ok"] and result["screen"]["presenting"]["remote"]["state"] == "unavailable"
     observer.failure = None
     await until(lambda: control.state == "active")
+
+
+async def test_touch_reports_reach_the_app_log_at_info_level(remote, caplog, monkeypatch):
+    service, observer, control = remote
+    caplog.set_level("INFO", logger="atv_bridge_app.present.remote_input")
+    monkeypatch.setattr(remote_input, "TOUCH_LOG_WINDOW_S", 0.2)
+
+    def lines():
+        return [record.getMessage() for record in caplog.records if record.getMessage().startswith("Remote touch")]
+
+    report = {"event": "gesture", "samples": 10, "lift_v": [-9.82, 0.82], "steps": 1, "momentum": 2, "no_momentum": None}
+    observer_event = observer.emit
+    # No page asked for remote input: nothing is logged.
+    observer.subscribe(control.on_event)
+    control.subscribed = True
+    observer_event(report)
+    assert lines() == []
+    await service.stage.show("a", "/c/a/index.html", remote="tvos")
+    await until(lambda: control.state == "active")
+    observer_event(report)
+    assert lines() == ['Remote touch: {"samples":10,"lift_v":[-9.82,0.82],"steps":1,"momentum":2,"no_momentum":null}']
+    assert caplog.records[-1].levelname == "INFO"
+    # A finger can touch the remote many times a second. The log keeps a limit per window.
+    for _ in range(remote_input.TOUCH_LOG_LIMIT + 5):
+        observer_event(report)
+    assert len(lines()) == remote_input.TOUCH_LOG_LIMIT
+    await asyncio.sleep(0.25)
+    observer_event(report)
+    assert len(lines()) == remote_input.TOUCH_LOG_LIMIT + 1 and lines()[-1].endswith("(6 earlier ones not logged)")
+    # A touch line of an unknown shape is shown too.
+    observer_event({"event": "touch_unmatched", "message": "pad contact 3 began"})
+    assert "Remote touch line with an unknown shape: pad contact 3 began" in caplog.text
 
 
 # --- tv_show ---------------------------------------------------------------

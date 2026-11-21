@@ -1,8 +1,10 @@
 """Forward Siri Remote presses to the mirrored page as trusted key events."""
 
 import asyncio
+import json
 import logging
 import time
+from collections import deque
 from contextlib import suppress
 
 from ..state import classify, now
@@ -20,6 +22,8 @@ KEYS = {
 STALE_S = 2.0
 QUEUE_LIMIT = 8
 RETRY_MAX_S = 30
+TOUCH_LOG_LIMIT = 20  # Touch reports logged per TOUCH_LOG_WINDOW_S. A finger can touch the remote many times a second.
+TOUCH_LOG_WINDOW_S = 10
 # Reasons for state "unavailable" that start in the app. The observer adds its own
 # (atv_bridge_observer/buttons.py, class Unavailable).
 REASONS = {"pairing_required": "screen_not_paired", "screen_pairing_invalid": "screen_pairing_invalid"}
@@ -314,6 +318,8 @@ class RemoteInput:
         self.wake = asyncio.Event()
         self.changed = asyncio.Event()
         self.queue = asyncio.Queue()
+        self.touch_logged = deque()
+        self.touch_skipped = 0
         ops.stage.on_change = self.sync
         # The transport can change after the show: a mirror can fail or fall back to a recording.
         for sender in {id(s): s for s in (ops.sender, getattr(ops, "live_mirror", None)) if s}.values():
@@ -393,8 +399,28 @@ class RemoteInput:
             if self.queue.qsize() >= QUEUE_LIMIT:
                 self.queue.get_nowait()
             self.queue.put_nowait((event["key"], time.monotonic(), event))
+        elif kind == "gesture":
+            self.log_touch(event)
+        elif kind == "touch_unmatched":
+            _LOG.info("Remote touch line with an unknown shape: %s", event.get("message"))
         elif kind == "button_unmatched":
             _LOG.debug("Unmatched button log line: %s", event.get("message"))
+
+    def log_touch(self, report):
+        """Log what the observer made of one finger contact. The values tune atv_bridge_observer/touch.py."""
+        now = time.monotonic()
+        while self.touch_logged and now - self.touch_logged[0] >= TOUCH_LOG_WINDOW_S:
+            self.touch_logged.popleft()
+        if len(self.touch_logged) >= TOUCH_LOG_LIMIT:
+            self.touch_skipped += 1
+            return
+        self.touch_logged.append(now)
+        skipped, self.touch_skipped = self.touch_skipped, 0
+        _LOG.info(
+            "Remote touch: %s%s",
+            json.dumps({key: value for key, value in report.items() if key != "event"}, separators=(",", ":")),
+            f" ({skipped} earlier ones not logged)" if skipped else "",
+        )
 
     async def _reconcile(self):
         while True:

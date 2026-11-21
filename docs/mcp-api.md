@@ -181,9 +181,9 @@ What each remote action becomes:
 |---|---|---|---|
 | Clickpad Siri Remote (2nd generation and later) | Click on the ring: left, right, up, down | `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` | Verified on tvOS 27.2 |
 | Clickpad Siri Remote | Click in the center | `Enter` | Verified on tvOS 27.2 |
-| Clickpad Siri Remote | Swipe on the touch surface | Arrows, as on the touch remote | Active, untested |
+| Clickpad Siri Remote | Swipe on the touch surface | Arrows, as on the touch remote | Seen on tvOS 27.2: a swipe moved one item, before momentum started at a lower speed. Its touch lines are not captured yet. |
 | Touch-surface Siri Remote (1st generation) | Swipe | One arrow for each 0.4 of the pad that the finger travels | Recognizer checked against a real capture on tvOS 26.6.1. Not yet tested end to end. |
-| Touch-surface Siri Remote | Fast flick | Extra arrows after lift-off (momentum), up to 4. A new touch stops them. | Not tested with a real flick |
+| Touch-surface Siri Remote | Brisk swipe or flick | Extra arrows after lift-off (momentum): 1 or 2 after a brisk swipe, 3 or 4 after a hard flick. A new touch stops them. | Speeds taken from the swipes of the capture. Not tested with a real flick |
 | Touch-surface Siri Remote | Click anywhere on the surface | `Enter` | Verified on tvOS 26.6.1 |
 | Touch-surface Siri Remote | Tap without a click | Nothing | By design, as in tvOS |
 | `tv_remote` and `tv_sequence` keys | left, right, up, down, select | Arrows and `Enter` | Verified on tvOS 26.6.1 |
@@ -191,6 +191,8 @@ What each remote action becomes:
 | Any remote | Play/Pause, volume | Not forwarded | |
 
 A click during a touch sends only the key of the click, never an extra arrow. The swipe and flick tuning is preliminary.
+
+To tune swipes, read the app log at the `info` level. For each finger contact that ends, the bridge logs one line that starts with `Remote touch:`. It has the positions as the TV logged them (`start`, `end`, `min`, `max`, `travel`), the number of `samples` and their `interval`, the `duration`, the `rest` between the last movement and the lift, the `span` (the coordinate range that counts as one pad), `peak_v` and `lift_v` in pad units per second, `steps`, `keys`, the number of `momentum` arrows, and `no_momentum`: why no momentum arrows went out (`clicked`, `too_short`, `rest_before_lift`, `no_dominant_axis`, `below_v_min`, `cancelled` or `no_lift`). The log keeps at most 20 of these lines per 10 seconds. When the watch starts, the log also shows the first touch line as the TV sent it, the first one that contains `down`, and touch lines with a shape that the bridge does not know.
 
 Limits:
 
