@@ -2,8 +2,9 @@
 """Screenshot a TV app the way the bridge shows it, without a TV.
 
 The page loads in an iframe with the bridge's sandbox (opaque origin, no
-storage) at 1920x1080 or 1280x720. Each patch runs through app.apply, like
-tv_page_run, and each step saves a PNG.
+storage) at 1920x1080 or 1280x720, with the files beside it (such as fonts/)
+as in a bundle. Each patch runs through app.apply, like tv_page_run, and each
+step saves a PNG. --no-fonts leaves fonts/ out, as when a page is sent inline.
 
 Usage:
   uv run --with playwright skills/tv-use-web-apps/scripts/preview.py APP.html OUT_DIR \
@@ -27,8 +28,15 @@ HARNESS = """<!doctype html><meta charset="utf-8">
 <iframe id="app" sandbox="allow-scripts allow-forms" src="/app/index.html"></iframe>"""
 
 
-def serve(app: pathlib.Path):
+TYPES = {".woff2": "font/woff2", ".jpg": "image/jpeg", ".png": "image/png", ".svg": "image/svg+xml"}
+
+
+def serve(app: pathlib.Path, fonts: bool):
     root = {"/index.html": HARNESS.encode(), "/app/index.html": app.read_bytes(), "/favicon.ico": b""}
+    for f in app.parent.rglob("*"):
+        rel = f.relative_to(app.parent).as_posix()
+        if f.is_file() and f != app and (fonts or not rel.startswith("fonts/")):
+            root["/app/" + rel] = f.read_bytes()
 
     class Handler(SimpleHTTPRequestHandler):
         def do_GET(self):
@@ -38,7 +46,7 @@ def serve(app: pathlib.Path):
                 self.send_error(404)
                 return
             self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Type", TYPES.get(pathlib.PurePath(path).suffix, "text/html; charset=utf-8"))
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -58,6 +66,7 @@ async def main():
     parser.add_argument("--size", default="1920x1080")
     parser.add_argument("--step", action="append", default=[])
     parser.add_argument("--bundled", action="store_true", help="use Playwright's bundled Chromium")
+    parser.add_argument("--no-fonts", action="store_true", help="leave out fonts/, as when the page is sent inline")
     args = parser.parse_args()
     width, height = map(int, args.size.split("x"))
     steps = [json.loads(s) for s in args.step] or [{"demo": True}]
@@ -65,12 +74,13 @@ async def main():
 
     from playwright.async_api import async_playwright
 
-    server = serve(args.app)
+    server = serve(args.app, not args.no_fonts)
     errors = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(**({} if args.bundled else {"channel": "chrome"}))
         page = await browser.new_page(viewport={"width": width, "height": height})
-        page.on("console", lambda m: m.type == "error" and errors.append(m.text))
+        page.on("console", lambda m: m.type == "error" and not (args.no_fonts and "404" in m.text)
+                and errors.append(m.text))
         page.on("pageerror", lambda e: errors.append(str(e)))
         await page.goto(f"http://127.0.0.1:{server.server_port}/")
         frame = page.frame_locator("#app")

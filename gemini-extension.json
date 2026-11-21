@@ -1,0 +1,5 @@
+{
+  "name": "tv-use",
+  "version": "0.1.0",
+  "description": "Let AI agents drive an Apple TV through Home Assistant: set up the bridge, connect, build TV web apps and run live voice sessions."
+}

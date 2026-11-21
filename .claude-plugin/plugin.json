@@ -1,0 +1,33 @@
+{
+  "name": "tv-use",
+  "displayName": "tv-use",
+  "description": "Let AI agents drive an Apple TV through Home Assistant: set up the bridge, connect, build TV web apps and run live voice sessions.",
+  "author": { "name": "neekolas", "url": "https://github.com/neekolas" },
+  "homepage": "https://github.com/neekolas/tv-use",
+  "repository": "https://github.com/neekolas/tv-use",
+  "license": "MIT",
+  "icon": "./.claude-plugin/icon.png",
+  "keywords": ["apple-tv", "home-assistant", "mcp", "tvos", "voice"],
+  "userConfig": {
+    "ha_url": {
+      "type": "string",
+      "title": "Home Assistant URL",
+      "description": "The origin you open Home Assistant with, including the port. At home: http://homeassistant.local:8123. Away: your tailnet hostname.",
+      "required": true
+    },
+    "ha_token": {
+      "type": "string",
+      "title": "Home Assistant token",
+      "description": "A long-lived access token from an HA administrator's profile.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "mcpServers": {
+    "tv-use": {
+      "type": "http",
+      "url": "${user_config.ha_url}/api/atv_bridge/mcp",
+      "headers": { "Authorization": "Bearer ${user_config.ha_token}" }
+    }
+  }
+}

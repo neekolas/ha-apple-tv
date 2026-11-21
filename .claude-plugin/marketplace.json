@@ -1,0 +1,13 @@
+{
+  "name": "tv-use",
+  "description": "tv-use: let AI agents drive an Apple TV through Home Assistant.",
+  "owner": { "name": "neekolas", "url": "https://github.com/neekolas" },
+  "plugins": [
+    {
+      "name": "tv-use",
+      "source": "./",
+      "description": "Skills to set up, connect to and build for an Apple TV, and to run live voice sessions on it.",
+      "category": "productivity"
+    }
+  ]
+}

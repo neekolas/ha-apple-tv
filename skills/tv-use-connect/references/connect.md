@@ -57,6 +57,23 @@ For a client that accepts an `mcpServers` JSON object, replace the sample origin
 }
 ```
 
+For OpenCode, add this to `opencode.json`. `oauth: false` stops it from trying OAuth, and `{env:…}` reads your shell variables.
+
+```json
+{
+  "mcp": {
+    "tvuse": {
+      "type": "remote",
+      "url": "{env:HA_URL}/api/atv_bridge/mcp",
+      "oauth": false,
+      "headers": {"Authorization": "Bearer {env:HA_TOKEN}"}
+    }
+  }
+}
+```
+
+If the Claude Code plugin is installed, it already registers the server as `tv-use`. Do not add a second one.
+
 ## Check the room
 
 Read `tv://tvs` or call `tv_status {}`. Each inventory row has a stable bridge `id`, a `name`, advertised `identifiers`, `paired` (saved AirPlay record) and `screen_paired` (saved screen record). These flags show saved credentials. Use status to check whether they work.

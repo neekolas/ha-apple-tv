@@ -1,0 +1,11 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "tv-use",
+  "displayName": "tv-use",
+  "version": "0.1.0",
+  "description": "Let AI agents drive an Apple TV through Home Assistant: set up the bridge, connect, build TV web apps and run live voice sessions.",
+  "author": { "name": "neekolas", "url": "https://github.com/neekolas" },
+  "repository": "https://github.com/neekolas/tv-use",
+  "license": "MIT",
+  "keywords": ["apple-tv", "home-assistant", "mcp", "tvos", "voice"]
+}

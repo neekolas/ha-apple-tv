@@ -2,26 +2,6 @@
 
 Worked examples for pages on the TV. These examples assume a default TV. With several paired TVs, add the same `tv` name or ID to every call, including the final hide.
 
-## Step-by-step recipe
-
-1. Pass this page as the `html` string to `tv_show`, with `title` set to `Pasta e ceci`.
-
-   ```html
-   <main style="font:48px system-ui"></main>
-   <script>
-     const steps = ["Bring water to a boil", "Add pasta"];
-     function render(step) {
-       document.querySelector("main").textContent = steps[step - 1];
-       return {step};
-     }
-     render(1);
-     window.setStep = render;
-   </script>
-   ```
-
-2. When the user says “next”, call `tv_page_run {"script":"window.setStep(arg)","arg":2}`. Check that `data.result.step` is 2.
-3. When cooking is done, call `tv_show {}`.
-
 ## Read and operate a page
 
 Read a known field with `tv_page_run {"script":"document.querySelector('#note').value"}`. Pass each recipe below as the tool's `script`.

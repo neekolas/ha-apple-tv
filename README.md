@@ -76,6 +76,26 @@ Run Claude Code, Codex or Grok Bot on a machine on the same network as Home Assi
 
 The same app image also runs as a plain MCP server in a Docker container, for example with OrbStack on a Mac. It connects to the TVs directly and needs no Home Assistant. A Mac renders and mirrors pages much faster than a Home Assistant Green, but it must stay on and awake. You configure it with environment variables or command flags and pair with `tv_pair`. [Run without Home Assistant](docs/standalone.md)
 
+## Add the skills to your agent
+
+Four [agent skills](skills/) teach an agent to use tv-use: **tv-use-setup** installs and pairs the bridge, **tv-use-connect** reaches and controls the TV, **tv-use-web-apps** builds pages for it, with five reference apps, and **tv-use-realtime** runs live voice sessions. The repository is a plugin for each agent below.
+
+| Agent | Install | MCP server |
+| --- | --- | --- |
+| Claude Code | `/plugin install tv-use --marketplace neekolas/tv-use` | Included. It asks for your HA URL and token. |
+| claude.ai, Claude Desktop, Cowork | **Customize → Plugins → Add → Add marketplace**, then `neekolas/tv-use` | Add a custom connector by hand. It needs an HTTPS URL that Anthropic can reach. |
+| Codex, ChatGPT desktop | `codex plugin marketplace add neekolas/tv-use`, then install it from `/plugins` | `codex mcp add tv-use --url "$HA_URL/api/atv_bridge/mcp" --bearer-token-env-var HA_TOKEN` |
+| GitHub Copilot CLI | `copilot plugin install neekolas/tv-use` | Add it by hand, as in [connect.md](skills/tv-use-connect/references/connect.md). |
+| VS Code | **Chat: Install Plugin from Source**, then `https://github.com/neekolas/tv-use` | Add it by hand. |
+| Google Antigravity | `agy plugin install https://github.com/neekolas/tv-use`, then `agy plugin enable tv-use` | Included. Enabling asks for your HA URL and token. |
+| Gemini CLI | `gemini extensions install https://github.com/neekolas/tv-use` | Add it by hand. |
+| Muse Code | `muse plugins install . --scope user` in a clone, then `muse plugins approve tv-use` | Add a `streamable_http` entry to `~/.config/muse/settings.json`. |
+| OpenCode and others | `npx skills add neekolas/tv-use` | Add a remote server with `"oauth": false` and the bearer header. |
+
+Each manifest names only the skills, except where noted. Each household has its own HA URL and token, so most formats cannot ship the server. The Muse Code manifest follows a working third-party plugin, because Meta does not document the format.
+
+**Privacy.** The skills and the MCP server talk only to your bridge, on Home Assistant or a standalone host. Pages you show load from that host. Nothing is sent to the plugin author.
+
 ## Operate a TV
 
 Every tool accepts an optional `tv`. Use the name or stable bridge ID from `tv://tvs`. One paired TV is the default, even if others await pairing. With several paired TVs, name the TV for actions. An untargeted `tv_status` or `tv_look` returns summaries. Use an ID when names overlap.

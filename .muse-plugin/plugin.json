@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "tv-use",
+  "displayName": "tv-use",
+  "version": "0.1.0",
+  "description": "Let AI agents drive an Apple TV through Home Assistant: set up the bridge, connect, build TV web apps and run live voice sessions.",
+  "compat": { "source": "native", "manifestDir": ".muse-plugin" },
+  "capabilities": {
+    "skills": [
+      { "id": "tv-use-setup", "path": "skills/tv-use-setup/SKILL.md", "enabledDefault": true },
+      { "id": "tv-use-connect", "path": "skills/tv-use-connect/SKILL.md", "enabledDefault": true },
+      { "id": "tv-use-web-apps", "path": "skills/tv-use-web-apps/SKILL.md", "enabledDefault": true },
+      { "id": "tv-use-realtime", "path": "skills/tv-use-realtime/SKILL.md", "enabledDefault": true }
+    ],
+    "commands": [],
+    "hooks": [],
+    "mcpServers": [],
+    "reminders": []
+  }
+}

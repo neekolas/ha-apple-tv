@@ -4,10 +4,12 @@ Rules every TV web app in this skill follows. The reference apps in `assets/apps
 
 ## One file, no network
 
-- Ship one self-contained `index.html`. Inline the CSS, the JavaScript and any icons as inline SVG.
-- Load nothing from the network. No web fonts, CDNs or remote images. Use the system font stack: `system-ui, -apple-system, "Segoe UI", sans-serif`.
-- Keep the file under about 60 KB. If you need photos, ship small JPEGs (1920×1080 or less) beside `index.html` in a bundle.
+- Ship one `index.html` with inline CSS, JavaScript and SVG. Keep it under about 60 KB.
+- Load nothing from the network. Ship photos as small JPEGs beside `index.html` in a bundle.
+- Fonts come from `fonts/` beside the file: `inter`, `fraunces`, `newsreader`, `bricolage` and `instrument-serif` (`.woff2`, latin, variable where available; see `assets/apps/fonts/`). Declare them with `@font-face { src: url(fonts/inter.woff2) }`. `upload-bundle.sh` includes the folder.
+- End every font stack with `"Noto Sans"` or `"Noto Serif"`, then `system-ui`. The HA host has only Noto, and a page sent inline has no `fonts/`. Check that the design still holds with `preview.py --no-fonts`.
 - The page runs in a sandbox with an opaque origin. `localStorage`, cookies and IndexedDB fail. Keep state in memory.
+- Start the file with a comment: what the app is for, every patch key with an example, and three typical voice turns mapped to patches.
 
 ## Canvas
 
@@ -30,7 +32,8 @@ Rules every TV web app in this skill follows. The reference apps in `assets/apps
 ## Type and color
 
 - Body text at least 32 px. Secondary text at least 28 px. Headings 56 px or more. The key number or word on a view can be 120 px or more.
-- Use weights 500 to 800. Thin weights break up on a mirrored TV picture.
+- Below 56 px, use weights 500 to 800. Thin weights break up in the mirror's video. Display type at 72 px or more can go to 400.
+- No fine grain, noise textures or 1 px hairlines: video encoding smears them. Use smooth, low-contrast gradients and rules of 2 px or more.
 - Use `font-variant-numeric: tabular-nums` for clocks, timers and scores.
 - Use a dark background, not pure black: about `#0d0f14`. Use text near `#f3f4f7`, and secondary text at 7:1 contrast or better against the background.
 - Pick one accent color per app. Use it for focus, the current item and the status dot. Do not rely on color alone; pair it with a number, a label or a shape.

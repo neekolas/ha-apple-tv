@@ -1,0 +1,28 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "tv-use",
+  "version": "0.1.0",
+  "description": "Let AI agents drive an Apple TV through Home Assistant: set up the bridge, connect, build TV web apps and run live voice sessions.",
+  "author": { "name": "neekolas", "url": "https://github.com/neekolas" },
+  "homepage": "https://github.com/neekolas/tv-use",
+  "repository": "https://github.com/neekolas/tv-use",
+  "license": "MIT",
+  "keywords": ["apple-tv", "home-assistant", "mcp", "tvos", "voice"],
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/tv-use-setup/SKILL.md",
+      "interface": {
+        "displayName": "tv-use",
+        "shortDescription": "Drive your Apple TV",
+        "longDescription": "Skills for agents that use an Apple TV through the tv-use bridge on Home Assistant: install and pair it, connect over the home network or Tailscale, build web apps for the TV and run live voice sessions where the TV is the reply. Register the bridge's MCP server separately; the tv-use-connect skill shows how.",
+        "developerName": "neekolas",
+        "category": "Productivity",
+        "capabilities": ["Interactive", "Read", "Write"],
+        "websiteURL": "https://github.com/neekolas/tv-use",
+        "defaultPrompt": ["Show tonight's dinner recipe on the Living Room TV."],
+        "composerIcon": "./.claude-plugin/icon.png",
+        "logo": "./.claude-plugin/icon.png"
+      }
+    }
+  }
+}

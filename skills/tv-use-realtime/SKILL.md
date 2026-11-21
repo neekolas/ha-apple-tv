@@ -1,66 +1,60 @@
 ---
 name: tv-use-realtime
-description: Run a live, real-time voice session on an Apple TV through tv-use, where the TV is the reply and the agent rarely speaks. Covers when to speak and when to stay silent, showing progress on screen instead of narrating, the latency of each tool and patterns for fast turns. Use when a user talks to an agent while watching the TV.
+description: Run a live voice session on an Apple TV through tv-use, where the TV is the reply and the agent rarely speaks. Covers when to speak, showing progress on screen instead of narrating, tool latency and fast turns. Use when a user talks to an agent while watching the TV.
 ---
 
 # Run a real-time session on the TV
 
-The usual session is a live voice conversation. The user watches the TV and talks. The agent acts, and the screen answers. The agent almost never speaks.
+The user talks and watches the TV. You act, and the screen answers.
 
-Related skills: **tv-use-connect** has the tools and error handling. **tv-use-web-apps** has the reference apps and the `tv` status kit used below.
+## Stay quiet
 
-## Act, don't narrate
-
-- Do the task without announcing it. Do not say what you are about to do or that you did it. No "Sure, putting it up now."
-- Put the answer on the screen. Do not read aloud what the screen already shows.
-- Show progress on the screen, not in speech. Do not say "I'm working on it."
-- Speak only when the screen cannot carry the message, in one short sentence:
-  - a choice or approval only the user can give: purchases, rentals, upgrades, sign-in, replacing another room's page, or choosing between services
-  - a pairing code request from `data.ask_user`
+- Never announce what you will do or what you did.
+- Never read aloud what the screen shows.
+- Show progress on screen, not in speech.
+- Speak only when the screen cannot carry the message, in one sentence:
+  - a choice or approval only the user can give: purchases, rentals, upgrades, sign-in, taking over another room's screen
+  - a pairing code request (`data.ask_user`)
   - a failure the screen does not show
-  - an answer to a question that is not on the screen
-  - a step that takes much longer than usual with nothing new on screen
+  - an answer that is not on screen
+  - a step that runs much longer than usual with nothing new on screen
 
-## Show something within two seconds
+## Show, then fill
 
-1. Pick the page for the request. Use a reference app from **tv-use-web-apps**, or `pending-page.html` for anything else.
-2. Show it at once, in its pending state, with a status line: `tv_show`, then `tv_page_run {"script":"tv.working('Finding a recipe')"}`. Starting the mirror takes a few seconds, so start it before the real work.
-3. Do the work. As each result arrives, fill it and update the status in one call: `{"script":"app.apply(arg); return tv.working('Writing the steps')","arg":{...}}`.
-4. When everything is in place, `tv.done()`. The page now holds the answer. Say nothing.
+1. Show the page for the task at once, in its pending state, with a status line. Starting the mirror takes seconds; start it before the real work.
+2. Fill it in place with `tv_page_run` as results arrive. Update the status line in the same call.
+3. Clear the status line when done.
 
-One page per task. Change it in place with `tv_page_run`. Do not show a new page for each change.
+One page per task. Never show a new page for each change. Build pages with **tv-use-web-apps**.
 
-## Latency budget
+## Latency
 
-Measured from a Mac on the home network, over a local connection:
+Local connection, from a Mac at home:
 
-| Call | Typical time |
+| Call | Time |
 |---|---|
-| `tv_status` | about 0.07 s |
-| `tv_page_run` update | 0.03 to 0.7 s |
-| `tv_look`, text only | about 0.6 s |
-| `tv_look` with a screenshot | about 2.5 s |
-| `tv_remote` burst, with the new screen | about 2 s |
-| `tv_show` of a new page | 2.7 to 5.2 s, mostly starting the mirror |
-| `tv_navigate` over three moves | about 8 s |
+| `tv_status` | 0.07 s |
+| `tv_page_run` | 0.03–0.7 s |
+| `tv_look`, text | 0.6 s |
+| `tv_look`, screenshot | 2.5 s |
+| `tv_remote` burst | 2 s |
+| `tv_show`, new page | 2.7–5.2 s |
+| `tv_navigate`, three moves | 8 s |
 
-- Use a local connection when you can. A remote connection adds the trip between the agent and the home to every call.
-- Prefer `tv_page_run` patches over new `tv_show` calls.
-- Prefer text-only `tv_look`. Take a screenshot only when labels are not enough. It also shows a toast on the TV.
-- Send known remote keys as one `tv_remote` burst. Use `tv_sequence` for a known route with checkpoints.
-- Leave 0.25 seconds between `tv_page_run` calls, or combine them.
+- Use a local connection. A remote one adds a round trip to every call.
+- Patch the page; do not re-show it.
+- Read text, not screenshots. A screenshot also shows a toast on the TV.
+- Send known keys as one `tv_remote` burst, or a `tv_sequence` with checkpoints.
+- Leave 0.25 s between `tv_page_run` calls, or combine them.
 
-## When the screen cannot show progress
+## When the screen cannot show it
 
-- **Someone is watching.** If `tv_look` shows playback or another app in use, do not replace the screen just to show progress. Ask first, or answer by voice.
-- **Recorded mode.** If `tv_show` returns `data.transport: "video"`, `tv_page_run` cannot change the page. Show the final page with a new `tv_show`.
-- **Native apps.** While a native app is on screen there is no page to update. Let the app show the result, and check it with `tv_look`.
-- **Mirror slot taken.** On `mirror_busy`, ask before using `replace: true`. Another room may be watching.
+- **Someone is watching:** `tv_look` shows playback you did not start. Ask once before replacing it.
+- **Recorded mode:** `tv_show` returned `data.transport: "video"`. The page cannot change; show the final page instead.
+- **A native app is on screen:** there is no page. Let the app show the result and check it with `tv_look`.
+- **`mirror_busy`:** ask before `replace: true`.
+- **A call fails:** read `error.fix` and try it once, silently. If it fails again, say so in one sentence.
 
-In these cases, a short spoken line is the right fallback.
+In these cases, one spoken sentence is the right fallback.
 
-## Load when needed
-
-| File | Load it to |
-|---|---|
-| [flows.md](references/flows.md) | Follow worked voice flows: cook along, pick something to watch, answer a question, run a quiz, drive a native app |
+**tv-use-connect** has the tools and error codes.

@@ -18,6 +18,8 @@ if [ -d "$src" ]; then
 else
   mkdir "$work/site"
   cp "$src" "$work/site/index.html"
+  # Reference apps load their fonts from fonts/ beside the file.
+  if [ -d "$(dirname "$src")/fonts" ]; then cp -R "$(dirname "$src")/fonts" "$work/site/fonts"; fi
 fi
 
 (cd "$work/site" && zip -qr ../site.zip .)
