@@ -1,6 +1,6 @@
 ---
 name: tv-use-setup
-description: Install tv-use end to end. Deploy the Apple TV Agent Bridge app and integration to Home Assistant OS from a checkout, pair each Apple TV, create the agent token and verify. Use to install, update, pair, repair or remove the bridge.
+description: Install tv-use end to end, on Home Assistant OS or as a standalone Docker container. Deploy the Apple TV Agent Bridge, pair each Apple TV, create the agent token and verify. Use to install, update, pair, repair or remove the bridge.
 ---
 
 # Set up tv-use on Home Assistant
@@ -50,6 +50,19 @@ curl -fsS -H "Authorization: Bearer $HA_TOKEN" -H 'Content-Type: application/jso
 ```
 
 Ready when control and screen pairing are `"ok"` and `show`, `play_media`, `look_text` and `look_image` are true.
+
+## Without Home Assistant
+
+The same image runs as a plain MCP server, for example with OrbStack or Docker on a Mac that stays awake. It's much faster than a Green: the first `tv_show` takes about 3 s instead of 12–13 s.
+
+```sh
+mkdir -p ~/.config/tv-use && (umask 077; openssl rand -hex 32 > ~/.config/tv-use/token)
+docker run -d --name tv-use --restart unless-stopped -p 127.0.0.1:8765:8765 -v tv-use-data:/data \
+  -v "$HOME/.config/tv-use/token:/run/secrets/tv-use-token:ro" -e TV_USE_TOKEN_FILE=/run/secrets/tv-use-token \
+  -e 'TV_USE_TVS=name=<TV>,host=<IP>' ghcr.io/neekolas/tv-use-bridge:latest
+```
+
+Discovery doesn't cross the VM, so give each TV a fixed IP. Pair with `tv_pair`, control first, then screen. `play_url` and `auto` presentation don't work on a Mac. Details: [docs/standalone.md](https://github.com/neekolas/tv-use/blob/main/docs/standalone.md).
 
 ## References
 

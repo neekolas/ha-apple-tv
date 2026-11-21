@@ -12,7 +12,9 @@ tv-use exposes every paired Apple TV in the home through one MCP endpoint on Hom
 - **On the home network:** use `http://homeassistant.local:<port>` or HA's LAN IP. Fastest; no Tailscale.
 - **Outside the home:** use HA's tailnet hostname through Tailscale.
 
-Same token for both. The port is 8123 by default, 80 on some installs. If the tools are missing, or you are at home on a tailnet URL, see [connect.md](references/connect.md).
+- **Standalone bridge (no Home Assistant):** use `http://127.0.0.1:8765/mcp` with its own token; REST is `POST /api/tool/<name>`.
+
+Same token for both HA paths. The port is 8123 by default, 80 on some installs. If the tools are missing, or you are at home on a tailnet URL, see [connect.md](references/connect.md).
 
 ## First calls
 
