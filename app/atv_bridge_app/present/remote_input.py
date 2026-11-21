@@ -9,7 +9,7 @@ from ..state import classify, now
 
 _LOG = logging.getLogger(__name__)
 
-MODES = ("off", "keys", "focus")
+MODES = ("off", "keys", "focus", "tvos")
 KEYS = {
     "left": "ArrowLeft",
     "right": "ArrowRight",
@@ -31,7 +31,7 @@ FOCUS_STAGE = """() => {
 }"""
 
 # Runs in the content document before every key. It counts trusted key presses in
-# window.__tvRemote and returns the document's id and count.
+# window.__tvRemote and returns the document's id, the count, and whether a helper is installed.
 # Hardware finding: after a few idle minutes the sandboxed frame drops a key unless a
 # script ran in it just before. This evaluation is that script. Do not remove it.
 PRESS_LOG = """() => {
@@ -41,7 +41,7 @@ PRESS_LOG = """() => {
       if (event.isTrusted) { log.count += 1; log.last = event.key; }
     }, true);
   }
-  return [window.__tvRemote.id, window.__tvRemote.count];
+  return [window.__tvRemote.id, window.__tvRemote.count, Boolean(window.__tvRemoteFocus)];
 }"""
 
 # Runs in the content document. Safe to run before every key.
@@ -108,6 +108,161 @@ FOCUS_HELPER = r"""() => {
     best.scrollIntoView({block: 'nearest', inline: 'nearest'});
   });
 }"""
+
+
+# The "tvos" helper. It extends the focus helper with a tvOS look and a search closer to UIKit:
+# a lift (scale, shadow, white ring), beam-first search, last-focused memory per group, and
+# one smooth scroll that follows fast key runs. See docs/research/tvos-native-feel.md, section 4.
+# Every duration and scale is in CONFIG at the top, for tuning on the TV.
+TVOS_HELPER = r"""() => {
+  if (window.__tvRemoteFocus) return;
+  window.__tvRemoteFocus = 'tvos';
+  const CONFIG = window.__tvRemoteConfig = {
+    scale: 1.06,            // Lift of the focused item.
+    wideScale: 1.03,        // Lift of an item wider than wideRatio of the screen.
+    wideRatio: 0.5,
+    scaleInMs: 180,
+    scaleOutMs: 260,
+    easing: 'cubic-bezier(.2,.8,.2,1)',
+    shadow: '0 16px 40px rgba(0,0,0,.45)',  // Applied at once, never animated.
+    ringPx: 3,
+    ringOffsetPx: 3,
+    ringColor: '#fff',
+    pressedMs: 200,         // How long Select holds the item at scale 1.
+    fastRunMs: 150,         // Keys closer together than this are a run: ring only, no lift.
+    scrollMarginY: 60,      // Room kept above and below the focused item when it scrolls into view.
+    scrollMarginX: 80,
+  };
+  const FOCUSABLE = 'a[href],button,input,select,textarea,summary,[tabindex],[contenteditable=""],[contenteditable="true"]';
+  // A trusted Enter already activates these elements.
+  const NATIVE = 'a[href],button,select,textarea,summary,input:not([type=checkbox]):not([type=radio])';
+  const DIRECTIONS = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]};
+  const root = document.documentElement;
+  try {
+    // A constructed sheet is not blocked by the page's style-src policy.
+    // The scale property leaves a transform that the page set on the element alone.
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(`
+      :is(${FOCUSABLE}) { transition: scale ${CONFIG.scaleOutMs}ms ${CONFIG.easing};
+        scroll-margin: ${CONFIG.scrollMarginY}px ${CONFIG.scrollMarginX}px; }
+      :focus { outline: ${CONFIG.ringPx}px solid ${CONFIG.ringColor} !important;
+        outline-offset: ${CONFIG.ringOffsetPx}px !important;
+        scale: var(--tv-remote-scale, ${CONFIG.scale}) !important; z-index: 1;
+        box-shadow: ${CONFIG.shadow} !important;
+        transition: scale ${CONFIG.scaleInMs}ms ${CONFIG.easing}; }
+      :root.tv-remote-fast :focus { scale: none !important; box-shadow: none !important; }
+      :root.tv-remote-pressed :focus { scale: 1 !important; }
+    `);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  } catch {}
+  const usable = el => !el.disabled && el.tabIndex >= 0 && !el.closest('[inert],[aria-hidden=true]')
+    && el.checkVisibility({visibilityProperty: true});
+  // The box of an element without its lift. A scaled box would make the beam too wide.
+  const box = el => {
+    const r = el.getBoundingClientRect();
+    const s = parseFloat(getComputedStyle(el).scale);
+    if (!(s > 0) || s === 1) return r;
+    const w = r.width / s, h = r.height / s, x = r.left + (r.width - w) / 2, y = r.top + (r.height - h) / 2;
+    return {left: x, top: y, right: x + w, bottom: y + h, width: w, height: h};
+  };
+  // A group is the nearest scroll container or [data-tv-group] ancestor. It remembers its last focused item.
+  const memory = new WeakMap();
+  const groupOf = el => {
+    for (let node = el.parentElement; node && node !== document.body && node !== root; node = node.parentElement) {
+      if (node.hasAttribute('data-tv-group')) return node;
+      const style = getComputedStyle(node);
+      if ((/auto|scroll/.test(style.overflowX) && node.scrollWidth > node.clientWidth)
+          || (/auto|scroll/.test(style.overflowY) && node.scrollHeight > node.clientHeight)) return node;
+    }
+    return null;
+  };
+  let previous = null;
+  addEventListener('focusin', event => {
+    const el = event.target;
+    if (!(el instanceof Element)) return;
+    const group = groupOf(el);
+    if (group) memory.set(group, el);
+    root.style.setProperty('--tv-remote-scale',
+      el.offsetWidth > innerWidth * CONFIG.wideRatio ? CONFIG.wideScale : CONFIG.scale);
+  }, true);
+  let lastKey = -Infinity, fastTimer = 0, pressedTimer = 0;
+  // The bubble phase lets the page handle the key first.
+  addEventListener('keydown', event => {
+    if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
+    let active = document.activeElement;
+    if (!active || active === document.body || active === root) active = null;
+    if (event.key === 'Enter') {
+      if (active) {
+        root.classList.add('tv-remote-pressed');
+        clearTimeout(pressedTimer);
+        pressedTimer = setTimeout(() => root.classList.remove('tv-remote-pressed'), CONFIG.pressedMs);
+      }
+      if (active && !active.matches(NATIVE)) {
+        event.preventDefault();
+        active.click();
+      }
+      return;
+    }
+    const dir = DIRECTIONS[event.key];
+    if (!dir) return;
+    // In a run of quick keys, the items passed show only the ring. The last one lifts.
+    if (event.timeStamp - lastKey < CONFIG.fastRunMs) root.classList.add('tv-remote-fast');
+    lastKey = event.timeStamp;
+    clearTimeout(fastTimer);
+    fastTimer = setTimeout(() => root.classList.remove('tv-remote-fast'), CONFIG.fastRunMs);
+    // These controls use the arrow on that axis themselves.
+    if (active && ((active.localName === 'select' && dir[1])
+        || (active.localName === 'input' && active.type === 'range' && dir[0]))) return;
+    // Read every box before anything is written.
+    const items = [...document.querySelectorAll(FOCUSABLE)].filter(el => el !== active && usable(el))
+      .map(el => [el, el === previous ? box(el) : el.getBoundingClientRect()])
+      .filter(([, r]) => r.width > 0 && r.height > 0);
+    const from = active && box(active);
+    let best = null, bestScore = Infinity, beam = null, beamScore = Infinity;
+    for (const [el, r] of items) {
+      if (!from) {
+        // No focus yet. Start at the first item on screen in reading order.
+        const visible = r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
+        const score = (visible ? 0 : 1e7) + Math.abs(r.top) * 4 + Math.abs(r.left);
+        if (score < bestScore) [best, bestScore] = [el, score];
+        continue;
+      }
+      const dx = r.left + r.width / 2 - (from.left + from.width / 2);
+      const dy = r.top + r.height / 2 - (from.top + from.height / 2);
+      const along = dx * dir[0] + dy * dir[1];
+      if (along <= 1) continue;
+      // Distance between the two boxes on the other axis. Zero when they overlap.
+      const cross = dir[0]
+        ? Math.max(0, r.top - from.bottom, from.top - r.bottom)
+        : Math.max(0, r.left - from.right, from.left - r.right);
+      if (cross === 0) {
+        // In the beam: the focused box projected in the pressed direction. Nearest edge wins.
+        const gap = Math.max(0, dir[0] ? (dir[0] > 0 ? r.left - from.right : from.left - r.right)
+          : (dir[1] > 0 ? r.top - from.bottom : from.top - r.bottom));
+        const score = gap + Math.abs(dir[0] ? dy : dx) / 1000;
+        if (score < beamScore) [beam, beamScore] = [el, score];
+      } else if (along > cross && along + cross * 4 < bestScore) {
+        // Outside the beam. Used only when the beam is empty.
+        [best, bestScore] = [el, along + cross * 4];
+      }
+    }
+    best = beam || best;
+    if (!best) return;  // Nothing that way. The page scrolls as usual.
+    // Entering a group from outside goes to the item that had focus there last.
+    const group = groupOf(best);
+    if (group && active && group !== groupOf(active)) {
+      const remembered = memory.get(group);
+      if (remembered && remembered.isConnected && group.contains(remembered) && usable(remembered)) best = remembered;
+    }
+    event.preventDefault();
+    previous = active;
+    best.focus({preventScroll: true});
+    // A new key replaces the target of a running smooth scroll.
+    best.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});
+  });
+}"""
+
+HELPERS = {"focus": FOCUS_HELPER, "tvos": TVOS_HELPER}
 
 
 class RemoteInput:
@@ -256,19 +411,24 @@ class RemoteInput:
             )
 
     async def prepare(self):
-        """Give the current content document keyboard focus and, in focus mode, the helper."""
+        """Give the current content document keyboard focus and, in focus and tvos mode, the helper.
+
+        Return the frame and its press log state.
+        """
         frame, _, direct = await self.interaction.binding()
         if not direct:
             await frame.page.evaluate(FOCUS_STAGE)
-        if self.mode == "focus":
-            await frame.evaluate(FOCUS_HELPER)
-        return frame
+        state = await frame.evaluate(PRESS_LOG)
+        helper = HELPERS.get(self.mode)
+        # The helper source is large. Send it only to a document that does not have it.
+        if helper and not state[2]:
+            await frame.evaluate(helper)
+        return frame, state
 
     async def send(self, key):
         """Press one key in the current content document. Return False if the page did not get it."""
         # A mirror restart or a navigation loses focus and the helper. Restore both for each key.
-        frame = await self.prepare()
-        before = await frame.evaluate(PRESS_LOG)
+        frame, before = await self.prepare()
         await frame.page.keyboard.press(KEYS[key])
         try:
             after = await frame.evaluate(PRESS_LOG)

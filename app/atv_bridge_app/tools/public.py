@@ -868,7 +868,7 @@ class PublicTools:
         """Present a page, or dismiss it by omitting the source. Can wake the TV and replaces its bridge media or page.
         The HA host renders the page and mirrors it or plays a recording. Live URLs use a mirror. The default fleet limit is one active mirror.
         Inspect data.transport and screen.presenting. verified means frames were sent or playback was observed. Use tv_page_run to read or change a live page.
-        Set remote to "keys" or "focus" so Siri Remote arrows and Select reach a mirrored page. Check data.remote.state and screen.presenting.remote.
+        Set remote to "keys", "focus" or "tvos" so Siri Remote arrows and Select reach a mirrored page. Use "tvos" for a page you lay out in rows and grids. Check data.remote.state and screen.presenting.remote.
         For example, tv_show {"html":"<h1>Hello</h1>"}."""
         await self.media.stop()
         if all(source is None for source in (url, html, files, bundle)):

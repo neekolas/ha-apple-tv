@@ -15,7 +15,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from atv_bridge_app.present import remote_input
-from atv_bridge_app.present.remote_input import FOCUS_HELPER, FOCUS_STAGE, PRESS_LOG
+from atv_bridge_app.present.remote_input import FOCUS_HELPER, FOCUS_STAGE, PRESS_LOG, TVOS_HELPER
 from atv_bridge_app.processes import ObserverClient
 from atv_bridge_app.state import Fault, State
 from atv_bridge_app.tools.contract import ROUTED_SCHEMAS, SCHEMAS
@@ -1036,7 +1036,7 @@ async def test_watch_stops_when_the_mirror_falls_back_or_fails(remote, caplog, c
 def test_show_schema_accepts_the_remote_option():
     valid = Draft202012Validator(SCHEMAS["tv_show"]).is_valid
     assert SCHEMAS["tv_show"]["properties"]["remote"]["default"] == "off"
-    assert all(valid({"html": "x", "remote": mode}) for mode in ("off", "keys", "focus"))
+    assert all(valid({"html": "x", "remote": mode}) for mode in ("off", "keys", "focus", "tvos"))
     assert not valid({"html": "x", "remote": "mouse"}) and not valid({"remote": "keys"})
     assert Draft202012Validator(ROUTED_SCHEMAS["tv_show"]).is_valid({"tv": "Bedroom", "html": "x", "remote": "focus"})
 
@@ -1050,14 +1050,15 @@ def fake_frame(delivered=True, document="doc"):
 
     async def evaluate(script):
         if script == PRESS_LOG:
-            return [frame.document, page.keyboard.press.await_count if delivered else 0]
+            return [frame.document, page.keyboard.press.await_count if delivered else 0, frame.helper]
+        frame.helper = True
 
-    frame = SimpleNamespace(page=page, evaluate=AsyncMock(side_effect=evaluate), document=document,
+    frame = SimpleNamespace(page=page, evaluate=AsyncMock(side_effect=evaluate), document=document, helper=False,
                             url="http://127.0.0.1:8766/c/a/index.html")
     return frame
 
 
-@pytest.mark.parametrize("mode,direct", [("keys", False), ("focus", False), ("keys", True), ("focus", True)])
+@pytest.mark.parametrize("mode,direct", [("keys", False), ("focus", False), ("keys", True), ("focus", True), ("tvos", False)])
 async def test_key_goes_to_the_current_content_frame(remote, mode, direct):
     service, observer, control = remote
     frame = fake_frame()
@@ -1070,8 +1071,14 @@ async def test_key_goes_to_the_current_content_frame(remote, mode, direct):
     # Keyboard focus is restored for every key: the stage iframe, then the helper.
     assert [c.args for c in frame.page.evaluate.await_args_list] == ([] if direct else [(FOCUS_STAGE,)] * 5)
     # A script runs in the content frame just before each key. Without it an idle frame drops the key.
-    per_key = ([(FOCUS_HELPER,)] if mode == "focus" else []) + [(PRESS_LOG,), (PRESS_LOG,)]
-    assert [c.args for c in frame.evaluate.await_args_list] == per_key * 5
+    # The helper source goes out once, to a document that does not have it yet.
+    helper = {"focus": [(FOCUS_HELPER,)], "tvos": [(TVOS_HELPER,)]}.get(mode, [])
+    assert [c.args for c in frame.evaluate.await_args_list] == [(PRESS_LOG,), *helper, (PRESS_LOG,)] + [(PRESS_LOG,), (PRESS_LOG,)] * 4
+    # A navigation gives a new document without the helper. It is sent again.
+    frame.helper, frame.document = False, "next"
+    frame.evaluate.reset_mock()
+    await control.send("left")
+    assert [c.args for c in frame.evaluate.await_args_list] == [(PRESS_LOG,), *helper, (PRESS_LOG,)]
 
 
 async def test_a_key_the_page_did_not_get_is_reported(remote, caplog):
@@ -1197,9 +1204,34 @@ own.addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) e.preventD
 </script>"""
 
 
+# A page laid out for the tvos mode: a grid, a row with an offset neighbor, two rows that
+# are groups, a wide banner and a strip that scrolls sideways.
+TVOS_CONTENT = """<style>
+body{margin:0;background:#111} .c,button,a{position:absolute;width:200px;height:100px;border:0;background:#333}
+#strip{position:absolute;left:40px;top:860px;width:1100px;height:140px;overflow-x:auto;white-space:nowrap}
+#strip button{position:static;display:inline-block;width:300px;margin-right:20px}
+</style>
+<button id=g00 style='left:40px;top:20px'></button><button id=g01 style='left:300px;top:20px'></button><button id=g02 style='left:560px;top:20px'></button>
+<button id=g10 style='left:40px;top:150px'></button><button id=g11 style='left:300px;top:150px'></button><button id=g12 style='left:560px;top:150px'></button>
+<button id=r0 style='left:40px;top:290px'></button><button id=r1 style='left:300px;top:290px'></button>
+<button id=off style='left:560px;top:330px'></button><button id=diag style='left:430px;top:405px'></button>
+<div data-tv-group><button id=a0 style='left:40px;top:540px'></button><button id=a1 style='left:300px;top:540px'></button><button id=a2 style='left:560px;top:540px'></button></div>
+<div data-tv-group><button id=b0 style='left:40px;top:660px'></button><button id=b1 style='left:300px;top:660px'></button><button id=b2 style='left:560px;top:660px'></button></div>
+<button id=wide style='left:40px;top:780px;width:800px;height:60px' onclick='clicks.wide=(clicks.wide||0)+1'></button>
+<div id=own tabindex=0 class=c style='left:900px;top:20px'></div>
+<div id=strip>""" + "".join(f"<button id=s{n}></button>" for n in range(12)) + """</div>
+<script>
+window.clicks = {}; window.scrollEnds = 0;
+strip.addEventListener('scrollend', () => scrollEnds++);
+own.addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) e.preventDefault(); });
+</script>"""
+
+
 @pytest.fixture
-async def browser_frame():
+async def browser_frame(request):
     from playwright.async_api import async_playwright
+
+    content = getattr(request, "param", CONTENT)
 
     async with async_playwright() as driver:
         browser = None
@@ -1211,14 +1243,14 @@ async def browser_frame():
                 continue
         if browser is None:
             pytest.skip("Chromium is unavailable")
-        page = await browser.new_page(viewport={"width": 1280, "height": 720})
+        page = await browser.new_page(viewport={"width": 1280, "height": 1000 if content is TVOS_CONTENT else 720})
         # The stage shows bundles in a sandboxed iframe without allow-same-origin.
         await page.set_content(
             "<style>iframe{position:absolute;inset:0;width:100%;height:100%;border:0}</style>"
-            "<iframe class=visible sandbox='allow-scripts allow-forms' srcdoc=\"" + CONTENT.replace('"', "&quot;") + '"></iframe>'
+            "<iframe class=visible sandbox='allow-scripts allow-forms' srcdoc=\"" + content.replace('"', "&quot;") + '"></iframe>'
         )
         frame = page.frames[1]
-        await frame.wait_for_selector("#a")
+        await frame.wait_for_selector("button")
         yield frame
         await browser.close()
 
@@ -1274,3 +1306,121 @@ async def test_focus_helper_moves_by_geometry_and_enter_clicks_once(remote, brow
     assert await press("right") == "own"
     assert await press("left") == "own"
     assert await frame.evaluate("window.__tvRemoteFocus") is True
+
+
+@pytest.fixture
+async def tvos(remote, browser_frame):
+    """Send keys through RemoteInput in tvos mode. Count how often the helper source is sent."""
+    service, observer, control = remote
+    frame = browser_frame
+    sent = []
+
+    async def evaluate(script, *args):
+        sent.append(script)
+        return await frame.evaluate(script, *args)
+
+    proxy = SimpleNamespace(page=frame.page, evaluate=evaluate, url=frame.url)
+    control.interaction.binding = AsyncMock(return_value=(proxy, frame.url, False))
+    control.mode = "tvos"
+
+    async def press(*keys, start=None):
+        if start:
+            await frame.evaluate(f"document.getElementById('{start}').focus()")
+        for key in keys:
+            assert await control.send(key)
+        return await frame.evaluate("document.activeElement.id")
+
+    return SimpleNamespace(frame=frame, press=press, sent=sent)
+
+
+TVOS_PAGE = pytest.mark.parametrize("browser_frame", [TVOS_CONTENT], indirect=True)
+
+
+@TVOS_PAGE
+async def test_tvos_beam_search_in_a_grid_and_past_an_offset_neighbor(tvos):
+    assert await tvos.press("right") == "g00"  # The first arrow picks the first item on screen.
+    assert await tvos.press("right") == "g01"
+    assert await tvos.press("down") == "g11"
+    assert await tvos.press("right") == "g12"
+    assert await tvos.press("up") == "g02"
+    assert await tvos.press("left", "left") == "g00"
+    assert await tvos.press("left") == "g00"  # Nothing that way.
+    # Right of r1: "off" overlaps the beam. "diag" is closer by center but outside the beam.
+    assert await tvos.press("right", start="r1") == "off"
+    # The focus helper's scoring would pick the other one. It stays as the fallback when the beam is empty.
+    assert await tvos.press("down", start="r1") == "diag"
+    assert await tvos.press("left", start="diag") == "r1"
+    # The helper source crossed CDP once for all of these keys.
+    assert tvos.sent.count(TVOS_HELPER) == 1 and tvos.sent.count(PRESS_LOG) >= 20
+    assert await tvos.frame.evaluate("window.__tvRemoteFocus") == "tvos"
+
+
+@TVOS_PAGE
+async def test_tvos_groups_remember_their_last_item(tvos):
+    assert await tvos.press("right", "right", start="a0") == "a2"
+    assert await tvos.press("down") == "b2"
+    assert await tvos.press("left", "left") == "b0"
+    # Back into the first row: its last item, not the one straight above.
+    assert await tvos.press("up") == "a2"
+    assert await tvos.press("down") == "b0"
+    # A scroll container is a group too.
+    assert await tvos.press("right", "right", start="s0") == "s2"
+    assert await tvos.press("up") == "wide"
+    assert await tvos.press("down") == "s2"
+    # A remembered item that is gone does not trap focus.
+    await tvos.frame.evaluate("a2.remove()")
+    assert await tvos.press("up", start="b0") == "a0"
+
+
+@TVOS_PAGE
+async def test_tvos_look_lifts_the_focused_item(tvos):
+    frame = tvos.frame
+    look = "(() => { const s = getComputedStyle(document.activeElement); return [s.scale, s.outlineStyle, s.outlineWidth, s.outlineColor, s.boxShadow !== 'none']; })()"
+    assert await tvos.press("right", start="g00") == "g01"
+    await asyncio.sleep(0.45)
+    assert await frame.evaluate(look) == ["1.06", "solid", "3px", "rgb(255, 255, 255)", True]
+    assert await frame.evaluate("getComputedStyle(g00).scale") == "none"
+    # The lift does not widen the beam: the box is measured without its scale.
+    assert await tvos.press("down") == "g11"
+    # A wide item lifts less.
+    await asyncio.sleep(0.2)
+    assert await tvos.press("down", start="b0") == "wide"
+    await asyncio.sleep(0.45)
+    assert (await frame.evaluate(look))[0] == "1.03"
+    # Select presses the item: scale 1 for a moment, one click.
+    assert await tvos.press("select") == "wide"
+    assert await frame.evaluate("document.documentElement.classList.contains('tv-remote-pressed')")
+    await asyncio.sleep(0.1)
+    assert float((await frame.evaluate(look))[0]) < 1.01
+    await asyncio.sleep(0.5)
+    assert not await frame.evaluate("document.documentElement.classList.contains('tv-remote-pressed')")
+    assert (await frame.evaluate(look))[0] == "1.03" and await frame.evaluate("clicks") == {"wide": 1}
+    # Every duration and scale is in one config object.
+    config = await frame.evaluate("window.__tvRemoteConfig")
+    assert (config["scale"], config["wideScale"], config["scaleInMs"], config["scaleOutMs"], config["pressedMs"], config["fastRunMs"]) == (1.06, 1.03, 180, 260, 200, 150)
+    assert (config["scrollMarginY"], config["scrollMarginX"]) == (60, 80)
+
+
+@TVOS_PAGE
+async def test_tvos_flick_lands_on_the_right_item_with_one_scroll(tvos):
+    frame = tvos.frame
+    await tvos.press(start="s0")
+    await frame.evaluate("window.scrollEnds = 0")
+    # Four quick arrows, as after a flick.
+    assert await tvos.press("right", "right", "right", "right") == "s4"
+    # During the run the items show only the ring.
+    assert await frame.evaluate("document.documentElement.classList.contains('tv-remote-fast')")
+    assert await frame.evaluate("getComputedStyle(document.activeElement).scale") == "none"
+    await asyncio.sleep(1.2)
+    # The last item lifts, is fully in view with its margin, and the strip scrolled once.
+    state = await frame.evaluate("""(() => { const r = s4.getBoundingClientRect(), box = strip.getBoundingClientRect();
+        return {fast: document.documentElement.classList.contains('tv-remote-fast'), scale: getComputedStyle(s4).scale,
+                inside: r.left >= box.left && r.right <= box.right + 1, left: strip.scrollLeft, ends: scrollEnds}; })()""")
+    assert state["fast"] is False and state["scale"] == "1.06" and state["inside"] and state["left"] > 0
+    assert state["ends"] == 1
+
+
+@TVOS_PAGE
+async def test_tvos_leaves_a_page_that_handles_arrows_alone(tvos):
+    assert await tvos.press("right", start="g02") == "own"
+    assert await tvos.press("left", "down") == "own"
