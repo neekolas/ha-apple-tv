@@ -11,10 +11,13 @@ from contextlib import suppress
 
 from pymobiledevice3.services.os_trace import OsActivityStreamFlag, OsTraceService
 
+from . import touch
+
 # ---------------------------------------------------------------------------
 # Press matcher. Change only this block when a remote logs a different line.
 # The match uses the process, the log category and the HID page and usage.
 # It must not depend on where the press came from.
+# Swipes on a touch surface are matched in touch.py, which belongs to this block.
 # tv_remote presses: generic desktop page 0x1, verified on tvOS 26.6.1.
 # Physical clickpad Siri Remote: consumer page 0xC, verified on tvOS 27.2.
 PROCESS = "backboardd"
@@ -50,8 +53,11 @@ def match_press(process, category, message):
 
 # ---------------------------------------------------------------------------
 
-# PAYLOAD only. Never add HISTORICAL: it replays old log lines as new presses.
-STREAM_FLAGS = int(OsActivityStreamFlag.PAYLOAD)
+# Button lines are NOTICE level and need only PAYLOAD. Touch lines are DEBUG level.
+# Never add HISTORICAL: it replays old log lines as new presses.
+# Volume with the backboardd pid filter, from a full capture: under 1 line/s when idle,
+# about 60 lines/s during a touch, up to about 200 lines/s during a drag.
+STREAM_FLAGS = int(OsActivityStreamFlag.PAYLOAD | OsActivityStreamFlag.DEBUG)
 STALE_S = 2.0
 CONNECT_GRACE_S = 1.0
 # A late line that stays late by the same amount for this long is a clock step, not a backlog.
@@ -155,6 +161,8 @@ class ButtonWatch:
         self.delay = RETRY_MIN_S
         self.lag = float("inf")  # Lag baseline, kept across reconnects.
         self.unmatched = []
+        self.touch = touch.TouchRecognizer()
+        self.momentum = None
 
     def start(self):
         if not self.task or self.task.done():
@@ -242,6 +250,8 @@ class ButtonWatch:
                     wait, failures = PROBE_INTERVAL_S, 0
             finally:
                 self.lag = fresh.lag
+                self._cancel_momentum()
+                self.touch.reset()
                 reader.cancel()
                 accepted.cancel()
                 await asyncio.gather(reader, accepted, return_exceptions=True)
@@ -259,15 +269,48 @@ class ButtonWatch:
             now = time.time()
             device = entry.timestamp.timestamp()
             stale = fresh.stale(device, time.monotonic())
-            key, known = match_press(
-                os.path.basename(entry.filename), entry.label.category if entry.label else None, entry.message
-            )
+            process = os.path.basename(entry.filename)
+            category = entry.label.category if entry.label else None
+            if process == PROCESS and category == touch.CATEGORY:
+                self._touch(entry.message, device, now, stale)
+                continue
+            key, known = match_press(process, category, entry.message)
+            if process == PROCESS and category == CATEGORY and "downEvent:1" in (entry.message or ""):
+                # Any button, also one with no key here, ends a swipe under the finger.
+                self.touch.button(device)
+                self._cancel_momentum()
             if not known:
                 self._unmatched(entry.message, now)
             if key and not stale:
                 self.emit({"event": "button", "key": key, "device_time": device, "received": now})
             elif key:
                 logging.info("Dropped a stale %s press", key)
+
+    def _touch(self, message, device, now, stale):
+        if stale:
+            # Old touch lines must not move anything, and a half-seen contact is useless.
+            self.touch.reset()
+            self._cancel_momentum()
+            return
+        gesture = self.touch.touch(message, device)
+        if gesture.touch_down:
+            self._cancel_momentum()
+        for key in gesture.keys:
+            self.emit({"event": "button", "key": key, "device_time": device, "received": now, "gesture": "swipe"})
+        if gesture.momentum:
+            self.momentum = asyncio.create_task(self._glide(*gesture.momentum))
+
+    async def _glide(self, key, delays):
+        """Send the arrows that follow a flick. A new touch or a click cancels the rest."""
+        started = time.monotonic()
+        for delay in delays:
+            await asyncio.sleep(max(0, started + delay - time.monotonic()))
+            self.emit({"event": "button", "key": key, "received": time.time(), "gesture": "momentum"})
+
+    def _cancel_momentum(self):
+        if self.momentum:
+            self.momentum.cancel()
+            self.momentum = None
 
     def _unmatched(self, message, now):
         self.unmatched = [at for at in self.unmatched if now - at < UNMATCHED_WINDOW_S]

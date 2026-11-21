@@ -1,0 +1,353 @@
+{"t": 0.0, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:1 source:verifiedExternalAccessory senderID:100004006 down"}
+{"t": 0.0002, "category": "Button", "message": " 0xC/0x80/100004006 began: firstDown:0s ago b0e0u0"}
+{"t": 0.0124, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:0 source:verifiedExternalAccessory senderID:100004006 up"}
+{"t": 0.0125, "category": "Button", "message": " 0xC/0x80/100004006 finished: firstDown:0.0126s ago b0e0u1"}
+{"t": 0.5081, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 1; subevents: [path: 1; {0.029882354661822319, 0.62716048955917358}; down]; down"}
+{"t": 0.6693, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:1 source:verifiedExternalAccessory senderID:100004006 down"}
+{"t": 0.6694, "category": "Button", "message": " 0xC/0x80/100004006 began: firstDown:0s ago b0e0u0"}
+{"t": 0.8356, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:0 source:verifiedExternalAccessory senderID:100004006 up"}
+{"t": 0.8356, "category": "Button", "message": " 0xC/0x80/100004006 finished: firstDown:0.166s ago b0e0u1"}
+{"t": 0.8492, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 23; subevents: [path: 1; {0.021581700071692467, 0.64832717180252075}; move]; move"}
+{"t": 0.865, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 24; subevents: [path: 1; {0.021581700071692467, 0.65381479263305664}; move]; move"}
+{"t": 0.8802, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 25; subevents: [path: 1; {0.021581700071692467, 0.65773457288742065}; move]; move"}
+{"t": 0.8942, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 26; subevents: [path: 1; {0.021581700071692467, 0.66165429353713989}; move]; move"}
+{"t": 0.9091, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; gen: 27; subevents: [path: 1; {0.012450980953872204, 0.67027777433395386}; up]; up"}
+{"t": 2.7993, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 29; subevents: [path: 2; {0.99773859977722168, 0.68282097578048706}; down]; down"}
+{"t": 3.0991, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:1 source:verifiedExternalAccessory senderID:100004006 down"}
+{"t": 3.0991, "category": "Button", "message": " 0xC/0x80/100004006 began: firstDown:0s ago b0e0u0"}
+{"t": 3.2338, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:0 source:verifiedExternalAccessory senderID:100004006 up"}
+{"t": 3.2338, "category": "Button", "message": " 0xC/0x80/100004006 finished: firstDown:0.135s ago b0e0u1"}
+{"t": 3.3088, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; gen: 63; subevents: [path: 2; {0.99773859977722168, 0.68282097578048706}; up]; up"}
+{"t": 4.2394, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; range (in); gen: 65; subevents: [path: 1; {0.54037255048751831, 0.063500002026557922}; range (in)]; range (in)"}
+{"t": 4.3602, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 73; subevents: [path: 1; {0.46981701254844666, 0.038413580507040024}; down]; down"}
+{"t": 4.4642, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:1 source:verifiedExternalAccessory senderID:100004006 down"}
+{"t": 4.4644, "category": "Button", "message": " 0xC/0x80/100004006 began: firstDown:0s ago b0e0u0"}
+{"t": 4.5243, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; gen: 83; subevents: [path: 1; {0.46981701254844666, 0.038413580507040024}]"}
+{"t": 4.6143, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:0 source:verifiedExternalAccessory senderID:100004006 up"}
+{"t": 4.6143, "category": "Button", "message": " 0xC/0x80/100004006 finished: firstDown:0.15s ago b0e0u1"}
+{"t": 4.6592, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; gen: 92; subevents: [path: 1; {0.46981701254844666, 0.038413580507040024}; up]; up"}
+{"t": 6.2354, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; range (in); gen: 94; subevents: [path: 2; {0.535392165184021, 0.99953699111938477}; range (in)]; range (in)"}
+{"t": 6.3092, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 99; subevents: [path: 2; {0.52958172559738159, 0.99953699111938477}; down]; down"}
+{"t": 6.7295, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:1 source:verifiedExternalAccessory senderID:100004006 down"}
+{"t": 6.7298, "category": "Button", "message": " 0xC/0x80/100004006 began: firstDown:0s ago b0e0u0"}
+{"t": 6.8795, "category": "Button", "message": "Select page:0xC usage:0x80 downEvent:0 source:verifiedExternalAccessory senderID:100004006 up"}
+{"t": 6.8795, "category": "Button", "message": " 0xC/0x80/100004006 finished: firstDown:0.15s ago b0e0u1"}
+{"t": 6.9994, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; gen: 144; subevents: [path: 2; {0.52958172559738159, 0.99953699111938477}; up]; up"}
+{"t": 7.0002, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; range (out); gen: 145; subevents: [path: 2; {0.52958172559738159, 0.99953699111938477}; range (out)]; range (out)"}
+{"t": 8.3793, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 147; subevents: [path: 1; {0.98777782917022705, 0.64440739154815674}; down]; down"}
+{"t": 8.4396, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 151; subevents: [path: 1; {0.93963402509689331, 0.63421601057052612}; move]; move"}
+{"t": 8.4536, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 152; subevents: [path: 1; {0.92303270101547241, 0.63421601057052612}; move]; move"}
+{"t": 8.4686, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 153; subevents: [path: 1; {0.89979088306427002, 0.63029628992080688}; move]; move"}
+{"t": 8.4836, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 154; subevents: [path: 1; {0.85828763246536255, 0.61932098865509033}; move]; move"}
+{"t": 8.4988, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 155; subevents: [path: 1; {0.78358173370361328, 0.60285800695419312}; move]; move"}
+{"t": 8.5137, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 156; subevents: [path: 1; {0.66322225332260132, 0.58874690532684326}; move]; move"}
+{"t": 8.5288, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 157; subevents: [path: 1; {0.4781176745891571, 0.58874690532684326}; move]; move"}
+{"t": 8.5461, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 158; subevents: [path: 1; {0.28886276483535767, 0.61383330821990967}; move]; move"}
+{"t": 8.5587, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 159; subevents: [path: 1; {0.19506536424160004, 0.65224689245223999}; move]; move"}
+{"t": 8.5757, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; gen: 160; subevents: [path: 1; {0.1859346479177475, 0.66087037324905396}; up]; up"}
+{"t": 11.35, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 162; subevents: [path: 2; {0.0099607845768332481, 0.64205557107925415}; down]; down"}
+{"t": 11.3937, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 165; subevents: [path: 2; {0.055614382028579712, 0.63421601057052612}; move]; move"}
+{"t": 11.4106, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 166; subevents: [path: 2; {0.08549673855304718, 0.63421601057052612}; move]; move"}
+{"t": 11.4241, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 167; subevents: [path: 2; {0.12035948038101196, 0.63421601057052612}; move]; move"}
+{"t": 11.4387, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 168; subevents: [path: 2; {0.15854248404502869, 0.63343209028244019}; move]; move"}
+{"t": 11.4537, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 169; subevents: [path: 2; {0.21747712790966034, 0.62951231002807617}; move]; move"}
+{"t": 11.4688, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 170; subevents: [path: 2; {0.31376472115516663, 0.62010490894317627}; move]; move"}
+{"t": 11.4838, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 171; subevents: [path: 2; {0.44408497214317322, 0.60756170749664307}; move]; move"}
+{"t": 11.4987, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 172; subevents: [path: 2; {0.57357519865036011, 0.59815430641174316}; move]; move"}
+{"t": 11.5139, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 173; subevents: [path: 2; {0.7204967737197876, 0.59580248594284058}; move]; move"}
+{"t": 11.5289, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 174; subevents: [path: 2; {0.79686278104782104, 0.59345060586929321}; move]; move"}
+{"t": 11.5448, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 175; subevents: [path: 2; {0.84500658512115479, 0.5832592248916626}; move]; move"}
+{"t": 11.5589, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; gen: 176; subevents: [path: 2; {0.85496735572814941, 0.57463580369949341}; up]; up"}
+{"t": 12.4752, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 178; subevents: [path: 1; {0.52958172559738159, 0.99953699111938477}; down]; down"}
+{"t": 12.549, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 183; subevents: [path: 1; {0.55614382028579712, 0.96817898750305176}; move]; move"}
+{"t": 12.5639, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 184; subevents: [path: 1; {0.55614382028579712, 0.95249998569488525}; move]; move"}
+{"t": 12.5792, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 185; subevents: [path: 1; {0.55614382028579712, 0.9321172833442688}; move]; move"}
+{"t": 12.6089, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 186; subevents: [path: 1; {0.55614382028579712, 0.89683949947357178}; move]; move"}
+{"t": 12.6128, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 187; subevents: [path: 1; {0.55614382028579712, 0.81844443082809448}; move]; move"}
+{"t": 12.6242, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 188; subevents: [path: 1; {0.54701310396194458, 0.7345617413520813}; move]; move"}
+{"t": 12.6388, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 189; subevents: [path: 1; {0.52543139457702637, 0.63421601057052612}; move]; move"}
+{"t": 12.6537, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 190; subevents: [path: 1; {0.49637910723686218, 0.52681481838226318}; move]; move"}
+{"t": 12.6688, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 191; subevents: [path: 1; {0.46234643459320068, 0.42098146677017212}; move]; move"}
+{"t": 12.684, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 192; subevents: [path: 1; {0.43744444847106934, 0.35591357946395874}; move]; move"}
+{"t": 12.6987, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 193; subevents: [path: 1; {0.40424183011054993, 0.25791975855827332}; move]; move"}
+{"t": 12.7141, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 194; subevents: [path: 1; {0.3826601505279541, 0.2132345587015152}; move]; move"}
+{"t": 12.7289, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; gen: 195; subevents: [path: 1; {0.37269935011863708, 0.20461110770702362}; up]; up"}
+{"t": 13.4946, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 197; subevents: [path: 2; {0.47977778315544128, 0.039981480687856674}; down]; down"}
+{"t": 13.5238, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; gen: 199; subevents: [path: 2; {0.47977778315544128, 0.039981480687856674}]"}
+{"t": 13.6297, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 205; subevents: [path: 2; {0.59183663129806519, 0.16149382293224335}; move]; move"}
+{"t": 13.6461, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 206; subevents: [path: 2; {0.56859481334686279, 0.2383209764957428}; move]; move"}
+{"t": 13.6594, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 207; subevents: [path: 2; {0.52128106355667114, 0.36845678091049194}; move]; move"}
+{"t": 13.6745, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 208; subevents: [path: 2; {0.48558825254440308, 0.49624073505401611}; move]; move"}
+{"t": 13.6899, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 209; subevents: [path: 2; {0.46151635050773621, 0.63578391075134277}; move]; move"}
+{"t": 13.7043, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 210; subevents: [path: 2; {0.44740524888038635, 0.78316664695739746}; move]; move"}
+{"t": 13.7194, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; gen: 211; subevents: [path: 2; {0.43827453255653381, 0.79179012775421143}; up]; up"}
+{"t": 15.4747, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; range (in); gen: 213; subevents: [path: 1; {0, 0.72750616073608398}; range (in)]; range (in)"}
+{"t": 15.5339, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; gen: 217; subevents: [path: 1; {0, 0.72515428066253662}]"}
+{"t": 15.684, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 227; subevents: [path: 1; {0.0041503268294036388, 0.70477157831192017}; down]; down"}
+{"t": 15.8049, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; gen: 234; subevents: [path: 1; {0.0041503268294036388, 0.70477157831192017}]"}
+{"t": 15.8943, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; gen: 241; subevents: [path: 1; {0.0041503268294036388, 0.70477157831192017}]"}
+{"t": 15.9239, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; gen: 243; subevents: [path: 1; {0.0041503268294036388, 0.70477157831192017}]"}
+{"t": 16.06, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 252; subevents: [path: 1; {0.01494117733091116, 0.68517285585403442}; move]; move"}
+{"t": 16.0738, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 253; subevents: [path: 1; {0.016601307317614555, 0.68517285585403442}; move]; move"}
+{"t": 16.0891, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 254; subevents: [path: 1; {0.019091503694653511, 0.68517285585403442}; move]; move"}
+{"t": 16.104, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 255; subevents: [path: 1; {0.020751634612679482, 0.68517285585403442}; move]; move"}
+{"t": 16.1189, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 256; subevents: [path: 1; {0.022411765530705452, 0.68517285585403442}; move; edge]; move; edge"}
+{"t": 16.1338, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 257; subevents: [path: 1; {0.024071896448731422, 0.68517285585403442}; move; edge]; move; edge"}
+{"t": 16.1495, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 258; subevents: [path: 1; {0.026562092825770378, 0.68517285585403442}; move; edge]; move; edge"}
+{"t": 16.1638, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 259; subevents: [path: 1; {0.03154248371720314, 0.68517285585403442}; move; edge]; move; edge"}
+{"t": 16.1792, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 260; subevents: [path: 1; {0.039013072848320007, 0.68517285585403442}; move; edge]; move; edge"}
+{"t": 16.1946, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 261; subevents: [path: 1; {0.049803923815488815, 0.68517285585403442}; move; edge]; move; edge"}
+{"t": 16.2088, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 262; subevents: [path: 1; {0.057274512946605682, 0.68282097578048706}; move; edge]; move; edge"}
+{"t": 16.2239, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 263; subevents: [path: 1; {0.066405229270458221, 0.67968517541885376}; move; edge]; move; edge"}
+{"t": 16.2388, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 264; subevents: [path: 1; {0.073045752942562103, 0.67576539516448975}; move; edge]; move; edge"}
+{"t": 16.2697, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 265; subevents: [path: 1; {0.079686276614665985, 0.67341357469558716}; move; edge]; move; edge"}
+{"t": 16.2848, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 266; subevents: [path: 1; {0.08549673855304718, 0.67106169462203979}; move; edge]; move; edge"}
+{"t": 16.2996, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 267; subevents: [path: 1; {0.087156869471073151, 0.67027777433395386}; move; edge]; move; edge"}
+{"t": 16.3293, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 268; subevents: [path: 1; {0.092967323958873749, 0.66792589426040649}; move; edge]; move; edge"}
+{"t": 16.3294, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 269; subevents: [path: 1; {0.095457516610622406, 0.66714197397232056}; move; edge]; move; edge"}
+{"t": 16.3307, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 270; subevents: [path: 1; {0.09628758579492569, 0.66635799407958984}; move; edge]; move; edge"}
+{"t": 16.3442, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 271; subevents: [path: 1; {0.097117647528648376, 0.66635799407958984}; move; edge]; move; edge"}
+{"t": 16.3587, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 272; subevents: [path: 1; {0.09794771671295166, 0.66635799407958984}; move; edge]; move; edge"}
+{"t": 16.4195, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 276; subevents: [path: 1; {0.09794771671295166, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.4791, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 280; subevents: [path: 1; {0.098777778446674347, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.4947, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 281; subevents: [path: 1; {0.099607847630977631, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.5238, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 283; subevents: [path: 1; {0.10043790936470032, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.5389, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 284; subevents: [path: 1; {0.1012679785490036, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.5543, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 285; subevents: [path: 1; {0.10292810946702957, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.569, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 286; subevents: [path: 1; {0.10458824038505554, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.5841, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 287; subevents: [path: 1; {0.10541830211877823, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.5989, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 288; subevents: [path: 1; {0.1070784330368042, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.6155, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 289; subevents: [path: 1; {0.10790850222110748, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.6289, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 290; subevents: [path: 1; {0.11039869487285614, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.644, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 291; subevents: [path: 1; {0.11288889497518539, 0.66557407379150391}; move; edge]; move; edge"}
+{"t": 16.6588, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 292; subevents: [path: 1; {0.11454902589321136, 0.66479009389877319}; move; edge]; move; edge"}
+{"t": 16.6738, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 293; subevents: [path: 1; {0.11703921854496002, 0.66400617361068726}; move; edge]; move; edge"}
+{"t": 16.689, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 294; subevents: [path: 1; {0.12035948038101196, 0.66400617361068726}; move; edge]; move; edge"}
+{"t": 16.7039, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 295; subevents: [path: 1; {0.1236797422170639, 0.66322219371795654}; move; edge]; move; edge"}
+{"t": 16.7192, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 296; subevents: [path: 1; {0.12700000405311584, 0.66322219371795654}; move; edge]; move; edge"}
+{"t": 16.7339, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 297; subevents: [path: 1; {0.13115033507347107, 0.66322219371795654}; move; edge]; move; edge"}
+{"t": 16.7503, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 298; subevents: [path: 1; {0.13447059690952301, 0.66322219371795654}; move; edge]; move; edge"}
+{"t": 16.7639, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 299; subevents: [path: 1; {0.13862091302871704, 0.66243827342987061}; move; edge]; move; edge"}
+{"t": 16.7791, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 300; subevents: [path: 1; {0.14277124404907227, 0.66165429353713989}; move; edge]; move; edge"}
+{"t": 16.81, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 301; subevents: [path: 1; {0.14775164425373077, 0.66165429353713989}; move; edge]; move; edge"}
+{"t": 16.8245, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 302; subevents: [path: 1; {0.1519019603729248, 0.66087037324905396}; move; edge]; move; edge"}
+{"t": 16.84, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 303; subevents: [path: 1; {0.15605229139328003, 0.66087037324905396}; move; edge]; move; edge"}
+{"t": 16.8551, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 304; subevents: [path: 1; {0.15937255322933197, 0.66087037324905396}; move; edge]; move; edge"}
+{"t": 16.8697, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 305; subevents: [path: 1; {0.16352288424968719, 0.66087037324905396}; move; edge]; move; edge"}
+{"t": 16.8846, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 306; subevents: [path: 1; {0.16684314608573914, 0.66087037324905396}; move; edge]; move; edge"}
+{"t": 16.8997, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 307; subevents: [path: 1; {0.17099347710609436, 0.66087037324905396}; move; edge]; move; edge"}
+{"t": 16.9162, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 308; subevents: [path: 1; {0.17514379322528839, 0.66087037324905396}; move; edge]; move; edge"}
+{"t": 16.9296, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 309; subevents: [path: 1; {0.1801241934299469, 0.66008639335632324}; move; edge]; move; edge"}
+{"t": 16.9449, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 310; subevents: [path: 1; {0.18427450954914093, 0.6593024730682373}; move; edge]; move; edge"}
+{"t": 16.9595, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 311; subevents: [path: 1; {0.18925490975379944, 0.6593024730682373}; move; edge]; move; edge"}
+{"t": 16.9746, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 312; subevents: [path: 1; {0.19257517158985138, 0.6593024730682373}; move; edge]; move; edge"}
+{"t": 16.9895, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 313; subevents: [path: 1; {0.19589543342590332, 0.6593024730682373}; move; edge]; move; edge"}
+{"t": 17.0045, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 314; subevents: [path: 1; {0.19838562607765198, 0.6593024730682373}; move; edge]; move; edge"}
+{"t": 17.0195, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 315; subevents: [path: 1; {0.2025359570980072, 0.6593024730682373}; move; edge]; move; edge"}
+{"t": 17.0349, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 316; subevents: [path: 1; {0.20585621893405914, 0.6593024730682373}; move; edge]; move; edge"}
+{"t": 17.0514, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 317; subevents: [path: 1; {0.21000654995441437, 0.65851849317550659}; move; edge]; move; edge"}
+{"t": 17.0514, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 318; subevents: [path: 1; {0.21498693525791168, 0.65851849317550659}; move; edge]; move; edge"}
+{"t": 17.0642, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 319; subevents: [path: 1; {0.21830719709396362, 0.65851849317550659}; move; edge]; move; edge"}
+{"t": 17.0794, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 320; subevents: [path: 1; {0.22245752811431885, 0.65851849317550659}; move; edge]; move; edge"}
+{"t": 17.094, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 321; subevents: [path: 1; {0.22660784423351288, 0.65773457288742065}; move; edge]; move; edge"}
+{"t": 17.1088, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 322; subevents: [path: 1; {0.2307581752538681, 0.65695059299468994}; move; edge]; move; edge"}
+{"t": 17.1239, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 323; subevents: [path: 1; {0.23573857545852661, 0.65695059299468994}; move; edge]; move; edge"}
+{"t": 17.139, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 324; subevents: [path: 1; {0.23988889157772064, 0.656166672706604}; move; edge]; move; edge"}
+{"t": 17.154, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 325; subevents: [path: 1; {0.24320915341377258, 0.656166672706604}; move; edge]; move; edge"}
+{"t": 17.1691, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 326; subevents: [path: 1; {0.24652941524982452, 0.65538269281387329}; move; edge]; move; edge"}
+{"t": 17.1849, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 327; subevents: [path: 1; {0.24984967708587646, 0.65538269281387329}; move; edge]; move; edge"}
+{"t": 17.1989, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 328; subevents: [path: 1; {0.25400000810623169, 0.65459877252578735}; move; edge]; move; edge"}
+{"t": 17.214, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 329; subevents: [path: 1; {0.258980393409729, 0.65459877252578735}; move; edge]; move; edge"}
+{"t": 17.229, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 330; subevents: [path: 1; {0.26230067014694214, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 17.2438, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 331; subevents: [path: 1; {0.26645100116729736, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 17.2591, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 332; subevents: [path: 1; {0.2706013023853302, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 17.274, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 333; subevents: [path: 1; {0.27475163340568542, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 17.2892, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 334; subevents: [path: 1; {0.27807191014289856, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 17.3045, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 335; subevents: [path: 1; {0.28139215707778931, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 17.3194, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 336; subevents: [path: 1; {0.28388234972953796, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 17.3341, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 337; subevents: [path: 1; {0.2872026264667511, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 17.364, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 338; subevents: [path: 1; {0.29052287340164185, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 17.365, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 339; subevents: [path: 1; {0.29384315013885498, 0.6530308723449707}; move; edge]; move; edge"}
+{"t": 17.3796, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 340; subevents: [path: 1; {0.29799348115921021, 0.6530308723449707}; move; edge]; move; edge"}
+{"t": 17.394, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 341; subevents: [path: 1; {0.30297386646270752, 0.65224689245223999}; move; edge]; move; edge"}
+{"t": 17.4092, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 342; subevents: [path: 1; {0.30712419748306274, 0.65146297216415405}; move; edge]; move; edge"}
+{"t": 17.4241, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 343; subevents: [path: 1; {0.31210458278656006, 0.65146297216415405}; move; edge]; move; edge"}
+{"t": 17.4392, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 344; subevents: [path: 1; {0.31625491380691528, 0.65146297216415405}; move; edge]; move; edge"}
+{"t": 17.4543, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 345; subevents: [path: 1; {0.3212352991104126, 0.65067899227142334}; move; edge]; move; edge"}
+{"t": 17.469, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 346; subevents: [path: 1; {0.32704576849937439, 0.64911109209060669}; move; edge]; move; edge"}
+{"t": 17.4846, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 347; subevents: [path: 1; {0.33285620808601379, 0.64911109209060669}; move; edge]; move; edge"}
+{"t": 17.499, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 348; subevents: [path: 1; {0.33866667747497559, 0.64832717180252075}; move; edge]; move; edge"}
+{"t": 17.5141, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 349; subevents: [path: 1; {0.34447714686393738, 0.6467592716217041}; move; edge]; move; edge"}
+{"t": 17.5295, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 350; subevents: [path: 1; {0.34945753216743469, 0.64597529172897339}; move; edge]; move; edge"}
+{"t": 17.544, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 351; subevents: [path: 1; {0.35360786318778992, 0.64519137144088745}; move; edge]; move; edge"}
+{"t": 17.5589, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 352; subevents: [path: 1; {0.35775819420814514, 0.64440739154815674}; move; edge]; move; edge"}
+{"t": 17.574, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 353; subevents: [path: 1; {0.36107844114303589, 0.6436234712600708}; move; edge]; move; edge"}
+{"t": 17.6046, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 354; subevents: [path: 1; {0.36522877216339111, 0.64283949136734009}; move; edge]; move; edge"}
+{"t": 17.6198, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 355; subevents: [path: 1; {0.36854901909828186, 0.64205557107925415}; move; edge]; move; edge"}
+{"t": 17.6351, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 356; subevents: [path: 1; {0.371869295835495, 0.64127159118652344}; move; edge]; move; edge"}
+{"t": 17.6512, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 357; subevents: [path: 1; {0.37601962685585022, 0.6404876708984375}; move; edge]; move; edge"}
+{"t": 17.6647, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 358; subevents: [path: 1; {0.37933987379074097, 0.63970369100570679}; move; edge]; move; edge"}
+{"t": 17.6804, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 359; subevents: [path: 1; {0.38349020481109619, 0.63891971111297607}; move; edge]; move; edge"}
+{"t": 17.6947, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 360; subevents: [path: 1; {0.38681048154830933, 0.63891971111297607}; move; edge]; move; edge"}
+{"t": 17.7094, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 361; subevents: [path: 1; {0.39096081256866455, 0.63813579082489014}; move; edge]; move; edge"}
+{"t": 17.7247, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 362; subevents: [path: 1; {0.39511111378669739, 0.63735181093215942}; move; edge]; move; edge"}
+{"t": 17.7398, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 363; subevents: [path: 1; {0.40009152889251709, 0.63656789064407349}; move; edge]; move; edge"}
+{"t": 17.7551, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 364; subevents: [path: 1; {0.4050719141960144, 0.63656789064407349}; move; edge]; move; edge"}
+{"t": 17.7698, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 365; subevents: [path: 1; {0.41005229949951172, 0.63656789064407349}; move; edge]; move; edge"}
+{"t": 17.7861, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 366; subevents: [path: 1; {0.41586276888847351, 0.63578391075134277}; move; edge]; move; edge"}
+{"t": 17.8001, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 367; subevents: [path: 1; {0.42167320847511292, 0.63499999046325684}; move; edge]; move; edge"}
+{"t": 17.8151, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 368; subevents: [path: 1; {0.4283137321472168, 0.63421601057052612}; move; edge]; move; edge"}
+{"t": 17.8299, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 369; subevents: [path: 1; {0.43495425581932068, 0.63264811038970947}; move; edge]; move; edge"}
+{"t": 17.8447, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 370; subevents: [path: 1; {0.44159477949142456, 0.63186419010162354}; move; edge]; move; edge"}
+{"t": 17.8596, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 371; subevents: [path: 1; {0.44906538724899292, 0.63108021020889282}; move; edge]; move; edge"}
+{"t": 17.8748, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 372; subevents: [path: 1; {0.45653596520423889, 0.63029628992080688}; move; edge]; move; edge"}
+{"t": 17.8891, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 373; subevents: [path: 1; {0.46483662724494934, 0.62951231002807617}; move; edge]; move; edge"}
+{"t": 17.9196, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 374; subevents: [path: 1; {0.47230720520019531, 0.62951231002807617}; move; edge]; move; edge"}
+{"t": 17.92, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 375; subevents: [path: 1; {0.48143792152404785, 0.62794440984725952}; move; edge]; move; edge"}
+{"t": 17.9342, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 376; subevents: [path: 1; {0.49305883049964905, 0.62716048955917358}; move; edge]; move; edge"}
+{"t": 17.9513, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 377; subevents: [path: 1; {0.50467973947525024, 0.62637650966644287}; move; edge]; move; edge"}
+{"t": 17.9641, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 378; subevents: [path: 1; {0.51630067825317383, 0.62480860948562622}; move; edge]; move; edge"}
+{"t": 17.9793, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 379; subevents: [path: 1; {0.5287516713142395, 0.62402468919754028}; move; edge]; move; edge"}
+{"t": 17.9941, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 380; subevents: [path: 1; {0.53788238763809204, 0.62324070930480957}; move; edge]; move; edge"}
+{"t": 18.0091, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 381; subevents: [path: 1; {0.55033338069915771, 0.62245678901672363}; move; edge]; move; edge"}
+{"t": 18.0241, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 382; subevents: [path: 1; {0.56195425987243652, 0.62010490894317627}; move; edge]; move; edge"}
+{"t": 18.0392, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 383; subevents: [path: 1; {0.57855558395385742, 0.61853700876235962}; move; edge]; move; edge"}
+{"t": 18.0543, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 384; subevents: [path: 1; {0.59017646312713623, 0.61775308847427368}; move; edge]; move; edge"}
+{"t": 18.0692, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 385; subevents: [path: 1; {0.59930723905563354, 0.61618518829345703}; move; edge]; move; edge"}
+{"t": 18.086, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 386; subevents: [path: 1; {0.61590850353240967, 0.61461728811264038}; move; edge]; move; edge"}
+{"t": 18.0991, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 387; subevents: [path: 1; {0.62337911128997803, 0.61461728811264038}; move; edge]; move; edge"}
+{"t": 18.1139, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 388; subevents: [path: 1; {0.63500005006790161, 0.61383330821990967}; move; edge]; move; edge"}
+{"t": 18.1296, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 389; subevents: [path: 1; {0.65077126026153564, 0.61226540803909302}; move; edge]; move; edge"}
+{"t": 18.144, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 390; subevents: [path: 1; {0.658241868019104, 0.61226540803909302}; move; edge]; move; edge"}
+{"t": 18.1591, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 391; subevents: [path: 1; {0.67069286108016968, 0.61069750785827637}; move; edge]; move; edge"}
+{"t": 18.174, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 392; subevents: [path: 1; {0.68314379453659058, 0.60991358757019043}; move; edge]; move; edge"}
+{"t": 18.1891, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 393; subevents: [path: 1; {0.69476473331451416, 0.60991358757019043}; move; edge]; move; edge"}
+{"t": 18.204, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 394; subevents: [path: 1; {0.70638567209243774, 0.60912960767745972}; move; edge]; move; edge"}
+{"t": 18.2189, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 395; subevents: [path: 1; {0.71717649698257446, 0.60834568738937378}; move; edge]; move; edge"}
+{"t": 18.234, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 396; subevents: [path: 1; {0.72796732187271118, 0.60756170749664307}; move; edge]; move; edge"}
+{"t": 18.2501, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 397; subevents: [path: 1; {0.7429085373878479, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.2642, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 398; subevents: [path: 1; {0.75535953044891357, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.2789, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 399; subevents: [path: 1; {0.76864057779312134, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.294, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 400; subevents: [path: 1; {0.77694118022918701, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.309, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 401; subevents: [path: 1; {0.78939217329025269, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.3243, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 402; subevents: [path: 1; {0.80599349737167358, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.3391, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 403; subevents: [path: 1; {0.81927454471588135, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.3544, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 404; subevents: [path: 1; {0.8333856463432312, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.3852, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 405; subevents: [path: 1; {0.84666669368743896, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.3997, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 406; subevents: [path: 1; {0.8557974100112915, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.4148, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 407; subevents: [path: 1; {0.86907845735549927, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.4303, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 408; subevents: [path: 1; {0.88235950469970703, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.4445, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 409; subevents: [path: 1; {0.89481049776077271, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.4743, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 410; subevents: [path: 1; {0.90726149082183838, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.4745, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 411; subevents: [path: 1; {0.91888236999511719, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.4761, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 412; subevents: [path: 1; {0.92884320020675659, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.4893, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 413; subevents: [path: 1; {0.93714380264282227, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.5048, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 414; subevents: [path: 1; {0.94461441040039062, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.5193, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 415; subevents: [path: 1; {0.95125496387481689, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.534, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 416; subevents: [path: 1; {0.95623534917831421, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.5493, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 417; subevents: [path: 1; {0.96121573448181152, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.5639, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 418; subevents: [path: 1; {0.96619611978530884, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.5789, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 419; subevents: [path: 1; {0.96951639652252197, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.594, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 420; subevents: [path: 1; {0.97283661365509033, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.6091, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 421; subevents: [path: 1; {0.97532683610916138, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.6402, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 422; subevents: [path: 1; {0.97698694467544556, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.6547, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 423; subevents: [path: 1; {0.97864711284637451, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.6699, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 424; subevents: [path: 1; {0.98030722141265869, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.686, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 425; subevents: [path: 1; {0.98196732997894287, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.6998, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 426; subevents: [path: 1; {0.98362749814987183, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.7152, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 427; subevents: [path: 1; {0.98445755243301392, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.7303, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 428; subevents: [path: 1; {0.98528760671615601, 0.60677778720855713}; move; edge]; move; edge"}
+{"t": 18.7446, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 429; subevents: [path: 1; {0.9861176609992981, 0.60599380731582642}; move; edge]; move; edge"}
+{"t": 18.7598, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 430; subevents: [path: 1; {0.98694777488708496, 0.60520988702774048}; move; edge]; move; edge"}
+{"t": 18.7894, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 431; subevents: [path: 1; {0.98777782917022705, 0.60520988702774048}; move; edge]; move; edge"}
+{"t": 18.7896, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 432; subevents: [path: 1; {0.98860788345336914, 0.60520988702774048}; move; edge]; move; edge"}
+{"t": 18.7907, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 433; subevents: [path: 1; {0.98943793773651123, 0.60520988702774048}; move; edge]; move; edge"}
+{"t": 18.8042, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 434; subevents: [path: 1; {0.99026799201965332, 0.60520988702774048}; move; edge]; move; edge"}
+{"t": 18.8648, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 437; subevents: [path: 1; {0.99026799201965332, 0.60442590713500977}; move; edge]; move; edge"}
+{"t": 18.8803, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 438; subevents: [path: 1; {0.99109804630279541, 0.60364198684692383}; move; edge]; move; edge"}
+{"t": 18.8949, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 439; subevents: [path: 1; {0.99109804630279541, 0.60285800695419312}; move; edge]; move; edge"}
+{"t": 18.9249, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 441; subevents: [path: 1; {0.99109804630279541, 0.60050618648529053}; move; edge]; move; edge"}
+{"t": 18.9549, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 443; subevents: [path: 1; {0.99109804630279541, 0.59815430641174316}; move; edge]; move; edge"}
+{"t": 18.9699, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 444; subevents: [path: 1; {0.99109804630279541, 0.59580248594284058}; move; edge]; move; edge"}
+{"t": 18.9857, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 445; subevents: [path: 1; {0.99109804630279541, 0.59423458576202393}; move; edge]; move; edge"}
+{"t": 18.9996, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 446; subevents: [path: 1; {0.99109804630279541, 0.59188270568847656}; move; edge]; move; edge"}
+{"t": 19.0292, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 447; subevents: [path: 1; {0.99109804630279541, 0.59109872579574585}; move; edge]; move; edge"}
+{"t": 19.0293, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 448; subevents: [path: 1; {0.99109804630279541, 0.58874690532684326}; move; edge]; move; edge"}
+{"t": 19.031, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 449; subevents: [path: 1; {0.99109804630279541, 0.5863950252532959}; move; edge]; move; edge"}
+{"t": 19.044, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 450; subevents: [path: 1; {0.99109804630279541, 0.58482712507247925}; move; edge]; move; edge"}
+{"t": 19.0595, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 451; subevents: [path: 1; {0.99109804630279541, 0.5832592248916626}; move; edge]; move; edge"}
+{"t": 19.0741, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 452; subevents: [path: 1; {0.99109804630279541, 0.56914812326431274}; move; edge]; move; edge"}
+{"t": 19.0892, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 453; subevents: [path: 1; {0.99109804630279541, 0.55974072217941284}; move; edge]; move; edge"}
+{"t": 19.1042, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; edge; gen: 454; subevents: [path: 1; {0.99939870834350586, 0.54641354084014893}; up; edge]; up; edge"}
+{"t": 19.1492, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; range (out); gen: 457; subevents: [path: 1; {0.99939870834350586, 0.54641354084014893}; range (out); edge]; range (out)"}
+{"t": 24.3106, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; down; gen: 459; subevents: [path: 2; {0.002490196144208312, 0.70869135856628418}; down]; down"}
+{"t": 24.5945, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; gen: 478; subevents: [path: 2; {0.017431372776627541, 0.72280246019363403}; move]; move"}
+{"t": 24.6095, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 479; subevents: [path: 2; {0.022411765530705452, 0.72280246019363403}; move; edge]; move; edge"}
+{"t": 24.6251, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 480; subevents: [path: 2; {0.029052289202809334, 0.72280246019363403}; move; edge]; move; edge"}
+{"t": 24.6392, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 481; subevents: [path: 2; {0.035692811012268066, 0.72280246019363403}; move; edge]; move; edge"}
+{"t": 24.6544, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 482; subevents: [path: 2; {0.043163400143384933, 0.72280246019363403}; move; edge]; move; edge"}
+{"t": 24.6698, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 483; subevents: [path: 2; {0.054784316569566727, 0.72280246019363403}; move; edge]; move; edge"}
+{"t": 24.6842, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 484; subevents: [path: 2; {0.061424840241670609, 0.72280246019363403}; move; edge]; move; edge"}
+{"t": 24.715, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 485; subevents: [path: 2; {0.071385622024536133, 0.72280246019363403}; move; edge]; move; edge"}
+{"t": 24.7301, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 486; subevents: [path: 2; {0.08549673855304718, 0.72280246019363403}; move; edge]; move; edge"}
+{"t": 24.745, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 487; subevents: [path: 2; {0.097117647528648376, 0.72280246019363403}; move; edge]; move; edge"}
+{"t": 24.7603, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 488; subevents: [path: 2; {0.11039869487285614, 0.72123456001281738}; move; edge]; move; edge"}
+{"t": 24.7749, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 489; subevents: [path: 2; {0.12533988058567047, 0.71888267993927002}; move; edge]; move; edge"}
+{"t": 24.7913, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 490; subevents: [path: 2; {0.14194117486476898, 0.71496295928955078}; move; edge]; move; edge"}
+{"t": 24.8058, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 491; subevents: [path: 2; {0.15854248404502869, 0.71182715892791748}; move; edge]; move; edge"}
+{"t": 24.8197, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 492; subevents: [path: 2; {0.16933333873748779, 0.70947527885437012}; move; edge]; move; edge"}
+{"t": 24.8346, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 493; subevents: [path: 2; {0.19091503322124481, 0.70633947849273682}; move; edge]; move; edge"}
+{"t": 24.8499, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 494; subevents: [path: 2; {0.20087581872940063, 0.70398765802383423}; move; edge]; move; edge"}
+{"t": 24.865, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 495; subevents: [path: 2; {0.21498693525791168, 0.70085185766220093}; move; edge]; move; edge"}
+{"t": 24.88, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 496; subevents: [path: 2; {0.22826798260211945, 0.69771605730056763}; move; edge]; move; edge"}
+{"t": 24.8951, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 497; subevents: [path: 2; {0.24154902994632721, 0.69536417722702026}; move; edge]; move; edge"}
+{"t": 24.9101, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 498; subevents: [path: 2; {0.25400000810623169, 0.69301235675811768}; move; edge]; move; edge"}
+{"t": 24.9278, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 499; subevents: [path: 2; {0.26562091708183289, 0.69144445657730103}; move; edge]; move; edge"}
+{"t": 24.94, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 500; subevents: [path: 2; {0.27641177177429199, 0.68987655639648438}; move; edge]; move; edge"}
+{"t": 24.9706, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 501; subevents: [path: 2; {0.28637257218360901, 0.68830865621566772}; move; edge]; move; edge"}
+{"t": 24.9709, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 502; subevents: [path: 2; {0.29633334279060364, 0.68752467632293701}; move; edge]; move; edge"}
+{"t": 24.971, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 503; subevents: [path: 2; {0.30546405911445618, 0.68752467632293701}; move; edge]; move; edge"}
+{"t": 24.9841, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 504; subevents: [path: 2; {0.31542485952377319, 0.68595677614212036}; move; edge]; move; edge"}
+{"t": 24.9991, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 505; subevents: [path: 2; {0.32538563013076782, 0.68517285585403442}; move; edge]; move; edge"}
+{"t": 25.0143, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 506; subevents: [path: 2; {0.33949673175811768, 0.683604896068573}; move; edge]; move; edge"}
+{"t": 25.0293, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 507; subevents: [path: 2; {0.35111767053604126, 0.68203699588775635}; move; edge]; move; edge"}
+{"t": 25.0444, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 508; subevents: [path: 2; {0.36522877216339111, 0.67968517541885376}; move; edge]; move; edge"}
+{"t": 25.0604, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 509; subevents: [path: 2; {0.37850981950759888, 0.67811727523803711}; move; edge]; move; edge"}
+{"t": 25.0744, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 510; subevents: [path: 2; {0.39262092113494873, 0.67498147487640381}; move; edge]; move; edge"}
+{"t": 25.0898, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 511; subevents: [path: 2; {0.40839216113090515, 0.67184567451477051}; move; edge]; move; edge"}
+{"t": 25.1043, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 512; subevents: [path: 2; {0.42416340112686157, 0.66792589426040649}; move; edge]; move; edge"}
+{"t": 25.1347, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 513; subevents: [path: 2; {0.44159477949142456, 0.66322219371795654}; move; edge]; move; edge"}
+{"t": 25.1497, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 514; subevents: [path: 2; {0.45902615785598755, 0.65851849317550659}; move; edge]; move; edge"}
+{"t": 25.1649, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 515; subevents: [path: 2; {0.47728759050369263, 0.65381479263305664}; move; edge]; move; edge"}
+{"t": 25.1799, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 516; subevents: [path: 2; {0.49720916152000427, 0.64832717180252075}; move; edge]; move; edge"}
+{"t": 25.1952, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 517; subevents: [path: 2; {0.51796078681945801, 0.64283949136734009}; move; edge]; move; edge"}
+{"t": 25.2101, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 518; subevents: [path: 2; {0.53954249620437622, 0.63813579082489014}; move; edge]; move; edge"}
+{"t": 25.2397, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 519; subevents: [path: 2; {0.56112420558929443, 0.63343209028244019}; move; edge]; move; edge"}
+{"t": 25.2398, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 520; subevents: [path: 2; {0.58353596925735474, 0.62951231002807617}; move; edge]; move; edge"}
+{"t": 25.2408, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 521; subevents: [path: 2; {0.60511767864227295, 0.62559258937835693}; move; edge]; move; edge"}
+{"t": 25.2545, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 522; subevents: [path: 2; {0.62752944231033325, 0.62245678901672363}; move; edge]; move; edge"}
+{"t": 25.2692, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 523; subevents: [path: 2; {0.64994120597839355, 0.61932098865509033}; move; edge]; move; edge"}
+{"t": 25.2843, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 524; subevents: [path: 2; {0.67401307821273804, 0.61696910858154297}; move; edge]; move; edge"}
+{"t": 25.2995, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 525; subevents: [path: 2; {0.70638567209243774, 0.61226540803909302}; move; edge]; move; edge"}
+{"t": 25.3145, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 526; subevents: [path: 2; {0.73294776678085327, 0.61069750785827637}; move; edge]; move; edge"}
+{"t": 25.3295, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 527; subevents: [path: 2; {0.75120919942855835, 0.60991358757019043}; move; edge]; move; edge"}
+{"t": 25.3442, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 528; subevents: [path: 2; {0.78773206472396851, 0.60756170749664307}; move; edge]; move; edge"}
+{"t": 25.3593, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 529; subevents: [path: 2; {0.80682355165481567, 0.60599380731582642}; move; edge]; move; edge"}
+{"t": 25.3744, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 530; subevents: [path: 2; {0.8333856463432312, 0.60442590713500977}; move; edge]; move; edge"}
+{"t": 25.3896, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 531; subevents: [path: 2; {0.85911768674850464, 0.60285800695419312}; move; edge]; move; edge"}
+{"t": 25.4043, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 532; subevents: [path: 2; {0.88401961326599121, 0.60050618648529053}; move; edge]; move; edge"}
+{"t": 25.4193, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 533; subevents: [path: 2; {0.90643137693405151, 0.59737038612365723}; move; edge]; move; edge"}
+{"t": 25.4342, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 534; subevents: [path: 2; {0.92635297775268555, 0.59345060586929321}; move; edge]; move; edge"}
+{"t": 25.4493, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 535; subevents: [path: 2; {0.94378435611724854, 0.58796292543411255}; move; edge]; move; edge"}
+{"t": 25.4653, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 536; subevents: [path: 2; {0.95208501815795898, 0.58404320478439331}; move; edge]; move; edge"}
+{"t": 25.4794, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 537; subevents: [path: 2; {0.96370589733123779, 0.57855552434921265}; move; edge]; move; edge"}
+{"t": 25.4943, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 538; subevents: [path: 2; {0.97449678182601929, 0.57463580369949341}; move; edge]; move; edge"}
+{"t": 25.5094, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 539; subevents: [path: 2; {0.99026799201965332, 0.55425310134887695}; move; edge]; move; edge"}
+{"t": 25.5256, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; move; edge; gen: 540; subevents: [path: 2; {0.99109804630279541, 0.54249382019042969}; move; edge]; move; edge"}
+{"t": 25.5393, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; up; edge; gen: 541; subevents: [path: 2; {0.99939870834350586, 0.52446293830871582}; up; edge]; up; edge"}
+{"t": 25.5555, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; range (out); gen: 542; subevents: [path: 2; {0.99939870834350586, 0.52446293830871582}; range (out); edge]; range (out)"}
+{"t": 49.4812, "category": "Button", "message": "Menu page:0x1 usage:0x86 downEvent:1 source:verifiedExternalAccessory senderID:100004006 down"}
+{"t": 49.4814, "category": "Button", "message": " 0x1/0x86/100004006 began: firstDown:0s ago b0e0u0"}
+{"t": 49.6004, "category": "Button", "message": "Menu page:0x1 usage:0x86 downEvent:0 source:verifiedExternalAccessory senderID:100004006 up"}
+{"t": 49.6004, "category": "Button", "message": " 0x1/0x86/100004006 finished: firstDown:0.12s ago b0e0u1"}
+{"t": 49.6314, "category": "TouchEvents", "message": "touchpad Digitizer token: 0xB5890338; cancel; subevents: []; cancel"}

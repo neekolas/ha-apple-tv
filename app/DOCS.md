@@ -119,11 +119,27 @@ The show result reports `data.remote` with `mode`, `state` and `reason`. The pag
 
 Remote input needs screen pairing. The observer reads presses from the TV's log on its existing connection while such a page is shown. It stops when the page is dismissed or replaced. If the connection to the TV drops, the bridge reports `state: "unavailable"` with a `reason` such as `stream_failed` or `tv_unreachable`, and retries until the state is `active` again. If the observer process restarts, the state is `starting` until the watch runs again. A recorded presentation (`data.transport` equal to `"video"`) cannot receive keys and reports `reason: "not_mirrored"`. The watch also stops when a mirror fails or falls back to a recording. [All reason values](../docs/mcp-api.md#remote-input)
 
-Limits:
+What each remote action becomes:
+
+| Remote | Action | Key in the page | Hardware status |
+|---|---|---|---|
+| Clickpad Siri Remote (2nd generation and later) | Click on the ring: left, right, up, down | `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` | Verified on tvOS 27.2 |
+| Clickpad Siri Remote | Click in the center | `Enter` | Verified on tvOS 27.2 |
+| Clickpad Siri Remote | Swipe on the touch surface | Arrows, as on the touch remote | Not tested |
+| Touch-surface Siri Remote (1st generation) | Swipe | One arrow for each 0.4 of the pad that the finger travels | Recognizer checked against a real capture on tvOS 26.6.1. Not yet tested end to end. |
+| Touch-surface Siri Remote | Fast flick | Extra arrows after lift-off (momentum), up to 4. A new touch stops them. | Not tested with a real flick |
+| Touch-surface Siri Remote | Click anywhere on the surface | `Enter` | Verified on tvOS 26.6.1 |
+| Touch-surface Siri Remote | Tap without a click | Nothing | By design, as in tvOS |
+| `tv_remote` and `tv_sequence` keys | left, right, up, down, select | Arrows and `Enter` | Verified on tvOS 26.6.1 |
+| Any remote | Menu, Home | Not forwarded. tvOS handles them and ends the mirror. | |
+| Any remote | Play/Pause, volume | Not forwarded | |
+
+A click during a touch sends only the key of the click, never an extra arrow. The swipe and flick tuning is preliminary.
+
+Notes:
 
 - Presses sent with `tv_remote` during the page are forwarded to the page too.
-- Menu and Home still end the mirror. They do not reach the page.
-- Verified on hardware: presses sent by `tv_remote` on tvOS 26, and arrows and Select on a physical clickpad Siri Remote on tvOS 27.2. The first-generation Siri Remote with a touch surface is untested. Its arrows may not produce the log line that the bridge reads.
+- Swipes are read from the TV's debug log. While a finger is on the remote, the TV sends the bridge about 60 log lines per second. When nobody touches the remote, it sends less than one.
 - Set the app's log level to `debug` to log each forwarded key with its delay, and button lines that the bridge did not recognize. One press on the physical remote then shows what the TV logs for it.
 
 ### Presentation mode

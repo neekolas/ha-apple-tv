@@ -7,6 +7,7 @@ import struct
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -19,8 +20,9 @@ from atv_bridge_app.processes import ObserverClient
 from atv_bridge_app.state import Fault, State
 from atv_bridge_app.tools.contract import ROUTED_SCHEMAS, SCHEMAS
 from atv_bridge_observer import __main__ as observer_module
-from atv_bridge_observer import buttons
+from atv_bridge_observer import buttons, touch
 
+FIXTURES = Path(__file__).parent / "fixtures"
 LEFT = "Unknown page:0x1 usage:0x8B downEvent:1 source:externalAccessory (MediaRemote) senderID:100003D02 down"
 
 
@@ -70,7 +72,8 @@ def test_press_matcher_ignores_other_processes_and_categories():
 
 
 def test_stream_flags_never_replay_history():
-    assert buttons.STREAM_FLAGS == 0x4
+    # PAYLOAD for button lines, DEBUG for touch lines.
+    assert buttons.STREAM_FLAGS == 0x24
     assert not buttons.STREAM_FLAGS & buttons.OsActivityStreamFlag.HISTORICAL
 
 
@@ -261,7 +264,7 @@ async def test_watch_reports_one_key_per_press_with_a_pid_filter(watch):
     try:
         await until(lambda: {"event": "buttons", "state": "active"} in events)
         stream = FakeTrace.streams[0]
-        assert (stream.pid, stream.flags) == (68, 0x4)
+        assert (stream.pid, stream.flags) == (68, 0x24)
         up = LEFT.replace("downEvent:1", "downEvent:0")
         for line in (entry(LEFT), entry(up), entry(" 0x1/0x8B/1 began: x"), entry(" 0x1/0x8B/1 finished: x"),
                      entry(LEFT, process="rapportd"), entry("TV page:0xC usage:0x60 downEvent:1 x"),
@@ -395,6 +398,140 @@ async def test_observer_requests_work_while_the_watch_fails(monkeypatch, tmp_pat
         assert task.cancelled() and observer.buttons.task is None
     finally:
         await observer.close()
+
+
+# --- Touch surface -----------------------------------------------------------
+
+
+def touch_line(kind, x, y, path=1):
+    return f"touchpad Digitizer token: 0xB5890338; {kind}; gen: 7; subevents: [path: {path}; {{{x}, {y}}}; {kind}]; {kind}"
+
+
+def stroke(start, end, seconds, at=0.0, path=1):
+    """Log lines of one contact, every 15 ms, as (device time, message)."""
+    count = max(2, round(seconds / 0.015))
+    points = [(start[0] + (end[0] - start[0]) * i / count, start[1] + (end[1] - start[1]) * i / count) for i in range(count + 1)]
+    lines = [(at, touch_line("down", *points[0], path))]
+    lines += [(at + 0.015 * i, touch_line("move", *point, path)) for i, point in enumerate(points[1:], 1)]
+    return lines + [(at + 0.015 * count + 0.001, touch_line("up", *points[-1], path))]
+
+
+def recognize(lines, recognizer=None):
+    recognizer = recognizer or touch.TouchRecognizer()
+    keys, momentum = [], None
+    for at, message in lines:
+        gesture = recognizer.touch(message, at)
+        keys += gesture.keys
+        momentum = gesture.momentum or momentum
+    return keys, momentum
+
+
+def test_real_touch_remote_capture_replays_to_the_expected_keys():
+    """Lines from a first-generation Siri Remote on tvOS 26.6.1: five clicks, four swipes, two slow drags, Menu."""
+    recognizer, out = touch.TouchRecognizer(), []
+    for row in map(json.loads, (FIXTURES / "touch_remote.jsonl").read_text().splitlines()):
+        if row["category"] == "Button":
+            key, _ = buttons.match_press("backboardd", "Button", row["message"])
+            if "downEvent:1" in row["message"]:
+                recognizer.button(row["t"])
+            if key:
+                out.append(key)
+        else:
+            gesture = recognizer.touch(row["message"], row["t"])
+            out += gesture.keys
+            assert gesture.momentum is None  # These were ordinary swipes, not flicks.
+    assert out == ["select"] * 5 + ["left", "right", "right", "up", "down"] + ["right"] * 4
+
+
+def test_slow_drag_moves_one_item_per_step():
+    keys, momentum = recognize(stroke((0.05, 0.5), (0.95, 0.5), 3.0))
+    assert keys == ["right", "right"] and momentum is None
+    keys, _ = recognize(stroke((0.5, 0.95), (0.5, 0.05), 3.0))
+    assert keys == ["up", "up"]
+    # A reversal measures the next step from the turning point.
+    there_and_back = stroke((0.1, 0.5), (0.4, 0.5), 1.0)[:-1] + stroke((0.4, 0.5), (0.0, 0.5), 1.0, at=1.0)[1:]
+    assert recognize(there_and_back)[0] == ["left"]
+    # A diagonal has no dominant axis. A tap or a small move does nothing.
+    assert recognize(stroke((0.1, 0.1), (0.9, 0.9), 1.0)) == ([], None)
+    assert recognize(stroke((0.02, 0.5), (0.03, 0.5), 0.1)) == ([], None)
+    assert recognize(stroke((0.5, 0.5), (0.7, 0.5), 1.0)) == ([], None)
+
+
+def test_ordinary_swipe_gives_one_arrow_without_momentum():
+    # Like the captured swipes: about 0.75 of the pad in 0.2 s, 4 pad units per second.
+    for start, end, key in [((0.9, 0.6), (0.15, 0.6), "left"), ((0.1, 0.6), (0.85, 0.6), "right"),
+                            ((0.5, 0.9), (0.5, 0.15), "up"), ((0.5, 0.1), (0.5, 0.85), "down")]:
+        assert recognize(stroke(start, end, 0.2)) == ([key], None)
+
+
+def test_fast_flick_adds_momentum_arrows():
+    # 0.94 of the pad in 45 ms is about 21 pad units per second.
+    keys, momentum = recognize(stroke((0.03, 0.5), (0.97, 0.5), 0.045))
+    assert keys == ["right"]
+    assert momentum == ("right", touch.momentum_delays(3)) and touch.momentum_count(20) == 3
+    # The gaps grow from 40 ms to 120 ms.
+    delays = touch.momentum_delays(touch.MOMENTUM_MAX_EXTRA)
+    gaps = [round(b - a, 3) for a, b in zip([0, *delays], delays)]
+    assert gaps[0] == 0.04 and gaps[-1] == 0.12 and gaps == sorted(gaps)
+    assert [touch.momentum_count(speed) for speed in (0, 7.9, 11.9, 12, 16, 100)] == [0, 0, 0, 1, 2, touch.MOMENTUM_MAX_EXTRA]
+    # A short fast flick is too short for a step. It still moves one item.
+    assert recognize(stroke((0.5, 0.5), (0.8, 0.5), 0.03)) == (["right"], None)
+
+
+def test_click_during_a_contact_cancels_its_swipe():
+    recognizer = touch.TouchRecognizer()
+    lines = stroke((0.05, 0.5), (0.95, 0.5), 0.045)
+    assert recognize(lines[:2], recognizer) == ([], None)
+    recognizer.button(lines[1][0])  # Select, or a ring click on a clickpad remote.
+    assert recognize(lines[2:], recognizer) == ([], None)
+    # A contact that starts right after the click also belongs to it. A later one does not.
+    assert recognize(stroke((0.05, 0.5), (0.95, 0.5), 0.2, at=0.1), recognizer) == ([], None)
+    assert recognize(stroke((0.05, 0.5), (0.95, 0.5), 0.2, at=2.0), recognizer) == (["right", "right"], None)
+
+
+async def test_watch_sends_swipes_and_momentum_and_a_new_touch_cancels_it(watch, monkeypatch):
+    watch, observer, events = watch
+    monkeypatch.setattr(touch, "MOMENTUM_FIRST_GAP_S", 0.05)
+    monkeypatch.setattr(touch, "MOMENTUM_LAST_GAP_S", 0.05)
+
+    def keys():
+        return [(e["key"], e["gesture"]) for e in events if e["event"] == "button"]
+
+    def feed(lines, base):
+        for at, message in lines:
+            FakeTrace.streams[0].lines.put_nowait(entry(message, device=base + at, category="TouchEvents"))
+
+    watch.start()
+    try:
+        await until(lambda: {"event": "buttons", "state": "active"} in events)
+        base = time.time()
+        flick = stroke((0.03, 0.5), (0.97, 0.5), 0.045)
+        feed(flick, base)
+        await until(lambda: len(keys()) == 4)
+        assert keys() == [("right", "swipe")] + [("right", "momentum")] * 3
+        assert not any(e["event"] == "button_unmatched" for e in events)
+        # A second flick, then a new touch-down before its momentum arrows go out.
+        del events[:]
+        feed(flick, base + 1)
+        feed([(0.0, touch_line("down", 0.5, 0.5, path=2))], base + 1.06)
+        await asyncio.sleep(0.3)
+        assert keys() == [("right", "swipe")]
+        # A click during a contact: Select goes through, the swipe does not.
+        del events[:]
+        feed(flick[:2], base + 2)
+        FakeTrace.streams[0].lines.put_nowait(entry(
+            "Select page:0xC usage:0x80 downEvent:1 source:verifiedExternalAccessory senderID:1 down", device=base + 2.02))
+        feed(flick[2:], base + 2)
+        await until(lambda: [e["key"] for e in events if e["event"] == "button"] == ["select"])
+        await asyncio.sleep(0.3)
+        assert [e["key"] for e in events if e["event"] == "button"] == ["select"]
+        # Stale touch lines move nothing.
+        del events[:]
+        feed(flick, base - 60)
+        await asyncio.sleep(0.2)
+        assert events == []
+    finally:
+        await watch.stop()
 
 
 # --- Tunnel sharing with the real pymobiledevice3 lifecycle ------------------

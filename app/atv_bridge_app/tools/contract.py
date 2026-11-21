@@ -90,8 +90,11 @@ SHOW = {
     "keep_awake": described(BOOL, "Request a browser wake lock while presenting.", default=True),
     "remote": described(
         {"enum": ["off", "keys", "focus"]},
-        "Send Siri Remote presses to a mirrored page. keys sends arrow keys and Enter. "
-        "focus also moves focus between links and controls and shows a focus ring.",
+        "Send Siri Remote input to a mirrored page. keys sends arrow keys and Enter. "
+        "focus also moves focus between links and controls and shows a focus ring. "
+        "Clickpad remote: ring clicks are arrows, center click is Enter. "
+        "Touch-surface remote: swipes and flicks are arrows, any click is Enter. "
+        "Menu and Home stay with tvOS and end the mirror. Play/Pause and volume are not forwarded.",
         default="off",
     ),
 }
@@ -238,8 +241,12 @@ Pages that block framing open at the top level. Bundle-relative links and assets
 Page requests to Home Assistant and other LAN services are blocked by default.
 Page audio plays by default. Use audio: "mute" for a silent presentation.
 With remote: "keys", a mirrored page gets ArrowLeft, ArrowRight, ArrowUp, ArrowDown and Enter key events
-for Siri Remote presses. With remote: "focus", arrows also move focus between links and controls,
-unless the page handles the key itself. Menu and Home still end the mirror."""
+for Siri Remote input. With remote: "focus", arrows also move focus between links and controls,
+unless the page handles the key itself.
+Clickpad remote: ring clicks are arrows and the center click is Enter (verified).
+Touch-surface remote: swipes are arrows, one per step of finger travel, a fast flick adds a few more,
+and any click is Enter (clicks verified, swipe tuning preliminary).
+Menu and Home stay with tvOS and end the mirror. Play/Pause and volume are not forwarded."""
 RETRYABLE = {"tv_unreachable", "page_unreachable", "screen_unavailable", "busy"}
 CODES = {
     "wake_failed": "tv_unreachable",
