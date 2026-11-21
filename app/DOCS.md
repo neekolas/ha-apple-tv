@@ -106,6 +106,26 @@ Expose an application function for the caller, for example `window.setStep = n =
 
 Use the 1920×1080 canvas and body text of at least 28 px. Audio plays by default. Set `audio` to `mute` for silence. `keep_awake` defaults to true and requests a browser screen wake lock. Dismiss the page with `tv_show {}`. The `tv_hide` alias is accepted but omitted from `tools/list`. For a specific room use `tv_show {"tv":"<room>"}`.
 
+### Remote input on a page
+
+Pass `remote` to `tv_show` to let a person use the Siri Remote on a mirrored page. The default is `off`.
+
+- `remote: "keys"` sends Left, Right, Up, Down and Select to the page as the keys `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` and `Enter`. Use it for a page that handles `keydown` itself.
+- `remote: "focus"` also adds a focus helper. Arrows move focus between links and controls, a focus ring shows the focused element, and Select activates it. Use it for ordinary pages. The helper skips a key that the page handled with `preventDefault()`.
+
+For example, `tv_show {"url":"https://example.org/","remote":"focus"}`.
+
+The show result reports `data.remote` with `mode`, `state` and `reason`. The page still shows when remote input cannot start. Later results report `screen.presenting.remote` with `state`, the number of `presses` and the `last` key with its time.
+
+Remote input needs screen pairing. The observer reads presses from the TV's log on its existing connection while such a page is shown. It stops when the page is dismissed or replaced. If the connection drops, the bridge reconnects and reports `state: "starting"` until it is back. A recorded presentation (`data.transport` equal to `"video"`) cannot receive keys and reports `reason: "not_mirrored"`.
+
+Limits:
+
+- Presses sent with `tv_remote` during the page are forwarded to the page too.
+- Menu and Home still end the mirror. They do not reach the page.
+- Only presses sent by `tv_remote` have been verified on hardware, on tvOS 26. A physical Siri Remote and tvOS 27 are not yet verified. Arrows on the touch surface of a first-generation Siri Remote may not produce the log line that the bridge reads.
+- Set the app's log level to `debug` to log button lines that the bridge did not recognize. One press on the physical remote then shows what the TV logs for it.
+
 ### Presentation mode
 
 Set `presentation_mode` in the app options.

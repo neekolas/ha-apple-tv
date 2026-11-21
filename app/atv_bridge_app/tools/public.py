@@ -889,6 +889,8 @@ class PublicTools:
         if remote != "off":
             if mode != "mirror":
                 self.remote_input.block("not_mirrored")
+            else:
+                await self.remote_input.prime()
             status = await self.remote_input.settle()
             data["remote"] = {k: status[k] for k in ("mode", "state", "reason") if k in status}
         return outcome(

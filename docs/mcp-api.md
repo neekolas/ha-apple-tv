@@ -21,7 +21,7 @@ Single-TV operations other than `tv_status` and `tv_history` include `screen`. O
 | `app` | `id`, `name`, `source` (accessibility or now-playing metadata) |
 | `focus` | `label`, `role`, `value` |
 | `playing` | `title`, `state`, `position_s`, `duration_s` |
-| `presenting` | `page_id`, `title`, `url` |
+| `presenting` | `page_id`, `title`, `url`, and `remote` when the page was shown with remote input |
 
 Pairing uses an unknown screen snapshot. On failure the screen may be stale or unknown. Aggregate look returns top-level `screen: null`. A routing failure can have `screen.tv: null` with no `tv_id`.
 
@@ -116,6 +116,37 @@ Optional fields are `title`, `audio` (`play` by default, or `mute`), `keep_awake
 The bridge checks the resolved address before connecting, including after redirects. Public sites, reachable tailnet sites and the bridge’s active stage origins work by default. A blocked URL returns `blocked_address` with the address class and a fix. Operators can grant additional LAN destinations with `page_network_allow`.
 
 A show returns `data.page_id`, `data.size` and `data.transport`. A mirror reports the configured size (default `1920x1080`, also `1280x720`). Verification means the sender reported pushing frames. Recorded playback reports `video` at `1920x1080` and checks AirPlay playback. The result can have `verified: false`. Live URLs always use mirroring. Keep their server running. See [Present content](../skills/apple-tv/content.md).
+
+#### Remote input
+
+`remote` lets a person use the Siri Remote on a mirrored page. It is `off` by default.
+
+| Value | Effect |
+|---|---|
+| `off` | The page gets no remote presses. |
+| `keys` | Left, Right, Up, Down and Select reach the page as trusted `keydown` and `keyup` events with the keys `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` and `Enter`. The events go to the focused element of the content document. |
+| `focus` | The same key events, plus a focus helper in the content document. An arrow moves focus to the nearest link or control in that direction and a focus ring shows the focused element. Select activates it. When nothing lies in that direction, the page scrolls. The helper skips a key that the page already handled with `preventDefault()`. |
+
+For example, `tv_show {"html":"<button onclick=\"next()\">Next</button>","remote":"focus"}`.
+
+The show result has `data.remote` with `mode`, `state` and, when unavailable, `reason`. The show succeeds even when remote input cannot start. `screen.presenting.remote` reports the current values in every later result:
+
+| Field | Contents |
+|---|---|
+| `mode` | `keys` or `focus` |
+| `state` | `active`, `starting` (the watch is connecting or reconnecting) or `unavailable` |
+| `reason` | Why the state is `unavailable`. `screen_not_paired` needs `tv_pair {"kind":"screen"}`. `not_mirrored` means the page plays as a recording, which has no browser to receive keys. Other values name a connection error. The bridge keeps retrying. |
+| `presses` | Number of presses received for this page |
+| `last` | `key` (`left`, `right`, `up`, `down` or `select`) and `at` (UTC time) of the last press, or null |
+
+Poll `tv_look` and compare `presses` to learn that someone pressed a key. To react in the page, listen for `keydown`.
+
+The bridge reads presses from the TV's log over the screen pairing, so remote input needs screen pairing. A press reaches the page about 150 ms after the TV logs it. Limits:
+
+- Presses that the bridge sends with `tv_remote` or `tv_sequence` during the page are forwarded too.
+- Menu and Home still end the mirror on the TV. They do not reach the page.
+- Only presses sent by `tv_remote` have been verified on hardware, on tvOS 26. A physical Siri Remote and tvOS 27 are not yet verified. Arrows on the touch surface of a first-generation Siri Remote may not produce the log line that the bridge reads.
+- Play/Pause, volume, long presses and swipes are not forwarded.
 
 ### tv_page_run
 

@@ -545,6 +545,7 @@ CONTENT = """<style>button,a,div[tabindex]{position:absolute;width:200px;height:
 <a id=c href='/next' style='left:0;top:300px' onclick='hit(this); return false'>C</a>
 <div id=d tabindex=0 style='left:400px;top:300px' onclick='hit(this)'>D</div>
 <div id=own tabindex=0 style='left:800px;top:0'>Own</div>
+<button id=wide style='left:0;top:600px;width:1000px' onclick='hit(this)'>Wide</button>
 <script>
 window.clicks = {}; window.keys = [];
 function hit(el) { clicks[el.id] = (clicks[el.id] || 0) + 1; }
@@ -615,8 +616,16 @@ async def test_focus_helper_moves_by_geometry_and_enter_clicks_once(remote, brow
     # One click per Select: native for the button and link, from the helper for the div.
     assert await frame.evaluate("clicks") == {"a": 1, "c": 1, "d": 1}
     assert await frame.evaluate("getComputedStyle(document.activeElement).outlineStyle") == "solid"
+    # A wider item in the next row is not "right", but it is "down" from either column.
+    assert await press("down") == "wide"
+    assert await press("right") == "wide"
+    assert await press("up") == "c"
+    assert await press("right") == "d"
+    assert await press("down") == "wide"
+    assert await press("up") == "c"
+    assert await press("up") == "a"
+    assert await press("right") == "b"
     # The helper leaves a page that handles arrows alone.
-    assert await press("up") == "b"
     assert await press("right") == "own"
     assert await press("left") == "own"
     assert await frame.evaluate("window.__tvRemoteFocus") is True

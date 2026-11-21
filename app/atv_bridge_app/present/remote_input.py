@@ -76,11 +76,12 @@ FOCUS_HELPER = r"""() => {
         const dx = r.left + r.width / 2 - (from.left + from.width / 2);
         const dy = r.top + r.height / 2 - (from.top + from.height / 2);
         const along = dx * dir[0] + dy * dir[1];
-        if (along <= 1) continue;
         // Distance between the two boxes on the other axis. Zero when they overlap.
         const cross = dir[0]
           ? Math.max(0, r.top - from.bottom, from.top - r.bottom)
           : Math.max(0, r.left - from.right, from.left - r.right);
+        // The item must lie mostly in the pressed direction, not in the next row or column.
+        if (along <= 1 || along <= cross) continue;
         score = along + cross * 4;
       }
       if (score < bestScore) [best, bestScore] = [el, score];
@@ -229,16 +230,26 @@ class RemoteInput:
                 (received - event.get("device_time", received)) * 1000,
             )
 
-    async def send(self, key):
-        """Press one key in the current content document."""
+    async def prepare(self):
+        """Give the current content document keyboard focus and, in focus mode, the helper."""
         frame, _, direct = await self.interaction.binding()
-        page = frame.page
-        # A mirror restart or a navigation loses focus and the helper. Restore both for each key.
         if not direct:
-            await page.evaluate(FOCUS_STAGE)
+            await frame.page.evaluate(FOCUS_STAGE)
         if self.mode == "focus":
             await frame.evaluate(FOCUS_HELPER)
+        return frame.page
+
+    async def send(self, key):
+        """Press one key in the current content document."""
+        # A mirror restart or a navigation loses focus and the helper. Restore both for each key.
+        page = await self.prepare()
         await page.keyboard.press(KEYS[key])
+
+    async def prime(self):
+        """Find the content document at show time, so the first press is not slow."""
+        with suppress(Exception):
+            async with asyncio.timeout(3):
+                await self.prepare()
 
     async def settle(self, timeout=3):
         """Give the watch a short time to report its first state."""
