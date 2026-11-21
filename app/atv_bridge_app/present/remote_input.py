@@ -117,9 +117,11 @@ FOCUS_HELPER = r"""() => {
 
 
 # The "tvos" helper. It extends the focus helper with a tvOS look and a search closer to UIKit:
-# a lift (scale, shadow, white ring), beam-first search, and one smooth scroll that follows fast
-# key runs. See docs/research/tvos-native-feel.md, section 4.
-# Every duration and scale is in CONFIG at the top, for tuning on the TV.
+# a lift (scale, shadow, white ring) and a beam-first search. See docs/research/tvos-native-feel.md,
+# section 4. Every duration and scale is in CONFIG at the top, for tuning on the TV.
+# The values suit a mirror of about 10 frames per second, where one frame is 100 ms: most of a
+# change lands in the first frame, and no state is shorter than about 200 ms. Only the scale of
+# the focused item animates. Retune CONFIG when the frame rate rises.
 # Hardware finding: a row must not remember its last focused item. Up and down then go
 # diagonally, which reads as a fault. They take the item straight above or below on screen.
 TVOS_HELPER = r"""() => {
@@ -129,6 +131,8 @@ TVOS_HELPER = r"""() => {
     scale: 1.06,            // Lift of the focused item.
     wideScale: 1.03,        // Lift of an item wider than wideRatio of the screen.
     wideRatio: 0.5,
+    // With this ease-out curve, 96% of the lift (180 ms) and 89% of the drop (260 ms) are done
+    // after 100 ms. The first mirrored frame shows nearly the whole change.
     scaleInMs: 180,
     scaleOutMs: 260,
     easing: 'cubic-bezier(.2,.8,.2,1)',
@@ -136,8 +140,15 @@ TVOS_HELPER = r"""() => {
     ringPx: 3,
     ringOffsetPx: 3,
     ringColor: '#fff',
-    pressedMs: 200,         // How long Select holds the item at scale 1.
-    fastRunMs: 150,         // Keys closer together than this are a run: ring only, no lift.
+    // How long Select holds the item at scale 1. The press needs about 100 ms to show. It then
+    // stays for two frames, so one late frame cannot hide it.
+    pressedMs: 300,
+    // Keys closer together than this are a run: ring only, no lift. A lift that lasts less
+    // than this shows for one frame or for none, which looks like flicker.
+    fastRunMs: 250,
+    // 'instant' or 'smooth'. A smooth scroll is three to five mirrored frames that each repaint
+    // a whole row, and it starts slowly. Use 'smooth' only at a higher frame rate.
+    scrollBehavior: 'instant',
     scrollMarginY: 60,      // Room kept above and below the focused item when it scrolls into view.
     scrollMarginX: 80,
   };
@@ -160,6 +171,9 @@ TVOS_HELPER = r"""() => {
         transition: scale ${CONFIG.scaleInMs}ms ${CONFIG.easing}; }
       :root.tv-remote-fast :focus { scale: none !important; box-shadow: none !important; }
       :root.tv-remote-pressed :focus { scale: 1 !important; }
+      /* A scrollbar has no use without a pointer. This sheet exists only in tvos mode. */
+      * { scrollbar-width: none !important; }
+      ::-webkit-scrollbar { display: none !important; }
     `);
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
   } catch {}
@@ -270,8 +284,7 @@ TVOS_HELPER = r"""() => {
     if (!best) return;  // Nothing that way. The page scrolls as usual.
     event.preventDefault();
     best.focus({preventScroll: true});
-    // A new key replaces the target of a running smooth scroll.
-    best.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});
+    best.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: CONFIG.scrollBehavior});
   });
 }"""
 

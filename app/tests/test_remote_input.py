@@ -1397,7 +1397,7 @@ async def test_tvos_look_lifts_the_focused_item(tvos):
     # The lift does not widen the beam: the box is measured without its scale.
     assert await tvos.press("down") == "g11"
     # A wide item lifts less.
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
     assert await tvos.press("down", start="b0") == "wide"
     await asyncio.sleep(0.45)
     assert (await frame.evaluate(look))[0] == "1.03"
@@ -1409,29 +1409,43 @@ async def test_tvos_look_lifts_the_focused_item(tvos):
     await asyncio.sleep(0.5)
     assert not await frame.evaluate("document.documentElement.classList.contains('tv-remote-pressed')")
     assert (await frame.evaluate(look))[0] == "1.03" and await frame.evaluate("clicks") == {"wide": 1}
-    # Every duration and scale is in one config object.
+    # Every duration and scale is in one config object. The values suit about 10 mirrored frames per second.
     config = await frame.evaluate("window.__tvRemoteConfig")
-    assert (config["scale"], config["wideScale"], config["scaleInMs"], config["scaleOutMs"], config["pressedMs"], config["fastRunMs"]) == (1.06, 1.03, 180, 260, 200, 150)
-    assert (config["scrollMarginY"], config["scrollMarginX"]) == (60, 80)
+    assert (config["scale"], config["wideScale"], config["scaleInMs"], config["scaleOutMs"], config["pressedMs"], config["fastRunMs"]) == (1.06, 1.03, 180, 260, 300, 250)
+    assert (config["scrollMarginY"], config["scrollMarginX"], config["scrollBehavior"]) == (60, 80, "instant")
+    # Only the scale animates. A shadow or outline transition would repaint on every frame.
+    assert await frame.evaluate("getComputedStyle(document.activeElement).transitionProperty") == "scale"
 
 
 @TVOS_PAGE
-async def test_tvos_flick_lands_on_the_right_item_with_one_scroll(tvos):
+async def test_tvos_flick_lands_on_the_right_item_and_scrolls_at_once(tvos):
     frame = tvos.frame
+    inside = """(() => { const r = document.activeElement.getBoundingClientRect(), box = strip.getBoundingClientRect();
+        return [r.left >= box.left && r.right <= box.right + 1, strip.scrollLeft]; })()"""
     await tvos.press(start="s0")
-    await frame.evaluate("window.scrollEnds = 0")
     # Four quick arrows, as after a flick.
     assert await tvos.press("right", "right", "right", "right") == "s4"
+    # The strip is already where it must be. No scroll is still running when the next key arrives.
+    visible, left = await frame.evaluate(inside)
+    assert visible and left > 0
     # During the run the items show only the ring.
     assert await frame.evaluate("document.documentElement.classList.contains('tv-remote-fast')")
     assert await frame.evaluate("getComputedStyle(document.activeElement).scale") == "none"
-    await asyncio.sleep(1.2)
-    # The last item lifts, is fully in view with its margin, and the strip scrolled once.
-    state = await frame.evaluate("""(() => { const r = s4.getBoundingClientRect(), box = strip.getBoundingClientRect();
-        return {fast: document.documentElement.classList.contains('tv-remote-fast'), scale: getComputedStyle(s4).scale,
-                inside: r.left >= box.left && r.right <= box.right + 1, left: strip.scrollLeft, ends: scrollEnds}; })()""")
-    assert state["fast"] is False and state["scale"] == "1.06" and state["inside"] and state["left"] > 0
-    assert state["ends"] == 1
+    await asyncio.sleep(1.0)
+    # The last item lifts, and the strip did not move again.
+    assert not await frame.evaluate("document.documentElement.classList.contains('tv-remote-fast')")
+    assert await frame.evaluate("getComputedStyle(s4).scale") == "1.06"
+    assert await frame.evaluate(inside) == [True, left]
+
+
+@pytest.mark.parametrize("browser_frame,mode,expected", [(TVOS_CONTENT, "tvos", "none"), (TVOS_CONTENT, "focus", "auto")],
+                         indirect=["browser_frame"])
+async def test_tvos_hides_scrollbars_and_focus_mode_keeps_them(tvos, mode, expected):
+    tvos.control.mode = mode
+    assert await tvos.press("right", start="s0") == "s1"
+    # The strip scrolls sideways. The document itself can scroll too.
+    assert await tvos.frame.evaluate(
+        "[strip, document.documentElement].map(el => getComputedStyle(el).scrollbarWidth)") == [expected] * 2
 
 
 @TVOS_PAGE
@@ -1454,6 +1468,10 @@ async def test_tvos_up_and_down_go_straight_when_rows_are_scrolled_by_whole_colu
     assert await tvos.press("right", "down", start="t11") == "t23"
     assert await tvos.press("up", "up") == "t01"
     assert await tvos.frame.evaluate("[row0, row1, row2].map(row => row.scrollLeft)") == [0, 320, 640]
+    # A tile at the edge scrolls into view with its margin at once, although the page asks for
+    # smooth scrolling. The next key then reads boxes that no longer move.
+    assert await tvos.press("right", "right", start="t01") == "t03"
+    assert await tvos.frame.evaluate("[row0.scrollLeft, t03.getBoundingClientRect().right]") == [60, 1200]
 
 
 @ROWS_PAGE
