@@ -30,6 +30,7 @@ Same token for both. The port is 8123 by default, 80 on some installs. If the to
 | Open an app, search, follow a menu path | `tv_open` |
 | YouTube, media URL, deep link | `tv_play`; the TV fetches media URLs itself |
 | Wake or sleep | `tv_power` |
+| What the household watched, or what's playing now without a screen read | `tv_history {"since":"30d","limit":0}` for a summary, then narrow with `app`, `search` or `tv`. `watched_s` is seconds actually played; Netflix gives no titles; `data.now` is what's playing. |
 | Show and change a web page | `tv_show`, `tv_page_run`; see **tv-use-web-apps** |
 | Repair pairing | `tv_pair` |
 
@@ -40,6 +41,7 @@ Results carry `ok`, `summary`, `verified`, `evidence` and usually `screen`. `ver
 - After a media or deep-link launch, your next call is a text `tv_look`. Handle any **Open in …?** prompt before another key or launch.
 - Ask before purchases, rentals, upgrades or sign-in. There is no purchase guard.
 - On `mirror_busy`, ask before `replace: true`.
+- Watch history is private household data. Never send it to an outside service unless the user asks.
 
 ## References
 
