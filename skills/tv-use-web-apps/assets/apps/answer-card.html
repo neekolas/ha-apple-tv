@@ -274,7 +274,7 @@
     stage.style.transform = `translate(${(innerWidth - 1920 * s) / 2}px, ${(innerHeight - 1080 * s) / 2}px) scale(${s})`; };
   new ResizeObserver(fit).observe(document.documentElement);
 </script>
-<!-- tv-kit:start v1 — copy this block unchanged into every TV app, just before </body>. -->
+<!-- tv-kit:start v2 — copy this block unchanged into every TV app, just before </body>. -->
 <style>
   #tv-status { position: absolute; left: 80px; bottom: 60px; z-index: 50; display: flex; align-items: center; gap: 18px;
     padding: 14px 28px 14px 22px; border-radius: 40px; background: rgba(20, 23, 31, .92); color: #c9ccd6;
@@ -308,15 +308,24 @@
       }
       return el;
     };
+    // What the person at the TV did with the remote, newest last. The agent reads it with tv.state().input.
+    const inputs = [];
     const state = () => ({
       working: status.hidden ? null : status.lastChild.textContent,
       pending: [...document.querySelectorAll("[data-slot].tv-pending")].map(el => el.dataset.slot),
+      input: { count: inputs.length ? inputs[inputs.length - 1].n : 0, last: inputs[inputs.length - 1] || null, recent: inputs.slice(-5) },
     });
     window.tv = {
       working(text) { status.lastChild.textContent = String(text); status.hidden = false; return state(); },
       pending(name, label = "") { const el = slot(name); el.classList.add("tv-pending"); el.textContent = label; return state(); },
       fill(name, html) { const el = slot(name); el.classList.remove("tv-pending"); el.innerHTML = html; return state(); },
       done() { status.hidden = true; return state(); },
+      // Call when the person acts with the remote, e.g. tv.input("pick", {item: 3}).
+      input(action, detail = null) {
+        inputs.push({ n: (inputs.length ? inputs[inputs.length - 1].n : 0) + 1, action: String(action), detail, at: Date.now() });
+        if (inputs.length > 20) inputs.shift();
+        return state();
+      },
       state,
     };
   })();

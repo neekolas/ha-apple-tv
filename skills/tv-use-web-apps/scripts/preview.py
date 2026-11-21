@@ -11,6 +11,8 @@ Usage:
       [--size 1920x1080] [--step '{"demo":true}'] [--step '{"view":"detail","item":2}']
 
 With no --step, it shows the app's pending state and then {"demo": true}.
+With --remote tvos (or focus), it injects the bridge's focus helper; a step
+{"_key": "right"} (left, right, up, down, select) then presses that remote key.
 It uses an installed Chrome. Install one, or run `playwright install chromium`
 and pass --bundled.
 """
@@ -26,6 +28,20 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 HARNESS = """<!doctype html><meta charset="utf-8">
 <style>html,body{margin:0;height:100%;background:#000}iframe{border:0;width:100%;height:100%}</style>
 <iframe id="app" sandbox="allow-scripts allow-forms" src="/app/index.html"></iframe>"""
+
+
+KEYS = {"left": "ArrowLeft", "right": "ArrowRight", "up": "ArrowUp", "down": "ArrowDown", "select": "Enter"}
+HELPER_SRC = pathlib.Path(__file__).resolve().parents[3] / "app/atv_bridge_app/present/remote_input.py"
+
+
+def remote_helper(mode, src):
+    """Read the focus helper the bridge injects for remote mode, from its Python source."""
+    import re
+    name = {"focus": "FOCUS_HELPER", "tvos": "TVOS_HELPER"}[mode]
+    found = re.search(rf'^{name} = r?"""(.*?)"""', src.read_text(), re.S | re.M)
+    if not found:
+        raise SystemExit(f"{name} not found in {src}; pass --helper-src to the bridge's remote_input.py")
+    return found.group(1)
 
 
 TYPES = {".woff2": "font/woff2", ".jpg": "image/jpeg", ".png": "image/png", ".svg": "image/svg+xml"}
@@ -71,6 +87,9 @@ async def main():
     parser.add_argument("--step", action="append", default=[])
     parser.add_argument("--bundled", action="store_true", help="use Playwright's bundled Chromium")
     parser.add_argument("--no-fonts", action="store_true", help="leave out fonts/, as when the page is sent inline")
+    parser.add_argument("--remote", choices=["focus", "tvos"], help="inject the bridge's focus helper for this remote mode")
+    parser.add_argument("--helper-src", type=pathlib.Path, default=HELPER_SRC,
+                        help="the bridge's remote_input.py (default: this repository's copy)")
     args = parser.parse_args()
     width, height = map(int, args.size.split("x"))
     steps = [json.loads(s) for s in args.step] or [{"demo": True}]
@@ -93,9 +112,18 @@ async def main():
         await page.wait_for_timeout(400)
         await page.screenshot(path=args.out / "0-initial.png")
         print("0-initial", json.dumps(await app.evaluate("window.app && window.app.state()")))
+        helper = remote_helper(args.remote, args.helper_src) if args.remote else None
         for n, patch in enumerate(steps, 1):
             try:
-                state = await app.evaluate("p => window.app.apply(p)", patch)
+                if "_key" in patch:  # a Siri Remote press: left, right, up, down or select
+                    await page.evaluate("document.getElementById('app').focus()")
+                    if helper:  # the bridge injects its focus helper before each press
+                        await app.evaluate(helper)
+                    await page.keyboard.press(KEYS[patch["_key"]])
+                    await page.wait_for_timeout(150)
+                    state = await app.evaluate("({app: window.app && window.app.state(), input: window.tv && window.tv.state().input})")
+                else:
+                    state = await app.evaluate("p => window.app.apply(p)", patch)
             except Exception as exc:  # report and keep going
                 state = {"error": str(exc).splitlines()[0]}
             await page.wait_for_timeout(450)
