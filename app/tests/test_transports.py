@@ -174,12 +174,14 @@ def test_tvpipe_log_keeps_useful_lines(caplog):
         ("debug", "airplay: SETUP"),
         ("debug", "airplay: receiver report (rrmt): rrmt latePackets=0"),
         ("warn", "share: the capture is slow"),
+        ("warn", "browser: https://example.com/a?token=secret answered 500 Error"),
     ):
         log_event({"type": "log", "level": level, "message": message})
     assert [(r.levelname, r.getMessage()) for r in caplog.records] == [
         ("DEBUG", 'tvpipe: share: page stats {"fps":9.5}'),
         ("DEBUG", "tvpipe: airplay: receiver report (rrmt): rrmt latePackets=0"),
         ("WARNING", "tvpipe: share: the capture is slow"),
+        ("WARNING", "tvpipe: browser: example.com answered 500 Error"),
     ]
 
 

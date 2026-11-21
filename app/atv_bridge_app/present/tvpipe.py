@@ -30,6 +30,7 @@ _LEVELS = {"error": logging.ERROR, "warn": logging.WARNING, "info": logging.INFO
 _KEEP = ("share: page stats", "fps from the page", "airplay: timing:", "airplay: receiver report",
          "browser: viewport")
 _STATS_WINDOW_MS = 5000
+_URL = re.compile(r"\b(?:https?|wss?)://([^/\s?#]+)\S*")
 
 # crates/tvpipe/src/browser/capture.js at the release pinned by install-tvpipe.sh.
 CAPTURE_JS_LENGTH = 38420
@@ -64,6 +65,8 @@ def log_event(event):
         if not any(key in message for key in _KEEP):
             return
         level = "debug"
+    # A shown page's URL can carry credentials in its path or query. Keep only the host.
+    message = _URL.sub(r"\1", message)
     _LOG.log(_LEVELS.get(level, logging.INFO), "tvpipe: %s", message)
 
 
