@@ -2,13 +2,33 @@
 
 **Question.** `tv_show` mirrors a browser page to the Apple TV through tvpipe. Can the bridge learn about each press on the Siri Remote during that mirror, so it can forward left, right, up, down and select into the page as key events?
 
-**Status: source review only. Verdict: pending hardware probe.** No path below has been tested on hardware for this question.
+**Status: source review plus one hardware probe. Verdict: go, for presses sent with `tv_remote`.** The physical Siri Remote is not yet tested.
 
 Source references use bridge checkout `7a5e37b`. tvpipe references use tag `v0.2.0`, commit `c2456d29`. pymobiledevice3 references use version 11.61.0, the version locked in `app/uv.lock`. A claim marked *(speculation)* has no source behind it.
 
 ## Verdict
 
-TBD
+**Go, for presses sent with `tv_remote` (Companion).** The os_trace syslog relay over RSD shows one unredacted NOTICE line from `backboardd` (subsystem `com.apple.BackBoard`, category `Button`) per key down. The line names the key by HID page/usage: Left 0x1/0x8B, Right 0x1/0x8A, Up 0x1/0x8C, Down 0x1/0x8D, Select 0xC/0x80.
+
+```
+Unknown page:0x1 usage:0x8B downEvent:1 source:externalAccessory (MediaRemote) senderID:… down
+```
+
+Outcome against the pass bar below:
+
+1. **Key identity: met.** Page/usage names each key. `downEvent:1` marks key down. The Select line starts with `Select`, not `Unknown`, so the matcher reads page, usage and `downEvent`.
+2. **Shared process: met by process only.** The line comes from `backboardd`, not `rapportd`. Its source field shows the injected path.
+3. **Coverage: met.** 20/20 presses in the main run, 5/5 in the narrowed run.
+4. **Latency: met.** The line follows the Companion arrival line by about 2 ms on the TV clock. The host receives it a median of about 117–120 ms after the TV logs it. The clock offset between the TV and the Mac was not measured.
+5. **No self-trigger: met.** 0 lines in the baseline and the `tv_look` control.
+
+Limits:
+
+- **Only `tv_remote` presses are verified.** The line says `source:externalAccessory (MediaRemote)`, the injected path. The physical Siri Remote has not been tested.
+- **Arrows on a 1st-gen Siri Remote may not produce this line.** That remote has a touch surface, not arrow buttons.
+- **One TV, one tvOS version.** Apple TV 4K 1st gen on tvOS 26.6.1. The bridge supports tvOS 27 or later, which is untested. Log text can change between tvOS versions.
+
+**One-minute physical check.** Show a page with `remote:"keys"`. Press each arrow and Select on the physical Siri Remote. Read the press counter. If it fails, only the matcher needs to change.
 
 ## Pass bar
 
@@ -22,25 +42,27 @@ This bar was set before any hardware result. A usable signal must meet all five 
 
 ## Paths
 
-Paths that work during a mirror come first. Within that group the order is how many of the five keys the path could identify, then build cost. Paths that replace the mirror or carry no press come last. The order is a hypothesis until the probe runs.
+Paths that work during a mirror come first. Within that group the order is how many of the five keys the path could identify, then build cost. Paths that replace the mirror or carry no press come last. The probe tested paths 1, 2 and 9. For the `source-only` rows the order is still a hypothesis.
 
 | # | Path | Keys it could deliver | Feasibility | Latency | Reliability | Build cost | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | os_trace syslog relay over RSD | All five, if a shared process logs a line per press with a readable key | Medium. Service not yet confirmed on the probe TV | Tens of ms plus tunnel, expected | `<private>` redaction may hide the key. Log lines change between tvOS versions | Small | `source-only` |
-| 2 | DVT `activitytracetap` | Same as path 1, plus format string and typed arguments | Medium. DVT already works for screenshots | Batched. Floor near 200 ms, unverified | Same as path 1. Parser marked "less stable" upstream | Small to medium | `source-only` |
+| 1 | os_trace syslog relay over RSD | All five, by HID page/usage | High for `tv_remote` presses. Physical Siri Remote untested | About 120 ms at the host | 25/25 presses. Log text can change between tvOS versions | Small | `tested`, passes |
+| 2 | DVT `activitytracetap` | Same lines as path 1, plus format strings | Works, but adds nothing over path 1 | About 60 ms later than path 1 | Same as path 1. Parser marked "less stable" upstream | Small to medium | `tested`, adds nothing |
 | 3 | DVT kdebug, IOHID class | A press with no key name. Arguments may map to a key *(speculation)* | Low to medium | About 200 ms floor | Likely differs between Companion and the physical Siri Remote | Medium | `source-only` |
 | 4 | AirPlay 2 event channel, passive | Unknown. Observed command types are housekeeping only | Low for presses *(speculation)*. tvpipe already connects the channel | Under 50 ms | High if present. Ordered TCP, each command acknowledged | None. Run tvpipe with `-v` | `source-only` |
 | 5 | AirPlay 2 event channel with advertised MR commands | Play/Pause most likely. Left and right only if the mirror UI maps them to skip *(speculation)*. No up, down or select | Medium for Play/Pause, low for left and right. Unknown for a mirror session | 50–150 ms | Unknown. Media commands are not guaranteed per press | 3–5 days. Fork tvpipe | `source-only` |
 | 6 | MRP tunnel | Play/Pause as a state change. None of the five keys | Low to medium | 100–300 ms | Poor. A state change is not a press | Listen: none | `source-only` |
 | 7 | Companion events | None directly | Very low | 100–300 ms | Poor | Listen: none | `source-only` |
 | 8 | DACP/RAOP callback | Play/Pause, perhaps volume. None of the five keys | Low. Needs a second RAOP session that may end the mirror | 50–200 ms | Unknown | 1–2 days | `source-only` |
-| 9 | URL playback seek inference (`play_url`) | Left and right as ±10 s seeks, select as Play/Pause. No up or down | Medium for those signals. **Replaces the mirror**, so it cannot drive a live page | Press seen in 0.1–0.5 s. Picture changes after seconds | Medium. Seeks are inferred | 3–5 days for a slideshow mode | `source-only` |
+| 9 | URL playback seek inference (`play_url`) | Left and right as ±10 s seeks, select as pause. No up or down | Works for those signals. **Replaces the mirror**, so it cannot drive a live page | Jump visible in `screen.playing.position_s` on a read 2 s after the press, not on the read right after it | Medium. Seeks are inferred | 3–5 days for a slideshow mode | `tested` |
 | 10 | AX audit notifications | None. Reports focus changes | Low | n/a | A fullscreen mirror moves no focus | n/a | `source-only` |
 | 11 | notification_proxy | None known. No payload before tvOS 27.2 | Low. Needs an exact notification name; none known | Low if a name existed | n/a | n/a | `source-only` |
 | 12 | Other AirPlay-side: MRP HID or game-controller registration, CarPlay-style HID reports, Sidecar, MediaDataControl | None found | Very low | n/a | n/a | Do not build | `source-only` |
 | 13 | Other RSD services: pcapd, BT packet logger, sysmontap, graphics, springboardservices | None | Very low | n/a | n/a | n/a | `source-only` |
 
-Only paths 1–3 could name up, down and select. They are side channels, not documented events.
+Only paths 1–3 could name up, down and select. They are side channels, not documented events. Path 1 names all five on hardware.
+
+Near-misses in the same capture: a `PineBoard` DEBUG line gives the usage for arrows only (16/20, none for Select). `TVAirPlay` logs each press without key identity. `rapportd` logs `Command <Left>, Button Down`, which is Companion only and fails pass bar point 2.
 
 ## Path details
 
@@ -48,14 +70,13 @@ Only paths 1–3 could name up, down and select. They are side channels, not doc
 
 - The service is `com.apple.os_trace_relay.shim.remote`. It pushes one record per log message with no client-side batching. Each record has pid, process path, sender image, level, subsystem, category, message and device time. See pymobiledevice3 `services/os_trace.py`.
 - The client can request debug and info levels through `StreamFlags`. A `Pid` filter runs on the device and cuts volume.
-- **It depends on a log line that may not exist.** No public source lists tvOS log lines for presses. The process list is a guess: `backboardd`, `PineBoard`, the AirPlay receiver UI, `mediaremoted`, `rapportd`, `bluetoothd` *(speculation)*.
-- Arguments marked private arrive as `<private>`. Showing them needs a logging profile with approval on the device. Treat that as not available for a shipped bridge. See Apple developer forum threads [705810](https://developer.apple.com/forums/thread/705810) and [780682](https://developer.apple.com/forums/thread/780682). Integer arguments such as HID usage codes are often public, so a line may still name the key *(speculation)*.
-- The service list for the probe TV is not recorded. The probe TV runs tvOS 26.6.1. The bridge supports tvOS 27 or later (`docs/live-accessibility.md:41`), so a line found on 26.6.1 must be confirmed again on a supported version.
+- **It depends on a log line that no public source lists.** The probe found one in `backboardd` on tvOS 26.6.1. The bridge supports tvOS 27 or later (`docs/live-accessibility.md:41`), so the line must be confirmed again there.
+- Arguments marked private arrive as `<private>`. Showing them needs a logging profile approved on the device, which a shipped bridge cannot rely on. See Apple developer forum threads [705810](https://developer.apple.com/forums/thread/705810) and [780682](https://developer.apple.com/forums/thread/780682). The `backboardd` line is not redacted.
 
 ### 2. DVT `activitytracetap`
 
 - It reads the same log store as path 1, so it shows no line that path 1 lacks. Its gain is the format string, typed arguments and a device-side NSPredicate. See `services/dvt/instruments/activity_trace_tap.py`.
-- Delivery is batched. pymobiledevice3 sets `ur: 500`. The kdebug tap documents `ur` as a flush interval in ms with a floor near 200 ms (`core_profile_session_tap.py`). That the activity tap has the same floor is an assumption. At 200 ms the path only just meets pass bar point 4.
+- Delivery is batched. Measured: the line arrives about 60 ms after path 1.
 
 ### 3. DVT kdebug, IOHID class
 
@@ -93,7 +114,7 @@ Only paths 1–3 could name up, down and select. They are side channels, not doc
 ### 9. URL playback seek inference (`play_url`)
 
 - In this mode the tvOS player owns the remote. Left or right skips 10 seconds, the center plays or pauses, and up and down show controls ([Apple TV User Guide](https://support.apple.com/guide/tv/atvb7944597f/tvos)).
-- The fork handles `playbackState` events on the event channel (`vendor/pyatv/pyatv/protocols/raop/protocols/airplayv2.py:197–217`). The sender could infer left and right from position jumps *(speculation)*.
+- The fork handles `playbackState` events on the event channel (`vendor/pyatv/pyatv/protocols/raop/protocols/airplayv2.py:197–217`). The probe confirmed that left and right move `screen.playing.position_s` by 10 s and that select pauses.
 - **A seek jump cannot be told apart from scrubbing or from another controller.** Up and down are invisible to the sender.
 - `play_url` plays a rendered MP4 (`docs/ARCHITECTURE.md:68`). It cannot drive a live page. It may suit a slideshow with one slide per 10 s *(speculation)*.
 
@@ -111,7 +132,7 @@ Only paths 1–3 could name up, down and select. They are side channels, not doc
 
 - **MRP HID and game-controller messages** exist in `ProtocolMessage.proto:85–99`. pyatv only sends them to the TV. They let a client act as an input device *(speculation)*.
 - **MediaDataControl** carries audio statistics (`raup`, `rrmt`) from the TV (tvpipe `mdc.rs:84–112`). **CarPlay-style HID reports** have no source. **Sidecar** is not offered by tvOS.
-- **pcapd** sees IP packets. Bluetooth HID is not IP and Companion traffic is encrypted. **BT packet logger** has no RSD shim in pymobiledevice3 and needs a logging profile. **sysmontap, graphics and springboardservices** carry no input.
+- **pcapd** sees IP packets. Bluetooth HID is not IP and Companion traffic is encrypted. **BT packet logger** has no RSD shim in pymobiledevice3 and needs a logging profile. The probe TV does list a shim for it; it was not tried. **sysmontap, graphics and springboardservices** carry no input.
 
 ## apple-protocols.dev review
 
@@ -151,7 +172,7 @@ The hardware probe sends presses with `tv_remote`. That tool uses Companion `_hi
 | --- | --- | --- |
 | Entry | Bluetooth LE → Bluetooth daemons → HID service | TCP Companion → `rapportd` and the TV remote daemon → virtual HID event |
 | Kernel IOHID | Possible | Unlikely |
-| `backboardd` dispatch, shell, focused app | Yes | Yes, assumed |
+| `backboardd` dispatch, shell, focused app | Assumed. Not tested | Yes. Observed |
 
 Effect on each path:
 
@@ -160,16 +181,41 @@ Effect on each path:
 - **Paths 4–9.** Not assessed. The sources do not say whether tvOS routes media commands the same way for both press sources.
 - **Paths 10–13.** They carry no press from either source.
 
-Two more limits on the probe:
+`tv_remote` ends with one screen read (`docs/ARCHITECTURE.md:51`), so the probe ran `tv_look` alone as a control. During the mirror, `backboardd` sends each press to `TVAirPlay`, which drops it (`firstResponder (null)`). Back ends the mirror.
 
-- **Self-trigger.** `tv_remote` ends with one screen read (`docs/ARCHITECTURE.md:51`). So the bridge reads the screen on the TV right after each test press. A line that follows a press may come from that read. Run `tv_look` alone as a control to check pass bar point 5.
-- **Mirror state.** Where tvOS sends presses during a fullscreen mirror is unknown. Back ends the mirror. Arrows and select may be dropped with no log line *(speculation)*. Run the probe with the mirror active.
-
-Before any build decision, confirm the chosen signal once with a press on the physical Siri Remote. The probe script is `spikes/live/atvlab/press_probe.py`. It is uncommitted and only its syslog stream has run offline.
+The physical Siri Remote is the open check. Run the one-minute physical check in the Verdict.
 
 ## Hardware results
 
-TBD
+Run on 2026-11-20. The Verdict holds the usage values and the limits.
+
+**Setup.** The Mac lab connected over RSD with its own RemotePairing record. The bridge showed an HTML page with `tv_show` (`transport: mirror`, `verified: true`, app `com.apple.TVAirPlay`) and sent every press with `tv_remote`.
+
+**Main run.** 190 s, streams `syslog` and `activity`, all levels. Phases: 15 s baseline, one `tv_look` control, 20 presses about 4.6 s apart. Volume: 151,727 syslog records (about 800 per second) and 261,382 activity records.
+
+| Key | Left | Right | Up | Down | Select |
+| --- | --- | --- | --- | --- | --- |
+| Down lines / presses | 6/6 | 4/4 | 4/4 | 2/2 | 4/4 |
+
+- Each press gave 4 `Button` lines: down, up, `began` and `finished`. No `Button` line fell outside a press.
+- Delay from the first `rapportd` `Received requestID '_hidC'` line to the down line, TV clock: min 0.2, median 2.0, max 13.6 ms.
+- Host receive delay for the down line: median 120 ms on `syslog` (105–472), 181 ms on `activity`.
+
+**Narrowed run.** `StreamFlags` 0x4 and a device-side pid filter for `backboardd`. The probe finds the pid by name through `OsTraceService.get_pid_list`; the pid changes on reboot. 5 presses, one per key, all seen. The stream carried 0 records while idle and 75 records in 50 s (1.5 per second). Host receive delay: median 117 ms (103–135).
+
+**RSD services.** The TV lists 59. They include `com.apple.os_trace_relay.shim.remote`, `com.apple.instruments.dtservicehub`, `com.apple.mobile.notification_proxy.shim.remote` and `com.apple.bluetooth.BTPacketLogger.shim.remote`.
+
+**`play_url`.** Each read came 2 s after the press. Left moved `screen.playing.position_s` from 7 to 2. Two right presses moved it from 5 to 17 and from 20 to 33. Select set the state to `paused`.
+
+**Not done.** kdebug (path 3), the physical Siri Remote, long press, tvOS 27, and a stream from the bridge's own pairing identity.
+
+**Evidence.** The captures are in `spikes/live/results/`, which is gitignored. The probe is `spikes/live/atvlab/press_probe.py`. Narrowed run:
+
+```sh
+uv run --no-sync atvlab press-probe --seconds 50 --streams syslog --syslog-flags 0x4 --syslog-process backboardd --quiet
+```
+
+The main run used `--seconds 190 --streams syslog,activity`. Analysis: take the `backboardd` `Button` records with `downEvent:1`, match each to a press by the `rapportd` arrival line, and tally by page/usage. The probe's `--analyze` hides the usage for this line, so the tally was done on the raw records.
 
 ## Sources
 
@@ -181,7 +227,7 @@ Bridge checkout:
 - `vendor/pyatv/pyatv/protocols/mrp/protobuf/ProtocolMessage.proto:85–99`, `CommandInfo.proto:5–62`, `messages.py:153–163`
 - `vendor/pyatv/pyatv/protocols/raop/protocols/airplayv2.py:197–217`
 - `vendor/pyatv/pyatv/support/rtsp.py:88–89, 270–272`
-- `spikes/live/atvlab/press_probe.py` (uncommitted)
+- `spikes/live/atvlab/press_probe.py` (commit `7d8c160`)
 
 Other projects:
 
