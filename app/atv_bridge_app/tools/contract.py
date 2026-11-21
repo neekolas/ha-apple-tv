@@ -77,7 +77,7 @@ APP = described(TEXT, "Installed app name or bundle ID from tv://apps.")
 HOLD = "Hold each HID key for this many milliseconds. Media commands require zero."
 KEYS_HELP = "Ordered keys, sent in one burst. The screen is read at the end and after Home. Stop on lost acknowledgment."
 SHOW = {
-    "url": described(TEXT, "Live HTTP(S) page on the public internet, tailnet or a destination permitted by page_network_allow."),
+    "url": described(TEXT, "Live HTTP(S) page on the public internet, the tailnet (Home Assistant app only; standalone blocks it unless granted) or a destination permitted by page_network_allow."),
     "html": described(TEXT, "Contents of a standalone HTML page."),
     "files": described({
         "type": "object", "required": ["index.html"],

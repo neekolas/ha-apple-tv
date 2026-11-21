@@ -85,6 +85,7 @@ docker run ... ghcr.io/neekolas/tv-use-bridge:latest \
 | `TV_USE_PRESENTATION_MODE` | `--presentation-mode` | `mirror` | `mirror`, `play_url` or `auto`. |
 | `TV_USE_MIRROR_SIZE` | `--mirror-size` | `1920x1080` | `1920x1080` or `1280x720`. |
 | `TV_USE_MIRROR_FPS` | `--mirror-fps` | `10` | 1 through 60. |
+| `TV_USE_MIRROR_FPS_MUTED` | `--mirror-fps-muted` | `15` | 0 through 60. A page shown with `audio:"mute"` uses the larger of this and `TV_USE_MIRROR_FPS`. 0 turns it off. |
 | `TV_USE_MAX_ACTIVE_MIRRORS` | `--max-active-mirrors` | `1` | Concurrent mirror sessions across the TVs. |
 | `TV_USE_PAGE_SCRIPTS` | `--page-scripts`, `--no-page-scripts` | `true` | Allow `tv_page_run`. |
 | `TV_USE_PAGE_NETWORK_ALLOW` | `--page-network-allow` | none | Extra destinations for pages: hostnames, IPs, CIDRs or `host:port`. Tailnet addresses need an entry too, such as `100.64.0.0/10`. Separate entries with commas in the variable. Repeat the flag for more. [Security](#security) |
