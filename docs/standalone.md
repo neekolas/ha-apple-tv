@@ -59,7 +59,12 @@ The trade-off: the computer that runs the container must stay on and awake. When
      -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8765/api/tool/tv_status
    ```
 
-   Read the log with `docker logs tv-use`. A line that starts with `Starting in standalone mode because` names the mode and the reason. The line `tv-use standalone: MCP at http://0.0.0.0:8765/mcp with a bearer token` shows that the server listens.
+   Read the log with `docker logs tv-use`. A line that contains `Starting in standalone mode because` names the mode and the reason. A line that contains `tv-use standalone: MCP at` shows that the server listens. With the command above, the two lines are:
+
+   ```text
+   INFO:__main__:Starting in standalone mode because TV_USE_TOKEN_FILE is set and Supervisor supplied no token
+   INFO:__main__:tv-use standalone: MCP at http://0.0.0.0:8765/mcp with a bearer token, stage on 127.0.0.1:8766, 1 configured TV(s)
+   ```
 
 ## Settings
 
@@ -106,7 +111,7 @@ The settings match the [Home Assistant app options](SETUP.md#app-options). A bad
 The bridge never deletes a TV's pairing records because of a change to the TV list. A TV can leave the list through a typo in its address, a misspelled variable, a start with one `--tv` flag, or a second container on the same volume. The bridge then keeps the TV's records in the volume and leaves the TV out of `tv://tvs`. The log names each kept TV and its ID:
 
 ```text
-Kept the records of TV Living Room (ID 8fbc2b6530915fde8e449c7e72027484), which the TV list no longer names.
+WARNING:atv_bridge_app.fleet:Kept the records of TV Living Room (ID 8fbc2b6530915fde8e449c7e72027484), which the TV list no longer names. Add the TV to the list again to use its pairings.
 ```
 
 When a listed TV matches a kept record again, the bridge uses the record and its pairings. It matches the TV's stored identifier first, then its name, then its address. An entry with an ID never takes the records of a TV with other identifiers. An entry with a name never takes the records of a TV with another name, unless the entry's ID matches the TV's stored identifier. A new TV at a kept TV's address therefore needs its own name.
