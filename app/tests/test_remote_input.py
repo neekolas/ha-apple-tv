@@ -1694,6 +1694,8 @@ async def test_tvos_rows_do_not_remember_their_last_item(tvos):
     assert await tvos.press("up") == "wide"
     # Two tiles lie fully below the wide banner. The one nearer to its center wins.
     assert await tvos.press("down") == "s1"
+    # s1 and s2 lie below the banner and are not "right" of it. s3 starts past its right end.
+    assert await tvos.press("right", start="wide") == "s3"
 
 
 @TVOS_PAGE
@@ -1892,10 +1894,19 @@ MENU_CONTENT = """<style>body{margin:0;background:#111} button{border:0;backgrou
 
 @pytest.mark.parametrize("browser_frame", [MENU_CONTENT], indirect=True)
 async def test_tvos_left_and_right_go_between_a_menu_and_the_rows(tvos):
-    """Review finding: Left from the first tile and Right from the menu did nothing, because only one of them is in a row."""
+    """Review finding: Left from the first tile and Right from the menu did nothing, because only one of them is in a row.
+
+    On a TV, Left at the start of a row goes to the side menu, however far up or down its items are.
+    The menu item nearest in height wins.
+    """
     assert await tvos.press("left", start="t00") == "m2"
     assert await tvos.press("right") == "t00"
+    assert await tvos.press("left", start="t10") == "m2"  # t10 is at 580-740, m2 at 180-240.
     assert await tvos.press("right", start="m0") == "t00"
+    assert await tvos.press("right", start="m1") == "t00"
+    # In a row with more tiles that way, Left takes the next tile, although it is scrolled out of view.
+    await tvos.scroll(row1=320)
+    assert await tvos.press("left", start="t11") == "t10"
     # At the end of a row, Right still does not go to the other row.
     await tvos.scroll(row0=9999)
     assert await tvos.press("right", start="t05") == "t05"

@@ -275,7 +275,7 @@ TVOS_HELPER = r"""() => {
     const from = active && box(active);
     const row = active && dir[0] ? rowOf(active) : null;
     const next = [];  // Items that can be in the next row or column.
-    let best = null, bestScore = Infinity;
+    let best = null, bestScore = Infinity, side = null, sideScore = Infinity, ahead = false;
     for (const [el, r] of items) {
       if (!from) {
         // No focus yet. Start at the first item on screen in reading order.
@@ -308,12 +308,22 @@ TVOS_HELPER = r"""() => {
       // Used only when nothing qualifies above. Left and right do not go to another row: at the end
       // of a row, a tile of another row that is scrolled differently is not "right". They can go
       // between a row and an item outside every row, such as a menu beside the rows.
-      const cross = Math.max(0, -overlap);
       const other = dir[0] && row && rowOf(el);
-      if (along > cross && along + cross * 4 < bestScore && !(other && other !== row)) {
-        [best, bestScore] = [el, along + cross * 4];
+      if (other && other !== row) continue;
+      ahead ||= Boolean(other);
+      const cross = Math.max(0, -overlap);
+      // For left and right, the center of the item must lie past the focused box. A tile below a
+      // wide banner is not "right" of it.
+      if (along > cross && (!dir[0] || start + length / 2 > 0)) {
+        if (along + cross * 4 < bestScore) [best, bestScore] = [el, along + cross * 4];
+      } else if (dir[0] && start >= 0 && start + cross * 4 < sideScore) {
+        // Last for left and right: an item wholly that way, however far up or down, such as the
+        // menu at the start of a row. The one nearest in height wins.
+        [side, sideScore] = [el, start + cross * 4];
       }
     }
+    // A row with more items that way keeps the key: its own items and its scrolling come first.
+    if (!best && !ahead) best = side;
     if (next.length) {
       // The next row or column is every such item that starts before the first one of them ends.
       // In it, the item that covers most of the focused box wins, then the nearest one, then the
