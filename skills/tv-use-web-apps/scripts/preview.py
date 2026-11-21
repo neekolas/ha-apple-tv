@@ -116,7 +116,8 @@ async def main():
         for n, patch in enumerate(steps, 1):
             try:
                 if "_key" in patch:  # a Siri Remote press: left, right, up, down or select
-                    await page.evaluate("document.getElementById('app').focus()")
+                    # As the bridge does: focus the frame only when it isn't focused already.
+                    await page.evaluate("(f => document.activeElement === f || f.focus())(document.getElementById('app'))")
                     if helper:  # the bridge injects its focus helper before each press
                         await app.evaluate(helper)
                     await page.keyboard.press(KEYS[patch["_key"]])

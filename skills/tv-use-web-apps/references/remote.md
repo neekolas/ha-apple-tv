@@ -4,7 +4,7 @@ Use this when a person at the TV should move through or pick things on a page yo
 
 | `remote` on `tv_show` | For | Effect |
 |---|---|---|
-| `"tvos"` | Pages you write, including every reference app | `focus` with the tvOS look: the focused item lifts 6% with a ring and shadow, arrows search straight ahead first, and each `data-tv-group` row remembers its last item. Follow the layout rules in [app-contract.md](app-contract.md#remote-input). |
+| `"tvos"` | Pages you write, including every reference app | `focus` with the tvOS look: the focused item lifts 6% with a ring and shadow, arrows search straight ahead first, and Left and Right stay inside a `data-tv-group` row. Follow the layout rules in [app-contract.md](app-contract.md#remote-input). |
 | `"focus"` | Ordinary pages you did not write | Arrows move a visible focus ring between links and buttons; Select activates the focused one. A page that calls `preventDefault()` on a key keeps that key. |
 | `"keys"` | Pages that handle `keydown` themselves | Trusted `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` and `Enter` events. |
 | `"off"` (default) | | Presses aren't forwarded. |
