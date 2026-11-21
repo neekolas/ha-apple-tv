@@ -29,7 +29,7 @@ _LEVELS = {"error": logging.ERROR, "warn": logging.WARNING, "info": logging.INFO
 # The others are dropped. Each pattern must match at the start of the line,
 # so page console text that quotes one is dropped too.
 _KEEP = re.compile(
-    r"share: (?:page stats |[0-9.]+ fps from the page)|airplay: (?:timing: |receiver report )|browser: viewport: "
+    r"share: (?:page stats|[0-9.]+ fps from the page)|airplay: (?:timing:|receiver report)|browser: viewport"
 )
 _STATS_WINDOW_MS = 5000
 _RECEIVER_COUNTS = ("pushed", "dropped", "dropped_full", "dropped_waiting")
@@ -106,7 +106,9 @@ class MachineLines:
                 return line
             # This line ends the oversized one.
             self.size += len(line)
-            head = _URL.sub(r"\1", self.head.decode(errors="replace"))
+            text = self.head.decode(errors="replace")
+            # A URL cut at the end can have lost its "@", so it is dropped whole.
+            head = _URL.sub(lambda url: "" if url.end() == len(text) else url[1], text)
             _LOG.warning("tvpipe: skipped a %d-byte machine line that starts with %s", self.size, head)
             self.head = None
             if end:

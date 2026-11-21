@@ -182,6 +182,7 @@ def test_tvpipe_log_keeps_useful_lines(caplog):
         ("debug", "share: 9.4 fps from the page, capture to tvpipe avg 70.1 ms, max 233.0 ms"),
         ("debug", "airplay: SETUP"),
         ("debug", "airplay: receiver report (rrmt): rrmt latePackets=0"),
+        ("debug", "browser: viewport 1920x1024 in a 1920x1080 window; resizing the window to 1920x1136"),
         ("debug", "page console.error: airplay: timing: video 9 frames late"),
         ("debug", "page warning (network): share: page stats faked"),
         ("warn", "share: the capture is slow"),
@@ -192,6 +193,7 @@ def test_tvpipe_log_keeps_useful_lines(caplog):
         ("DEBUG", 'tvpipe: share: page stats {"fps":9.5}'),
         ("DEBUG", "tvpipe: share: 9.4 fps from the page, capture to tvpipe avg 70.1 ms, max 233.0 ms"),
         ("DEBUG", "tvpipe: airplay: receiver report (rrmt): rrmt latePackets=0"),
+        ("DEBUG", "tvpipe: browser: viewport 1920x1024 in a 1920x1080 window; resizing the window to 1920x1136"),
         ("WARNING", "tvpipe: share: the capture is slow"),
         ("WARNING", "tvpipe: browser: example.com answered 500 Error"),
     ]
@@ -298,15 +300,16 @@ async def test_machine_lines_skip_oversized_lines_in_any_chunking(caplog):
         await asyncio.wait_for(lines.readline(), 0.05)
     reader.feed_data(big[1500:] + b"\n" + line)
     assert await lines.readline() == line
-    # An oversized last line ends at EOF.
-    reader.feed_data(big)
+    # An oversized last line ends at EOF. Its first 200 bytes end before the "@" of a URL.
+    cut = b"x" * 180 + b" https://user:s3cret@example.com/" + big
+    reader.feed_data(cut)
     reader.feed_eof()
     assert await lines.readline() == b""
     head = "x" * 200
     assert tvpipe_records(caplog) == [
         ("WARNING", f"tvpipe: skipped a 3001-byte machine line that starts with {head}"),
         ("WARNING", f"tvpipe: skipped a 3001-byte machine line that starts with {head}"),
-        ("WARNING", f"tvpipe: skipped a 3000-byte machine line that starts with {head}"),
+        ("WARNING", f"tvpipe: skipped a {len(cut)}-byte machine line that starts with {'x' * 180} "),
     ]
 
 
