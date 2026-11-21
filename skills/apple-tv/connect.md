@@ -7,8 +7,8 @@ Use an Apple TV 4K running **tvOS 27 or later**. tvOS 27 or later is recommended
 Use an aarch64 or amd64 Home Assistant OS host. The integration test environment uses Home Assistant 2026.11.2. On a workstation with Git, `uv`, `rsync` and OpenSSH, open the repository root. For a fresh checkout:
 
 ```sh
-git clone https://github.com/neekolas/ha-apple-tv.git
-cd ha-apple-tv
+git clone https://github.com/neekolas/tv-use.git
+cd tv-use
 ```
 
 Set `HA_URL` to the origin you use to open Home Assistant. Include the scheme and any non-default port. Use HTTPS, a trusted LAN or an encrypted tunnel for the admin token.

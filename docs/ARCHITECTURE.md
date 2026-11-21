@@ -1,4 +1,4 @@
-# Apple TV Agent Bridge architecture
+# tv-use architecture
 
 Home Assistant exposes one bridge endpoint for all registered Apple TVs. The app owns each receiver's control session, screen pairing and presentation. The recommended and tested baseline is tvOS 27 or later; tvOS 26.6 also works but is less tested. Hardware testing included Apple TV 4K (2nd generation), AppleTV11,1, on tvOS 27.2 (24K122). Pairing requires access to the TV and its on-screen codes. It requires no Apple Developer account. [Install, pair and operate the bridge](../app/DOCS.md)
 

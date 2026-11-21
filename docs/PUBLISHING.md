@@ -8,7 +8,7 @@ The app ships with an empty TV host, identifier and profile settings. The live s
 
 Pairing tests use a fictional profile. The public deep-link catalog keeps routing and playback results, with profile labels, household sign-in states and subscription details removed. Benchmark results omit browser capture session IDs and keep frame size, audio and timing measurements. UUIDs inside streaming-service title and episode URLs identify public content. The root license identifies the maintainer by the repository owner's public handle.
 
-All six tracked PNGs serve a documentation link. The accessibility guide uses two matching Settings frames, a submenu and a cropped row of app tiles. The browser comparison uses two sheets of synthetic benchmark pages. Visual and PNG metadata inspection found no personal names, profile pickers or lists of paired devices in these files.
+All six tracked PNGs serve a documentation link. Two JPEG recipe slides in `docs/images/` illustrate the README examples. They show only the recipe and carry no camera or author metadata. The accessibility guide uses two matching Settings frames, a submenu and a cropped row of app tiles. The browser comparison uses two sheets of synthetic benchmark pages. Visual and PNG metadata inspection found no personal names, profile pickers or lists of paired devices in these files.
 
 Raw deep-link evidence in `spikes/deeplinks/out/`, hardware captures in `spikes/live/results/` and pairing state in `spikes/live/state/` are local and ignored. Keep them out of the public export, including screenshots and JSON referenced by the catalog.
 

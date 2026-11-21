@@ -1,6 +1,6 @@
 ---
 name: apple-tv
-description: Controls an Apple TV through the Apple TV Agent Bridge MCP server on Home Assistant. Use for presenting pages, playing media, opening apps, navigating menus or reading the TV screen.
+description: Controls an Apple TV through the tv-use MCP server (Apple TV Agent Bridge) on Home Assistant. Use for presenting pages, playing media, opening apps, navigating menus or reading the TV screen.
 ---
 
 # Apple TV

@@ -1,12 +1,60 @@
-# Apple TV Agent Bridge
+# tv-use
 
-Show a web page on an Apple TV, play media, drive apps with the remote, or read the screen from an MCP client. The bridge runs on Home Assistant. One app handles the TVs. One custom integration handles pairing, entities and agent access. Nothing needs to be installed on the TV.
+**Make an Apple TV a first-class device for AI agents.** tv-use lets an agent see what is on the TV, show anything it can draw, open any app at the right screen and drive the remote. It runs on Home Assistant and gives agents one MCP endpoint. It is built to be driven by an agent in a real-time voice conversation.
 
-The bridge targets **Apple TV 4K on tvOS 27 or later**, the recommended and tested baseline. tvOS 26.6 also works but is less tested: pairing, control and screen reading all worked on an Apple TV 4K (1st generation), which cannot run tvOS 27. Testing included an Apple TV 4K (2nd generation) on tvOS 27.2 (24K122) and a Home Assistant Green. Discovery works without a static IP. No Apple Developer account is required.
+![A pork bulgogi recipe shown full screen on a TV, with the prompt "Say next when you're ready"](docs/images/recipe-title.jpg)
 
-An agent can show a recipe and advance it one step at a time, make a slideshow from uploaded photos, or put a live dashboard from your laptop on the TV. For installed apps it can open Settings, find a visible menu item by label, or start and check playback.
+## Great hardware, hard for agents
+
+Apple TV is the best TV hardware you can buy. It is fast and quiet, and it runs every major streaming app. It is also very hard for an AI agent to use.
+
+Home Assistant does not fix this. Its built-in Apple TV integration is built on [pyatv](https://github.com/postlund/pyatv). pyatv's last release came out in June 2026, before tvOS 27. The fixes for AirPlay PIN pairing on tvOS 27 ([#2894](https://github.com/postlund/pyatv/pull/2894)) and for now-playing state on tvOS 27.2 ([#2953](https://github.com/postlund/pyatv/pull/2953)) are still open pull requests, along with dozens of others. And even where it works, it is missing what an agent needs most.
+
+| An agent needs to | Built-in integration | tv-use |
+| --- | --- | --- |
+| Know what is on screen | Current app and now-playing data only | `tv_look` reads the screen's accessibility labels and which item has focus |
+| See screens without good labels | No screenshots | `tv_look {"image":true}` returns a screenshot |
+| Show its own content | Media URLs only | `tv_show` puts any web page, document, slide deck, photo set or live dashboard on the TV |
+| Open a show in the right app | A few deep-link examples and "try a share link" | A tested deep-link catalog, and a check of where the link landed |
+
+Deep links are the clearest example. How would an agent know that an HBO Max episode opens with `https://play.hbomax.com/video/watch/{id}`? Or that a Netflix title link opens Netflix Home, not the title? tv-use keeps a catalog of links for 47 services, with trial results from a real Apple TV, and gives it to the agent. After each launch, it reads the screen to report where the TV actually landed, and it can answer the profile picker. [Deep links by service](skills/apple-tv/deeplinks.md)
+
+## What tv-use does
+
+tv-use turns an Apple TV into hardware an agent can fully script. It installs on Home Assistant as an app and a custom integration. It uses current Apple protocols:
+
+- **RemotePairing** to read the screen's accessibility text and take screenshots.
+- **AirPlay mirroring** to show pages rendered by Chromium on the Home Assistant host.
+- **Companion** for the remote, keyboard, app launches and power, through a [pyatv fork](docs/pyatv-fork.md) with 20 patches for tvOS 27.
+
+Every result tells the agent what changed on screen, so it can check its work instead of guessing. Calls are fast enough for a voice conversation. A burst of remote keys returns the new screen in about 2 seconds.
+
+![tvOS Settings with Notifications focused](docs/live-accessibility/settings-before.png)
+
+On this screen, `tv_look` returns each menu label, says that **Notifications** has focus, and names the app. The agent can then call `tv_navigate {"to":"Remotes and Devices","select":true}` without counting key presses.
+
+## What you can put on the TV
+
+The TV becomes a shared screen for whatever you and the agent are working on. Some things to try:
+
+- **Cook from a recipe.** Ask for a recipe scaled to what is in your fridge. The agent makes the slides and puts them on the TV. Say "next" to move to the next step.
+
+  ![The ingredients slide of the same recipe, with amounts scaled to a 1.225 kg roast](docs/images/recipe-ingredients.jpg)
+
+- **Watch a show.** "Put on The Last of Us." The agent finds which installed service has it, opens it with a deep link, picks your profile and checks that it is playing.
+- **Look at your photos.** Give the agent a folder of photos. It builds a slideshow, and you can say "go back to the first one" or "pause".
+- **Watch a live dashboard.** Serve a dashboard from your laptop over Tailscale. The TV shows it and it keeps updating.
+- **Listen to an article.** The agent shows the article in large type and reads it aloud, one paragraph at a time.
+- **Find a podcast.** The agent searches YouTube for the episode and plays it.
+- **Fix a setting.** "Turn on subtitles." The agent opens Settings, reads each menu and selects items by label.
+
+[Worked examples](skills/apple-tv/examples.md) · [Page authoring guide](skills/apple-tv/content.md)
 
 ## Install and connect
+
+In Home Assistant, tv-use appears as the app and integration **Apple TV Agent Bridge**.
+
+tv-use targets **Apple TV 4K on tvOS 27 or later**, the recommended and tested baseline. tvOS 26.6 also works but is less tested: pairing, control and screen reading all worked on an Apple TV 4K (1st generation), which cannot run tvOS 27. Testing included an Apple TV 4K (2nd generation) on tvOS 27.2 (24K122) and a Home Assistant Green. Discovery works without a static IP. No Apple Developer account is required. Nothing needs to be installed on the TV.
 
 1. Put Home Assistant and the TVs on the same LAN. Install the local app **Apple TV Agent Bridge** and copy the custom integration into Home Assistant. The setup guide covers both a manual install and a workstation deploy. [Setup guide](docs/SETUP.md) · [Workstation deploy](docs/deploy.md)
 2. Restart Home Assistant Core. If the TV already has a built-in Apple TV integration entry, disable that entry before pairing. Accept the bridge discovery in **Settings → Devices & services**. Choose the TV if prompted. Enter its AirPlay PIN. For screen reading, open **Settings → Remotes and Devices → Remote App and Devices** on the TV before requesting the screen PIN. Use **Add Apple TV** on the same integration entry for another TV.
@@ -42,9 +90,9 @@ Tool results include `ok`, `summary`, `verified`, `evidence` and `data`. An ackn
 
 Scripts can POST the same arguments to `/api/atv_bridge/tool/<name>` with the admin token. The bridge also supplies six text tools to Home Assistant’s LLM APIs. For Assist, expose each intended bridge media player. [Agent skill and examples](skills/apple-tv/SKILL.md) · [MCP API](docs/mcp-api.md)
 
-## Using the bridge with Home Assistant
+## Using tv-use with Home Assistant
 
-Home Assistant’s built-in Apple TV integration provides media player and remote entities. The bridge provides its own entities, a live Chromium presentation, screen observation, and a room-aware MCP endpoint. Disable the built-in entry only for a TV you move to the bridge. To switch back, stop the bridge app and re-enable that entry. [Setup guide](docs/SETUP.md#prepare-each-tv)
+Home Assistant’s built-in Apple TV integration provides media player and remote entities. tv-use provides its own entities, a live Chromium presentation, screen observation, and a room-aware MCP endpoint. Disable the built-in entry only for a TV you move to the bridge. To switch back, stop the bridge app and re-enable that entry. [Setup guide](docs/SETUP.md#prepare-each-tv)
 
 ## How it works
 

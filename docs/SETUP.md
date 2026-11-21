@@ -1,6 +1,6 @@
-# Set up the Apple TV Agent Bridge
+# Set up tv-use
 
-Install one Home Assistant app and one custom integration for all your TVs. The app talks to the TVs. Agents connect to the integration on your Home Assistant web address.
+Install one Home Assistant app and one custom integration for all your TVs. Both are named **Apple TV Agent Bridge** in Home Assistant. The app talks to the TVs. Agents connect to the integration on your Home Assistant web address.
 
 ## What you need
 
@@ -12,8 +12,8 @@ Install one Home Assistant app and one custom integration for all your TVs. The 
 To get a checkout with Git:
 
 ```sh
-git clone https://github.com/neekolas/ha-apple-tv.git
-cd ha-apple-tv
+git clone https://github.com/neekolas/tv-use.git
+cd tv-use
 ```
 
 ## Prepare each TV

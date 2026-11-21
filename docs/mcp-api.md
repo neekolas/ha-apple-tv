@@ -1,4 +1,4 @@
-# Apple TV Agent Bridge public MCP API
+# tv-use public MCP API
 
 Connect a Streamable HTTP client to `<HA origin>/api/atv_bridge/mcp` with the header `Authorization: Bearer <HA admin token>`. Use tvOS 27 or later (recommended; 26.6 also works, less tested). The bridge supports discovery without a static IP and requires no Apple Developer account. For installation, pairing, token creation and a read-only connection test, see [Install and connect](../skills/apple-tv/connect.md).
 
