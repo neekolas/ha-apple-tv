@@ -13,6 +13,20 @@ Use the bridge on Home Assistant OS with an Apple TV 4K running tvOS 27 or later
 2. Call `tv_status {}` or read `tv://tvs`. Use the target room's stable ID if names collide. Every tool takes optional `tv`. If several TVs are paired, include it on every call for a particular room.
 3. Check `tv_status {"tv":"<room>"}` for reachability, pairings and capabilities. If someone may be watching, use a text-only `tv_look` before changing their screen.
 
+## Act, don't narrate
+
+The usual session is a live voice conversation. The user watches the TV, and you rarely speak.
+
+- Do the task without announcing it. Do not say what you are about to do or that you did it.
+- Show progress on the TV, not in speech. For a page, show it at once with empty places and a status line, then fill it in. See [Build good TV content](pages.md#show-work-in-progress).
+- Do not read aloud what the screen already shows.
+- Speak only when the screen cannot carry the message, in one short sentence. That includes:
+  - a choice or approval only the user can give: purchases, rentals, upgrades, sign-in, replacing another room's page, or choosing between services
+  - a pairing code request from `data.ask_user`
+  - a failure the screen does not show
+  - an answer to a question that is not on the screen
+  - a step that takes much longer than usual with nothing new on screen
+
 Use MCP discovery for tool choices, arguments and examples. For repetitive remote work, plan a `tv_sequence` using labels from the target TV. Put a checkpoint immediately before an action that depends on focus, app or row value. `tv_remote` sends keys in one fast burst and checks the screen once at the end; add `"check_each":true` only when each press must be confirmed. See [Drive native apps](apps.md).
 
 After a media or deep-link launch returns, make text-only `tv_look` on the same TV your next call, even if the launch reports success. Check accessibility for an Open prompt before sending another launch or remote key. Confirm a visible Open prompt for the intended app, then verify where the TV lands. See [Profiles and dialogs](apps.md#profiles-and-dialogs). Ask before purchases, rentals or upgrades.
@@ -27,7 +41,7 @@ If you run on a machine at home and the MCP server is registered with a tailnet 
 
 - [Install, pair and connect](connect.md)
 - [Present files, live URLs and updates](content.md)
-- [Design a page for the TV](pages.md)
+- [Build good TV content](pages.md)
 - [Drive native apps](apps.md)
 - [Choose a service deep link](deeplinks.md)
 - [Follow a worked example](examples.md)

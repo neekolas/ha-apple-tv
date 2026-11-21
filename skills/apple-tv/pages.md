@@ -1,6 +1,45 @@
-# Design pages for the TV
+# Build good TV content
 
-How to build pages that read well from the sofa, given how the bridge renders and mirrors them.
+How to build pages that read well from the sofa and show your work while you do it. The usual session is a live voice conversation where the agent rarely speaks. The TV is the reply.
+
+## The TV is the reply
+
+- Put the answer on the screen. Do not read it aloud as well.
+- Show progress on the screen, not in speech. Do not say "I'm working on it" or "Putting it up now."
+- Show something within a second or two of the request, even if it is only a title and empty places. Then fill it in.
+- One page per task. Update it in place instead of showing a new page for each change.
+- When you finish, the page holds the result. Clear the status line and stop.
+
+## Show work in progress
+
+Start from [pending-page.html](pending-page.html). It defines four functions on `window.tv`. Call them with `tv_page_run`. Each returns `{working, pending}`, so you can check the page state without a screenshot.
+
+| Call | Effect |
+|---|---|
+| `tv.working(text)` | Shows a status line at the bottom, such as "Finding a recipe". Use short present-tense text. |
+| `tv.pending(name, label)` | Reserves a place for a result that is still coming. The label says what will appear there. |
+| `tv.fill(name, html)` | Puts a result in its place and removes the placeholder. Plain text works too. |
+| `tv.done()` | Hides the status line. |
+
+The flow:
+
+1. Edit the last lines of the starter for this request: the title, one `tv.pending` per expected result and the first `tv.working` text. Send it with `tv_show {"html": "..."}` before you start the real work. Starting the mirror takes a few seconds, and this way it overlaps with your work.
+2. As each result arrives, fill it and say what comes next, in one call:
+   `tv_page_run {"script":"tv.fill('summary', arg); return tv.working('Writing the steps')","arg":"Sweet, savory pork in about 30 minutes."}`
+3. When all places are filled, call `tv_page_run {"script":"tv.done()"}`.
+
+Combine updates into one script. The bridge refuses a second `tv_page_run` that arrives within 0.25 seconds with `busy`. On the test TV, `tv_show` took 2.7 to 5.2 seconds to start the mirror, and each later `tv_page_run` update took 0.03 to 0.7 seconds.
+
+You can add the four functions to your own page instead. Keep the names, so any agent can drive it the same way.
+
+### When the screen cannot show progress
+
+- **Someone is watching.** If `tv_look` shows playback or another app in use, do not replace the screen just to show progress. Ask first, or answer by voice.
+- **Recorded mode.** If `tv_show` returns `data.transport: "video"`, `tv_page_run` cannot change the page. Show the final page with a new `tv_show`.
+- **Native apps.** While a native app is on screen there is no page to update. Let the app's own screen show the result, and check it with `tv_look`.
+- **Mirror slot taken.** On `mirror_busy`, ask before using `replace: true`, because another room may be watching.
+
+In these cases, a short spoken line is the right fallback.
 
 ## Canvas and type
 
@@ -38,3 +77,4 @@ For stored content in `play_url` mode or after `auto` falls back, `tv_show` retu
 
 - The resource `tv://page-guide` has the short rules.
 - The MCP prompt `present` takes a `topic` and returns a TV-ready HTML scaffold that exposes a render function.
+- [pending-page.html](pending-page.html) is a starter with the work-in-progress functions above.
