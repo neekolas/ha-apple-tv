@@ -1204,8 +1204,8 @@ own.addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) e.preventD
 </script>"""
 
 
-# A page laid out for the tvos mode: a grid, a row with an offset neighbor, two rows that
-# are groups, a wide banner and a strip that scrolls sideways.
+# A page laid out for the tvos mode: a grid, a row with an offset neighbor, two marked rows,
+# a wide banner and a strip that scrolls sideways.
 TVOS_CONTENT = """<style>
 body{margin:0;background:#111} .c,button,a{position:absolute;width:200px;height:100px;border:0;background:#333}
 #strip{position:absolute;left:40px;top:860px;width:1100px;height:140px;overflow-x:auto;white-space:nowrap}
@@ -1227,6 +1227,16 @@ own.addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) e.preventD
 </script>"""
 
 
+# Three rows of eight tiles, as on the page of the hardware test. Each row scrolls sideways on its own.
+# One column is 320 px: a 300 px tile and a 20 px gap. The viewport shows four columns.
+ROWS_CONTENT = """<style>
+body{margin:0;background:#111} .row{display:flex;gap:20px;overflow-x:auto;padding:30px 0;scroll-behavior:smooth}
+.row button{flex:none;width:300px;height:160px;border:0;background:#333}
+</style>""" + "".join(
+    f"<div class=row id=row{row} data-tv-group>" + "".join(f"<button id=t{row}{column}></button>" for column in range(8)) + "</div>"
+    for row in range(3))
+
+
 @pytest.fixture
 async def browser_frame(request):
     from playwright.async_api import async_playwright
@@ -1243,7 +1253,7 @@ async def browser_frame(request):
                 continue
         if browser is None:
             pytest.skip("Chromium is unavailable")
-        page = await browser.new_page(viewport={"width": 1280, "height": 1000 if content is TVOS_CONTENT else 720})
+        page = await browser.new_page(viewport={"width": 1280, "height": 720 if content is CONTENT else 1000})
         # The stage shows bundles in a sandboxed iframe without allow-same-origin.
         await page.set_content(
             "<style>iframe{position:absolute;inset:0;width:100%;height:100%;border:0}</style>"
@@ -1325,15 +1335,21 @@ async def tvos(remote, browser_frame):
 
     async def press(*keys, start=None):
         if start:
-            await frame.evaluate(f"document.getElementById('{start}').focus()")
+            await frame.evaluate(f"document.getElementById('{start}').focus({{preventScroll: true}})")
         for key in keys:
             assert await control.send(key)
         return await frame.evaluate("document.activeElement.id")
 
-    return SimpleNamespace(frame=frame, press=press, sent=sent)
+    async def scroll(**rows):
+        """Put each named row at a scroll offset, at once."""
+        await frame.evaluate("rows => Object.entries(rows).forEach(([id, left]) => "
+                             "document.getElementById(id).scrollTo({left, behavior: 'instant'}))", rows)
+
+    return SimpleNamespace(frame=frame, press=press, sent=sent, scroll=scroll, control=control)
 
 
 TVOS_PAGE = pytest.mark.parametrize("browser_frame", [TVOS_CONTENT], indirect=True)
+ROWS_PAGE = pytest.mark.parametrize("browser_frame", [ROWS_CONTENT], indirect=True)
 
 
 @TVOS_PAGE
@@ -1356,20 +1372,18 @@ async def test_tvos_beam_search_in_a_grid_and_past_an_offset_neighbor(tvos):
 
 
 @TVOS_PAGE
-async def test_tvos_groups_remember_their_last_item(tvos):
+async def test_tvos_rows_do_not_remember_their_last_item(tvos):
     assert await tvos.press("right", "right", start="a0") == "a2"
     assert await tvos.press("down") == "b2"
     assert await tvos.press("left", "left") == "b0"
-    # Back into the first row: its last item, not the one straight above.
-    assert await tvos.press("up") == "a2"
+    # Back into the first row: the item straight above, not the one that had focus there last.
+    assert await tvos.press("up") == "a0"
     assert await tvos.press("down") == "b0"
-    # A scroll container is a group too.
+    # The same for a scroll container.
     assert await tvos.press("right", "right", start="s0") == "s2"
     assert await tvos.press("up") == "wide"
-    assert await tvos.press("down") == "s2"
-    # A remembered item that is gone does not trap focus.
-    await tvos.frame.evaluate("a2.remove()")
-    assert await tvos.press("up", start="b0") == "a0"
+    # Two tiles lie fully below the wide banner. The one nearer to its center wins.
+    assert await tvos.press("down") == "s1"
 
 
 @TVOS_PAGE
@@ -1424,3 +1438,47 @@ async def test_tvos_flick_lands_on_the_right_item_with_one_scroll(tvos):
 async def test_tvos_leaves_a_page_that_handles_arrows_alone(tvos):
     assert await tvos.press("right", start="g02") == "own"
     assert await tvos.press("left", "down") == "own"
+
+
+@ROWS_PAGE
+async def test_tvos_up_and_down_go_straight_when_rows_are_scrolled_by_whole_columns(tvos):
+    """Hardware finding: up and down went diagonally, to the item that had focus in that row before."""
+    await tvos.scroll(row1=320, row2=640)
+    for column in (1, 2):
+        # The tile straight below has another index in each row.
+        assert await tvos.press("down", start=f"t0{column}") == f"t1{column + 1}"
+        assert await tvos.press("down") == f"t2{column + 2}"
+        assert await tvos.press("up") == f"t1{column + 1}"
+        assert await tvos.press("up") == f"t0{column}"
+    # A walk along one row does not change where up and down go from another row.
+    assert await tvos.press("right", "down", start="t11") == "t23"
+    assert await tvos.press("up", "up") == "t01"
+    assert await tvos.frame.evaluate("[row0, row1, row2].map(row => row.scrollLeft)") == [0, 320, 640]
+
+
+@ROWS_PAGE
+@pytest.mark.parametrize("mode", ["tvos", "focus"])
+async def test_up_and_down_take_the_item_that_covers_most_when_rows_are_scrolled_apart(tvos, mode):
+    """Two tiles of the next row lie partly below the focused one. The one that covers more of it wins."""
+    tvos.control.mode = mode
+    # Row 1 is 250 px further along: t12 is at 70-370, t13 at 390-690 and t14 at 710-1010.
+    await tvos.scroll(row1=570)
+    assert await tvos.press("down", start="t01") == "t13"  # t01 is at 320-620.
+    assert await tvos.press("up") == "t01"
+    assert await tvos.press("down", start="t02") == "t14"  # t02 is at 640-940.
+    assert await tvos.press("up") == "t02"
+    # From the other row: t13 at 390-690 lies below t01 (320-620), not below t02.
+    assert await tvos.press("up", start="t13") == "t01"
+    assert await tvos.frame.evaluate("window.__tvRemoteFocus") == (True if mode == "focus" else "tvos")
+
+
+@ROWS_PAGE
+async def test_tvos_left_and_right_stay_in_the_row_at_its_end(tvos):
+    """After a flick, momentum arrows can arrive at the end of a row. They must not jump to another row."""
+    await tvos.scroll(row0=9999)
+    # Row 1 is not scrolled, so its tiles t14 to t17 lie further right than the last tile of row 0.
+    assert await tvos.press("right", start="t07") == "t07"
+    assert await tvos.press("right", "right") == "t07"
+    assert await tvos.press("left", start="t10") == "t10"
+    # Up and down still leave the row, and the row below scrolls to show the tile.
+    assert await tvos.press("down", start="t07") == "t13"

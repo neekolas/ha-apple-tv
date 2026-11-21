@@ -98,7 +98,13 @@ FOCUS_HELPER = r"""() => {
           : Math.max(0, r.left - from.right, from.left - r.right);
         // The item must lie mostly in the pressed direction, not in the next row or column.
         if (along <= 1 || along <= cross) continue;
-        score = along + cross * 4;
+        // Two items of one row are at the same distance. The one that lines up better with the
+        // focused box wins. Without this, the first one in the document won, which can be a
+        // diagonal move when rows are scrolled differently.
+        const overlap = dir[0] ? Math.min(r.bottom, from.bottom) - Math.max(r.top, from.top)
+          : Math.min(r.right, from.right) - Math.max(r.left, from.left);
+        const size = dir[0] ? Math.min(r.height, from.height) : Math.min(r.width, from.width);
+        score = along + cross * 4 - Math.max(0, overlap) / Math.max(1, size);
       }
       if (score < bestScore) [best, bestScore] = [el, score];
     }
@@ -111,9 +117,11 @@ FOCUS_HELPER = r"""() => {
 
 
 # The "tvos" helper. It extends the focus helper with a tvOS look and a search closer to UIKit:
-# a lift (scale, shadow, white ring), beam-first search, last-focused memory per group, and
-# one smooth scroll that follows fast key runs. See docs/research/tvos-native-feel.md, section 4.
+# a lift (scale, shadow, white ring), beam-first search, and one smooth scroll that follows fast
+# key runs. See docs/research/tvos-native-feel.md, section 4.
 # Every duration and scale is in CONFIG at the top, for tuning on the TV.
+# Hardware finding: a row must not remember its last focused item. Up and down then go
+# diagonally, which reads as a fault. They take the item straight above or below on screen.
 TVOS_HELPER = r"""() => {
   if (window.__tvRemoteFocus) return;
   window.__tvRemoteFocus = 'tvos';
@@ -157,31 +165,30 @@ TVOS_HELPER = r"""() => {
   } catch {}
   const usable = el => !el.disabled && el.tabIndex >= 0 && !el.closest('[inert],[aria-hidden=true]')
     && el.checkVisibility({visibilityProperty: true});
+  // Items that had focus. One can still be shrinking when a later key arrives.
+  const lifted = new WeakSet();
   // The box of an element without its lift. A scaled box would make the beam too wide.
   const box = el => {
     const r = el.getBoundingClientRect();
     const s = parseFloat(getComputedStyle(el).scale);
-    if (!(s > 0) || s === 1) return r;
+    if (!(s > 0) || s === 1) {
+      if (el !== document.activeElement) lifted.delete(el);
+      return r;
+    }
     const w = r.width / s, h = r.height / s, x = r.left + (r.width - w) / 2, y = r.top + (r.height - h) / 2;
     return {left: x, top: y, right: x + w, bottom: y + h, width: w, height: h};
   };
-  // A group is the nearest scroll container or [data-tv-group] ancestor. It remembers its last focused item.
-  const memory = new WeakMap();
-  const groupOf = el => {
+  // The row of an item: the nearest [data-tv-group] or sideways scroll container.
+  const rowOf = el => {
     for (let node = el.parentElement; node && node !== document.body && node !== root; node = node.parentElement) {
-      if (node.hasAttribute('data-tv-group')) return node;
-      const style = getComputedStyle(node);
-      if ((/auto|scroll/.test(style.overflowX) && node.scrollWidth > node.clientWidth)
-          || (/auto|scroll/.test(style.overflowY) && node.scrollHeight > node.clientHeight)) return node;
+      if (node.hasAttribute('data-tv-group') || /auto|scroll/.test(getComputedStyle(node).overflowX)) return node;
     }
     return null;
   };
-  let previous = null;
   addEventListener('focusin', event => {
     const el = event.target;
     if (!(el instanceof Element)) return;
-    const group = groupOf(el);
-    if (group) memory.set(group, el);
+    lifted.add(el);
     root.style.setProperty('--tv-remote-scale',
       el.offsetWidth > innerWidth * CONFIG.wideRatio ? CONFIG.wideScale : CONFIG.scale);
   }, true);
@@ -213,12 +220,15 @@ TVOS_HELPER = r"""() => {
     // These controls use the arrow on that axis themselves.
     if (active && ((active.localName === 'select' && dir[1])
         || (active.localName === 'input' && active.type === 'range' && dir[0]))) return;
-    // Read every box before anything is written.
+    // Read every box before anything is written. Boxes are positions on screen, so each
+    // row counts where its own scroll offset has put it.
     const items = [...document.querySelectorAll(FOCUSABLE)].filter(el => el !== active && usable(el))
-      .map(el => [el, el === previous ? box(el) : el.getBoundingClientRect()])
+      .map(el => [el, lifted.has(el) ? box(el) : el.getBoundingClientRect()])
       .filter(([, r]) => r.width > 0 && r.height > 0);
     const from = active && box(active);
-    let best = null, bestScore = Infinity, beam = null, beamScore = Infinity;
+    const row = active && dir[0] ? rowOf(active) : null;
+    const beam = [];
+    let best = null, bestScore = Infinity;
     for (const [el, r] of items) {
       if (!from) {
         // No focus yet. Start at the first item on screen in reading order.
@@ -231,31 +241,34 @@ TVOS_HELPER = r"""() => {
       const dy = r.top + r.height / 2 - (from.top + from.height / 2);
       const along = dx * dir[0] + dy * dir[1];
       if (along <= 1) continue;
-      // Distance between the two boxes on the other axis. Zero when they overlap.
-      const cross = dir[0]
-        ? Math.max(0, r.top - from.bottom, from.top - r.bottom)
-        : Math.max(0, r.left - from.right, from.left - r.right);
-      if (cross === 0) {
-        // In the beam: the focused box projected in the pressed direction. Nearest edge wins.
+      // How far the two boxes overlap on the other axis. Below zero: the distance between them.
+      const overlap = dir[0] ? Math.min(r.bottom, from.bottom) - Math.max(r.top, from.top)
+        : Math.min(r.right, from.right) - Math.max(r.left, from.left);
+      if (overlap > 1) {
+        // In the beam: the focused box projected in the pressed direction.
         const gap = Math.max(0, dir[0] ? (dir[0] > 0 ? r.left - from.right : from.left - r.right)
           : (dir[1] > 0 ? r.top - from.bottom : from.top - r.bottom));
-        const score = gap + Math.abs(dir[0] ? dy : dx) / 1000;
-        if (score < beamScore) [beam, beamScore] = [el, score];
-      } else if (along > cross && along + cross * 4 < bestScore) {
-        // Outside the beam. Used only when the beam is empty.
+        const size = dir[0] ? Math.min(r.height, from.height) : Math.min(r.width, from.width);
+        beam.push({el, gap, end: gap + (dir[0] ? r.width : r.height),
+          share: Math.round(100 * overlap / size), off: Math.abs(dir[0] ? dy : dx)});
+        continue;
+      }
+      // Outside the beam. Used only when the beam is empty. Left and right stay in their row:
+      // at the end of a row, a tile of another row that is scrolled differently is not "right".
+      const cross = Math.max(0, -overlap);
+      if (along > cross && along + cross * 4 < bestScore && (!dir[0] || rowOf(el) === row)) {
         [best, bestScore] = [el, along + cross * 4];
       }
     }
-    best = beam || best;
-    if (!best) return;  // Nothing that way. The page scrolls as usual.
-    // Entering a group from outside goes to the item that had focus there last.
-    const group = groupOf(best);
-    if (group && active && group !== groupOf(active)) {
-      const remembered = memory.get(group);
-      if (remembered && remembered.isConnected && group.contains(remembered) && usable(remembered)) best = remembered;
+    if (beam.length) {
+      // The nearest row or column of the beam is every item that starts before the nearest one ends.
+      // In it, the item that lines up best with the focused box wins, then the nearest center.
+      const near = beam.reduce((a, b) => (b.gap < a.gap ? b : a));
+      best = beam.filter(item => item.gap < near.end)
+        .reduce((a, b) => ((b.share - a.share || a.off - b.off || a.gap - b.gap) > 0 ? b : a)).el;
     }
+    if (!best) return;  // Nothing that way. The page scrolls as usual.
     event.preventDefault();
-    previous = active;
     best.focus({preventScroll: true});
     // A new key replaces the target of a running smooth scroll.
     best.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});

@@ -113,7 +113,7 @@ Pass `remote` to `tv_show` to let a person use the Siri Remote on a mirrored pag
 - `remote: "keys"` sends Left, Right, Up, Down and Select to the page as the keys `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` and `Enter`. Use it for a page that handles `keydown` itself.
 - `remote: "focus"` also adds a focus helper. Arrows move focus between links and controls, a focus ring shows the focused element, and Select activates it. Use it for ordinary pages. The helper skips a key that the page handled with `preventDefault()`.
 
-- `remote: "tvos"` is `focus` with a tvOS look. The focused item lifts with a shadow and a white ring, a row remembers its last focused item, and a flick scrolls once. Use it for pages you write for the TV. Use `focus` for other pages, where a scaled item could be clipped.
+- `remote: "tvos"` is `focus` with a tvOS look. The focused item lifts with a shadow and a white ring, Up and Down go to the item straight above or below on screen, and a flick scrolls once. Use it for pages you write for the TV. Use `focus` for other pages, where a scaled item could be clipped.
 
 For example, `tv_show {"url":"https://example.org/","remote":"focus"}`.
 
@@ -123,7 +123,7 @@ Write pages for `tvos` with these layout rules:
 - Keep 60 px free at the top and bottom and 80 px at the sides.
 - Put focusable items in rows and grids, so each arrow has an obvious target.
 - Leave about 8% spare room around each focusable item. The focused item grows by 6%, and a parent with `overflow: hidden` would clip it.
-- Wrap each row in a horizontal scroll container or an element with `data-tv-group`. Focus then returns to the item that was last focused in that row.
+- Put each row in a horizontal scroll container (`overflow-x: auto`) or an element with `data-tv-group`. At the end of such a row, Left and Right stay in the row. They move to an item outside the row only when it lies straight ahead.
 - Use a dark background.
 - Do not rely on hover. Every control must be reachable with arrows and work with Enter.
 - Do not run animation without input. The mirror shows about 10 frames per second, so constant motion looks rough.

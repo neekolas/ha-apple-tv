@@ -92,7 +92,7 @@ SHOW = {
         {"enum": ["off", "keys", "focus", "tvos"]},
         "Send Siri Remote input to a mirrored page. keys sends arrow keys and Enter. "
         "focus also moves focus between links and controls and shows a focus ring. "
-        "tvos is focus with a tvOS look for pages you write: the focused item lifts, rows remember their last item. "
+        "tvos is focus with a tvOS look for pages you write: the focused item lifts, up and down go straight between rows. "
         "Clickpad remote: ring clicks are arrows, center click is Enter. "
         "Touch-surface remote: swipes and flicks are arrows, any click is Enter. "
         "Menu and Home stay with tvOS and end the mirror. Play/Pause and volume are not forwarded.",
@@ -244,10 +244,10 @@ Page audio plays by default. Use audio: "mute" for a silent presentation.
 With remote: "keys", a mirrored page gets ArrowLeft, ArrowRight, ArrowUp, ArrowDown and Enter key events
 for Siri Remote input. With remote: "focus", arrows also move focus between links and controls,
 unless the page handles the key itself.
-With remote: "tvos", the focused item also lifts with a shadow and a white ring, and each row remembers
-its last focused item. For "tvos", put focusable items in rows and grids, wrap each row in a scroll
-container or a data-tv-group element, leave 8% spare room around items, use a dark background,
-and do not use hover-only controls or animation that runs without input.
+With remote: "tvos", the focused item also lifts with a shadow and a white ring, and Up and Down go to
+the item straight above or below on screen. For "tvos", put focusable items in rows and grids, put
+each row in a horizontal scroll container or a data-tv-group element, leave 8% spare room around
+items, use a dark background, and do not use hover-only controls or animation that runs without input.
 Clickpad remote: ring clicks are arrows and the center click is Enter (verified).
 Touch-surface remote: swipes are arrows, one per step of finger travel, a fast flick adds a few more,
 and any click is Enter (clicks verified, swipe tuning preliminary).

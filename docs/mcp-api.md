@@ -125,7 +125,7 @@ A show returns `data.page_id`, `data.size` and `data.transport`. A mirror report
 |---|---|
 | `off` | The page gets no remote presses. |
 | `keys` | Left, Right, Up, Down and Select reach the page as trusted `keydown` and `keyup` events with the keys `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` and `Enter`. The events go to the focused element of the content document. |
-| `tvos` | `focus` with a tvOS look, for pages you write. The focused item lifts (scale 1.06, or 1.03 for an item wider than half the screen), gets a shadow and a white ring, and shrinks for a moment on Select. An arrow first looks straight ahead of the focused item and takes the nearest item there. A row remembers its last focused item. A run of quick arrows, as after a flick, shows only the ring on the items it passes and scrolls once. |
+| `tvos` | `focus` with a tvOS look, for pages you write. The focused item lifts (scale 1.06, or 1.03 for an item wider than half the screen), gets a shadow and a white ring, and shrinks for a moment on Select. An arrow first looks straight ahead of the focused item. It takes the nearest row or column there and, in it, the item that lines up best with the focused one. Up and down go by the positions on screen, so they also go straight between rows that are scrolled differently. A row does not remember its last focused item. A run of quick arrows, as after a flick, shows only the ring on the items it passes and scrolls once. |
 | `focus` | The same key events, plus a focus helper in the content document. An arrow moves focus to the nearest link or control in that direction and a focus ring shows the focused element. Select activates it. When nothing lies in that direction, the page scrolls. The helper skips a key that the page already handled with `preventDefault()`. |
 
 For example, `tv_show {"html":"<button onclick=\"next()\">Next</button>","remote":"focus"}`.
@@ -136,7 +136,7 @@ Write pages for `tvos` with these layout rules:
 - Keep 60 px free at the top and bottom and 80 px at the sides.
 - Put focusable items in rows and grids, so each arrow has an obvious target.
 - Leave about 8% spare room around each focusable item. The focused item grows by 6%, and a parent with `overflow: hidden` would clip it.
-- Wrap each row in a horizontal scroll container or an element with `data-tv-group`. Focus then returns to the item that was last focused in that row.
+- Put each row in a horizontal scroll container (`overflow-x: auto`) or an element with `data-tv-group`. At the end of such a row, Left and Right stay in the row. They move to an item outside the row only when it lies straight ahead.
 - Use a dark background.
 - Do not rely on hover. Every control must be reachable with arrows and work with Enter.
 - Do not run animation without input. The mirror shows about 10 frames per second, so constant motion looks rough.
