@@ -59,6 +59,7 @@ def add_arguments(cli):
         help="syslog: os_activity_stream flags. Default 0x124 PAYLOAD|DEBUG|INFO. Console's sniffed set is 0x3c",
     )
     cli.add_argument("--syslog-pid", type=int, default=-1, help="syslog: device-side PID filter")
+    cli.add_argument("--syslog-process", help="syslog: resolve this process name to --syslog-pid on the device")
     cli.add_argument("--ur", type=int, default=100, help="activity and kdebug: update rate in ms")
     cli.add_argument("--predicate", default=ACTIVITY_PREDICATE, help="activity: NSPredicate on the device")
     cli.add_argument("--ax-event-type", type=int, default=2, help="ax: monitored event mask")
@@ -120,9 +121,16 @@ async def syslog(rsd, rec, args):
 
     # Upstream's default (0x3c, sniffed from Console) has HISTORICAL and CALLSTACK and no INFO bit.
     # Dropping HISTORICAL to avoid a backlog replay is inferred from the flag name. Not verified.
-    rec.write("meta", message=f"syslog flags {args.syslog_flags:#x}")
+    pid = args.syslog_pid
+    if args.syslog_process:
+        # PIDs change on reboot. PidList is a separate os_trace connection.
+        pids = [p for p, name in (await pid_names(rsd)).items() if name == args.syslog_process]
+        if len(pids) != 1:
+            raise ValueError(f"Expected one {args.syslog_process} process, found {pids}")
+        pid = pids[0]
+    rec.write("meta", message=f"syslog flags {args.syslog_flags:#x} pid {pid}")
     async with OsTraceService(lockdown=rsd) as service:
-        async for entry in service.syslog(pid=args.syslog_pid, stream_flags=args.syslog_flags):
+        async for entry in service.syslog(pid=pid, stream_flags=args.syslog_flags):
             rec.write(
                 "syslog",
                 device_time=entry.timestamp.timestamp(),
