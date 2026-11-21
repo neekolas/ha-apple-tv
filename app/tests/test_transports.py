@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import logging
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -11,7 +12,7 @@ from mcp import ClientSession, types
 from mcp.client.streamable_http import streamable_http_client
 
 from atv_bridge_app.present.sender import STAGE_URL
-from atv_bridge_app.present.tvpipe import TvpipeSender
+from atv_bridge_app.present.tvpipe import SentRate, TvpipeSender, log_event
 from atv_bridge_app.state import Fault
 from atv_bridge_app.tools.contract import SCHEMAS, INSTRUCTIONS
 
@@ -143,6 +144,37 @@ with (root / "stops").open("a") as f:
     finally:
         await sender.stop()
     assert (tmp_path / "tvpipe" / "stops").read_text().splitlines() == ["stop", "stop"]
+
+
+def test_sent_rate_logs_pushed_frames(caplog):
+    caplog.set_level(logging.DEBUG, "atv_bridge_app.present.tvpipe")
+    rate = SentRate()
+    for second in range(7):
+        rate.add({
+            "elapsed_ms": second * 1000,
+            "video_frames": second * 9 - (second == 3),
+            "receivers": [{"pushed": second * 130, "dropped": second}],
+        })
+    assert [r.getMessage() for r in caplog.records] == [
+        "tvpipe sent 9.0 video fps over 5.0 s, per report 9 9 8 10 9; receiver packets 130.0/s, dropped 5"
+    ]
+
+
+def test_tvpipe_log_keeps_useful_lines(caplog):
+    caplog.set_level(logging.DEBUG, "atv_bridge_app.present.tvpipe")
+    for level, message in (
+        ("trace", "cdp> Runtime.evaluate"),
+        ("trace", 'share: page stats {"fps":9.5}'),
+        ("debug", "airplay: SETUP"),
+        ("debug", "airplay: receiver report (rrmt): rrmt latePackets=0"),
+        ("warn", "share: the capture is slow"),
+    ):
+        log_event({"type": "log", "level": level, "message": message})
+    assert [(r.levelname, r.getMessage()) for r in caplog.records] == [
+        ("DEBUG", 'tvpipe: share: page stats {"fps":9.5}'),
+        ("DEBUG", "tvpipe: airplay: receiver report (rrmt): rrmt latePackets=0"),
+        ("WARNING", "tvpipe: share: the capture is slow"),
+    ]
 
 
 async def test_sender_pin_stops_restart(service, tmp_path):

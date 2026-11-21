@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import struct
@@ -19,6 +20,16 @@ from ..state import Fault
 from . import browsers
 from .sender import STAGE_URL, Sender
 
+
+_LOG = logging.getLogger(__name__)
+_LEVELS = {"error": logging.ERROR, "warn": logging.WARNING, "info": logging.INFO, "debug": logging.DEBUG}
+# tvpipe's debug and trace lines worth keeping: the capture page's encoder
+# report (a trace), the encoded rate at tvpipe, AirPlay send timing, the
+# receiver's own reports of lost and late packets, and the viewport fit.
+# The others are dropped.
+_KEEP = ("share: page stats", "fps from the page", "airplay: timing:", "airplay: receiver report",
+         "browser: viewport")
+_STATS_WINDOW_MS = 5000
 
 # crates/tvpipe/src/browser/capture.js at the release pinned by install-tvpipe.sh.
 CAPTURE_JS_LENGTH = 38420
@@ -44,6 +55,53 @@ def _listener_inode(pid, port):
     except (FileNotFoundError, ProcessLookupError, PermissionError):
         pass
     return None
+
+
+def log_event(event):
+    """Write one tvpipe `log` event to the app log at its own level."""
+    level, message = event.get("level"), str(event.get("message", ""))
+    if level in ("debug", "trace"):
+        if not any(key in message for key in _KEEP):
+            return
+        level = "debug"
+    _LOG.log(_LEVELS.get(level, logging.INFO), "tvpipe: %s", message)
+
+
+class SentRate:
+    """Log tvpipe's sent frame rate from its one-second `stats` events."""
+
+    def __init__(self):
+        self.mark = self.last = None
+        self.steps = []
+
+    def add(self, event):
+        rows = event.get("receivers", [])
+        now = (
+            event.get("elapsed_ms", 0),
+            event.get("video_frames", 0),
+            sum(row.get("pushed", 0) for row in rows),
+            sum(row.get("dropped", 0) for row in rows),
+        )
+        if self.mark is None or now[0] < self.mark[0]:
+            self.mark = self.last = now
+            self.steps = []
+            return
+        # Video frames in each one-second report show the sent cadence.
+        # Receiver packets count audio frames as well.
+        self.steps.append(str(now[1] - self.last[1]))
+        self.last = now
+        span = (now[0] - self.mark[0]) / 1000
+        if span * 1000 >= _STATS_WINDOW_MS:
+            _LOG.debug(
+                "tvpipe sent %.1f video fps over %.1f s, per report %s; receiver packets %.1f/s, dropped %d",
+                (now[1] - self.mark[1]) / span,
+                span,
+                " ".join(self.steps),
+                (now[2] - self.mark[2]) / span,
+                now[3] - self.mark[3],
+            )
+            self.mark = now
+            self.steps = []
 
 
 async def stop_sender(proc):
@@ -316,6 +374,7 @@ class TvpipeSender(Sender):
                     proxy_url = await self.proxy.start()
                     self.proc = proc = await browsers.spawn(
                         self.executable,
+                        *(["--debug"] if _LOG.isEnabledFor(logging.DEBUG) else []),
                         "--machine",
                         "share",
                         self.url,
@@ -339,6 +398,7 @@ class TvpipeSender(Sender):
                     )
                 proc.stdin.write(b"SLRW")
                 await proc.stdin.drain()
+                rate = SentRate()
                 while True:
                     try:
                         line = await asyncio.wait_for(proc.stdout.readline(), 0.5)
@@ -359,10 +419,15 @@ class TvpipeSender(Sender):
                             "tvpipe requested AirPlay pairing.",
                             "Pair AirPlay and show the page again.",
                         )
+                    if kind == "log":
+                        log_event(event)
+                    if kind in ("capture", "started"):
+                        _LOG.info("tvpipe %s: %s", kind, json.dumps(event))
                     if kind == "stats":
                         self.frames = sum(
                             row.get("pushed", 0) for row in event.get("receivers", [])
                         )
+                        rate.add(event)
                     if kind == "started":
                         self.transition("showing", ["tvpipe started"])
                         failed_host = None
