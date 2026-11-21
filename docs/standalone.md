@@ -59,7 +59,7 @@ The trade-off: the computer that runs the container must stay on and awake. When
      -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8765/api/tool/tv_status
    ```
 
-   Read the log with `docker logs tv-use`. The line `Starting in standalone mode because TV_USE_TOKEN_FILE is set and Supervisor supplied no token` names the mode and the reason. The line `tv-use standalone: MCP at http://0.0.0.0:8765/mcp with a bearer token` shows that the server listens.
+   Read the log with `docker logs tv-use`. A line that starts with `Starting in standalone mode because` names the mode and the reason. The line `tv-use standalone: MCP at http://0.0.0.0:8765/mcp with a bearer token` shows that the server listens.
 
 ## Settings
 
@@ -111,7 +111,7 @@ When a listed TV matches a kept record again, the bridge uses the record and its
 
 Add each TV's ID to `TV_USE_TVS` after you pair it, because the ID is the strongest match. To find the ID, read `identifiers` from `tv://tvs` or `GET /api/tvs` after pairing. Add `id=<first identifier>` to the entry and restart. A later address change then needs only a new `host=`.
 
-To delete a TV's records, send `DELETE /api/tvs/<TV ID>` with the token. This also works for a kept TV, with the ID from the log.
+To delete a TV's records, send `DELETE /api/tvs/<TV ID>` with the token. This also works for a kept TV, with the ID from the log. A TV that `TV_USE_TVS` still names returns without pairings at the next start.
 
 ### How the container chooses its mode
 
@@ -171,7 +171,7 @@ Control, screen reading, screenshots and AirPlay mirroring with sound all work o
 
 - tvpipe kept one process, and its count of frames sent rose at each of 25 samples, 15 seconds apart.
 - Seven `tv_show` calls changed the page. The first took 2.5 seconds, the others 0.6 to 1.4 seconds. After each change, a `tv_look` screenshot showed the new page.
-- Text `tv_look`, `tv_page_run` and `tv_remote` keys worked throughout.
+- Text `tv_look` and `tv_page_run` worked throughout, and the TV acknowledged every `tv_remote` key.
 - From the Mac, neither `127.0.0.1` nor the container's address reached the stage or Chromium's debugging port.
 
 What does not cross the virtual machine:
@@ -187,7 +187,7 @@ Avoid host networking on a Mac. The container's loopback ports then open on the 
 
 - **Chromium's debugging port.** tvpipe starts Chromium with `--remote-debugging-port` and drives it through that port, so the bridge cannot close it or move it to a pipe. A program that connects controls the bridge's browser, and through it can read the container's files, such as the pairing records in `/data` and the token file. In testing, a program on the Mac read a file in `/data` this way.
 - **The page proxy** forwards requests under the page network rules.
-- **The stage** is reachable too, but it refuses other programs. It requires a key that changes at each start, refuses other origins on its socket and cannot be framed.
+- **The stage** is reachable too. It requires a key that changes at each start, refuses other origins on its socket and cannot be framed. A program that uses the debugging port can still read the key from the browser's tab list.
 
 Use host networking only on a computer where you trust every program and user.
 

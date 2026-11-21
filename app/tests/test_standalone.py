@@ -349,6 +349,17 @@ def test_a_tv_that_leaves_the_list_is_kept_and_returns(tmp_path, second, caplog)
     assert {returned.select(name).state.receiver("airplay")["ltpk"] for name in ("Living Room", "Den")} == {"test"}
 
 
+async def test_discovery_reattaches_a_kept_tv_for_good(tmp_path):
+    key = pair(start_fleet(tmp_path, "name=Living Room,host=192.0.2.15"))
+    fleet = start_fleet(tmp_path, argv=["--discover"])
+    assert key in fleet.kept
+    fleet.candidates = AsyncMock(return_value=[{"name": "Living Room", "identifiers": ["AA:01"], "address": "192.0.2.15"}])
+    assert (await fleet.enrol("AA:01"))["id"] == key
+    restarted = start_fleet(tmp_path, argv=["--discover"])
+    assert set(restarted.runtimes) == {key} and restarted.registry["kept"] == []
+    assert paired(tmp_path, key)
+
+
 def test_two_containers_on_one_volume_keep_each_others_tvs(tmp_path):
     living = pair(start_fleet(tmp_path, "name=Living Room,host=192.0.2.15"))
     den = pair(start_fleet(tmp_path, "name=Den,host=192.0.2.16"))
@@ -361,9 +372,10 @@ async def test_explicit_removal_still_deletes_the_pairings(tmp_path):
     fleet = start_fleet(tmp_path, "name=Living Room,host=192.0.2.15")
     key = pair(fleet)
     await fleet.remove(key)
-    assert not (tmp_path / "tvs" / key).exists()
-    # The listed TV stays suppressed, as in Home Assistant, until it is enrolled again.
-    assert start_fleet(tmp_path, "name=Living Room,host=192.0.2.15").runtimes == {}
+    assert not (tmp_path / "tvs" / key).exists() and key not in fleet.runtimes
+    # A TV that the list still names returns without its pairings at the next start.
+    (returned,) = start_fleet(tmp_path, "name=Living Room,host=192.0.2.15").runtimes.values()
+    assert returned.metadata["name"] == "Living Room" and not returned.state.receiver("airplay")
     # A kept TV can be deleted too. A TV with its name is then a new TV.
     den = pair(start_fleet(tmp_path, "name=Den,host=192.0.2.16"))
     fleet = start_fleet(tmp_path, "name=Office,host=192.0.2.17")
@@ -458,7 +470,9 @@ async def test_every_route_needs_the_token_and_refuses_other_sites(tmp_path, aio
         if method == "POST":
             for content_type in ("text/plain", "application/x-www-form-urlencoded", "multipart/form-data", None):
                 headers = good | ({"Content-Type": content_type} if content_type else {})
-                response = await client.request(method, path, data=b"{}", headers=headers)
+                # Without skip_auto_headers, the client would add application/octet-stream.
+                response = await client.request(method, path, data=b"{}", headers=headers,
+                                                skip_auto_headers=["Content-Type"])
                 assert response.status == 415, (method, path, content_type)
                 assert (await response.json())["error"]["code"] == "unsupported_media_type"
 
