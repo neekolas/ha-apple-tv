@@ -113,6 +113,36 @@ Only paths 1–3 could name up, down and select. They are side channels, not doc
 - **MediaDataControl** carries audio statistics (`raup`, `rrmt`) from the TV (tvpipe `mdc.rs:84–112`). **CarPlay-style HID reports** have no source. **Sidecar** is not offered by tvOS.
 - **pcapd** sees IP packets. Bluetooth HID is not IP and Companion traffic is encrypted. **BT packet logger** has no RSD shim in pymobiledevice3 and needs a logging profile. **sysmontap, graphics and springboardservices** carry no input.
 
+## apple-protocols.dev review
+
+[apple-protocols.dev](https://apple-protocols.dev) documents one TypeScript client library, `@apple-protocols/*`. The library controls an Apple TV over AirPlay 2, MRP, RAOP and Companion Link. **The review found no new path and changes no rating in the table.**
+
+All 41 pages were read through the site's full-text export, `llms-full.txt`. Facts marked *(repo)* come from the linked [repository](https://github.com/basmilius/apple-protocols) at commit `3431c380`, not from the site.
+
+What the site does not cover:
+
+- **Screen mirroring.** The word "mirror" appears on no page and nowhere in the library source.
+- **RSD, lockdown and developer services.** No page. Paths 1–3, 10, 11 and 13 are not affected.
+- **DACP callbacks.** The site lists `dacpId` and `activeRemoteId` as session headers only ([reference](https://apple-protocols.dev/reference/airplay)).
+- **`sendMediaRemoteCommand` and `updateMRSupportedCommands`.** Neither name appears on the site or in the source. Path 5 still rests on shairport-sync alone.
+
+What the site documents that bears on the question:
+
+- **Path 4, event channel.** The receiver sends `POST /command` and the client answers `200 OK` ([AirPlay sessions and channels](https://apple-protocols.dev/protocols/airplay)). The known command types are `duckAudio`, `unduckAudio`, `cycleUsePickedRoute`, `died` and the play-queue commands `playbackState`, `notification` and `unhandledURL` *(repo: `channels/event.ts`, `playback/playQueue.ts`)*. All are housekeeping. The library opens this channel for the MRP tunnel and for URL playback, never in a mirror session.
+- **Path 6, MRP.** The TV pushes now-playing state and supported commands. The client sends commands ([Media Remote](https://apple-protocols.dev/protocols/mrp)). The library handles no command sent by the TV *(repo: `mrp/codec.ts`)*. This is a second client that agrees with pyatv.
+- **Path 7, Companion events.** The library registers interest in `_iMC`, `SystemStatus`, `TVSystemStatus`, `NowPlayingInfo` and `SupportedActions` *(repo: `companion-link/src/session.ts:33`)*. The last two are not in the fork's list. They carry now-playing state, not a press. `_hidC`, `_hidT`, `_touchC` and the game controller event `_gcC` all go from the client to the TV ([Companion Link](https://apple-protocols.dev/protocols/companion-link)).
+- **Path 12, MRP HID.** HID events go from the client to the TV and the TV never replies. tvOS drops the MRP session when it gets a virtual touch event ([Media Remote](https://apple-protocols.dev/protocols/mrp)). `registerHIDDevice` makes the client an input device *(repo: `mrp/messages.ts:348–372`)*. It does not subscribe the client to the TV's input. This supports "Do not build".
+- **Path 12, MRP game controller.** The protos exist, with `dPadX`, `dPadY`, `a` and `pause` fields. The library sends none of them. The source does not show which side sends them *(repo: `proto/GameControllerMessage.proto`, `RegisterForGameControllerEventsMessage.proto`)*.
+- **AirPlay feature bits.** The library names 44 bits *(repo: `airplayFeatures.ts`)*. None names HID, input or touch forwarding. The source says a device needs `SupportsHangdogRemoteControl` to receive HID events. The bit means the TV accepts input, not that it sends any.
+- **SETUP options.** The session that carries the MRP tunnel sends `isRemoteControlOnly: true` and a type-130 stream, as pyatv does *(repo: `session.ts:248–251, 507–516`)*. No option asks the TV to forward input.
+- **MRP update subscription.** The client can subscribe to artwork, now-playing, volume, keyboard, output device and system endpoint updates *(repo: `proto/ClientUpdatesConfigMessage.proto`)*. No flag concerns input.
+- **`FetchSiriRemoteInfo`.** The only API on the site that names the Siri Remote is a Companion request with one reply ([reference](https://apple-protocols.dev/reference/companion-link)). The client polls it. The TV does not push it.
+
+Two tools in the repository could help a later test. Neither was run.
+
+- **Man-in-the-middle proxy.** The [diagnostics](https://apple-protocols.dev/diagnostics) app has a proxy that sits between a controller and the TV. It answers the controller's pairing, connects to the TV with stored credentials, and logs the decrypted control channel, event channel and data channel *(repo: `packages/diagnostics/src/main/proxy/airplay/proxy.ts:33–38`)*. Path 5 lacks a capture from an Apple sender. With an iPhone as the controller, this proxy could record the `updateMRSupportedCommands` body and any `sendMediaRemoteCommand` that tvOS sends back. It does not relay audio or timing. It treats every data stream as MRP, so an iPhone mirror through it will most likely fail without a patch *(speculation)*.
+- **Traffic sink.** The library reports every decoded message to a traffic sink ([Transport and logging](https://apple-protocols.dev/protocols/transport)), and the diagnostics CLI prints all traffic since a mark. It could log the MRP tunnel and Companion next to a mirror while a person presses keys. It covers paths 6 and 7 with every MRP type decoded. It does not cover the event channel of the mirror session, which tvpipe owns.
+
 ## Companion presses versus the physical remote
 
 The hardware probe sends presses with `tv_remote`. That tool uses Companion `_hidC` (`vendor/pyatv/pyatv/protocols/companion/api.py:319`). The physical Siri Remote enters tvOS through a different path. No primary source for the tvOS internals was found, so this split is an assumption.
@@ -158,6 +188,7 @@ Other projects:
 - [tvpipe v0.2.0](https://github.com/mitsuhiko/tvpipe/tree/v0.2.0), commit `c2456d29`: `docs/airplay-mirroring.md:285, 1205–1232`, `crates/tvpipe/src/airplay/events.rs`, `session.rs:769–781`, `mdc.rs`, `crates/tvpipe/tests/vectors/airplay-mirror/appletv-session.txt:148`
 - [doubletake v0.6.0](https://github.com/omarroth/doubletake/tree/v0.6.0), commit `be27776b`: `internal/airplay/event_channel.go:268–335`
 - [shairport-sync 5.6](https://github.com/mikebrady/shairport-sync/tree/5.6), commit `9118bbc`: `remote/remote.c:33–48, 190–223, 544–565`, `ap2_event_receiver.c:97–117`, `rtsp.c:2051–2069`. [Release notes](https://github.com/mikebrady/shairport-sync/releases)
+- [apple-protocols.dev](https://apple-protocols.dev) (`llms-full.txt`, all pages) and [basmilius/apple-protocols](https://github.com/basmilius/apple-protocols), commit `3431c380`: `packages/airplay/src/channels/event.ts:64–101`, `session.ts:248–251, 507–516`, `playback/playQueue.ts:203–219`, `airplayFeatures.ts:8–51`, `mrp/codec.ts:86–152`, `mrp/messages.ts:348–372`, `packages/airplay/proto/GameControllerMessage.proto`, `RegisterForGameControllerEventsMessage.proto`, `ClientUpdatesConfigMessage.proto`, `packages/companion-link/src/session.ts:33`, `state.ts:17`, `messages.ts:98–129, 195–197, 285–293`, `packages/diagnostics/src/main/proxy/airplay/proxy.ts:33–38, 161–227`
 - pymobiledevice3 11.61.0: `services/os_trace.py`, `services/notification_proxy.py`, `services/accessibilityaudit.py`, `services/pcapd.py`, `services/bt_packet_logger.py`, `services/dvt/instruments/activity_trace_tap.py`, `core_profile_session_tap.py`
 - macOS SDK `usr/include/sys/kdebug.h`; `/usr/share/misc/trace.codes`
 - Lab dumps of `axauditd` and `AccessibilityAudit` methods from iOS 18.6 simulator binaries (`/tmp/atvlab/`, not in the repository)
