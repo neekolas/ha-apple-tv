@@ -1477,14 +1477,20 @@ own.addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) e.preventD
 </script>"""
 
 
-# Three rows of eight tiles, as on the page of the hardware test. Each row scrolls sideways on its own.
-# One column is 320 px: a 300 px tile and a 20 px gap. The viewport shows four columns.
-ROWS_CONTENT = """<style>
+def rows_page(*tiles, style=""):
+    """Rows with the given numbers of tiles, as on the page of the hardware test. Each row scrolls sideways on its own.
+
+    One column is 320 px: a 300 px tile and a 20 px gap. The viewport shows four columns.
+    """
+    return """<style>
 body{margin:0;background:#111} .row{display:flex;gap:20px;overflow-x:auto;padding:30px 0;scroll-behavior:smooth}
-.row button{flex:none;width:300px;height:160px;border:0;background:#333}
-</style>""" + "".join(
-    f"<div class=row id=row{row} data-tv-group>" + "".join(f"<button id=t{row}{column}></button>" for column in range(8)) + "</div>"
-    for row in range(3))
+.row button{flex:none;width:300px;height:160px;border:0;background:#333}""" + style + "</style>" + "".join(
+        f"<div class=row id=row{row} data-tv-group>" + "".join(f"<button id=t{row}{column}></button>" for column in range(count)) + "</div>"
+        for row, count in enumerate(tiles))
+
+
+# Three rows of eight tiles.
+ROWS_CONTENT = rows_page(8, 8, 8)
 
 
 @pytest.fixture
@@ -1870,3 +1876,64 @@ async def test_tvos_only_a_sideways_scroller_keeps_left_and_right(tvos):
     assert await tvos.frame.evaluate("getComputedStyle(main).overflowX") == "auto"
     assert await tvos.press("right", start="inside") == "outside"
     assert await tvos.press("left") == "inside"
+
+
+@pytest.mark.parametrize("browser_frame", [rows_page(8, 2, 8), rows_page(8, 8, 8, style="#row1{width:620px}")],
+                         indirect=True, ids=["short", "narrow"])
+async def test_tvos_up_and_down_take_the_next_row_when_nothing_of_it_lies_straight_ahead(tvos):
+    """Up from column 6 went two rows up, to the tile straight above it there. tvOS takes the nearest tile of the next row.
+
+    The middle row has two tiles, or eight in a scroller that shows two. Its tiles past that edge are
+    hidden, so they do not count, although one of them lies straight ahead.
+    """
+    await tvos.scroll(row2=1260)  # t26 is at 660-960 and t27 at 980-1280. t11 ends at 620.
+    assert await tvos.press("up", start="t26") == "t11"  # Not t02 at 640-940 in the first row.
+    await tvos.scroll(row1=0, row2=1260)
+    assert await tvos.press("down", start="t03") == "t11"  # Not t27 in the last row.
+    assert await tvos.press("down") == "t25"
+    assert await tvos.press("up") == "t11"
+    assert await tvos.press("up") == "t01"
+
+
+# Rows of narrow tiles. Every second row is half a column further right, so no tile lies straight
+# above or below another one. The rows two apart line up.
+STAGGERED_ROWS_CONTENT = """<style>
+body{margin:0;background:#111} .row{display:flex;gap:180px;padding:30px 0}
+.row button{flex:none;width:120px;height:100px;border:0;background:#333}
+</style>""" + "".join(
+    f"<div class=row data-tv-group style='padding-left:{210 if row % 2 else 40}px'>"
+    + "".join(f"<button id=t{row}{column}></button>" for column in range(4)) + "</div>" for row in range(4))
+
+
+@pytest.mark.parametrize("browser_frame", [STAGGERED_ROWS_CONTENT], indirect=True)
+async def test_tvos_up_and_down_zigzag_through_a_staggered_grid(tvos):
+    # t01 is at 340-460. Below it, t10 ends at 330 and t11 starts at 510. t21 lies straight below, two rows down.
+    assert await tvos.press("down", start="t01") == "t10"
+    assert await tvos.press("down") == "t21"
+    assert await tvos.press("down") == "t30"
+    assert await tvos.press("up") == "t21"
+    assert await tvos.press("up") == "t10"
+    assert await tvos.press("up") == "t01"
+    assert await tvos.press("down", start="t03") == "t12"
+
+
+# Three columns of tiles. The middle column is 60 px lower, so its tiles lie partly beside those of
+# the other columns. The right column ends after one tile.
+STAGGERED_COLUMNS_CONTENT = """<style>
+body{margin:0;background:#111} button{position:absolute;width:200px;height:100px;border:0;background:#333}
+</style>""" + "".join(
+    f"<button id=c{column}{row} style='left:{40 + 240 * column}px;top:{20 + 60 * (column == 1) + 140 * row}px'></button>"
+    for column, count in enumerate((3, 3, 1)) for row in range(count))
+
+
+@pytest.mark.parametrize("browser_frame", [STAGGERED_COLUMNS_CONTENT], indirect=True)
+async def test_tvos_up_and_down_stay_in_a_staggered_column(tvos):
+    # c10 at 80-180 starts nearer below c00 at 20-120, but c01 at 160-260 lies straight below.
+    assert await tvos.press("down", start="c00") == "c01"
+    assert await tvos.press("down") == "c02"
+    assert await tvos.press("up", "up") == "c00"
+    assert await tvos.press("down", start="c10") == "c11"
+    assert await tvos.press("down") == "c12"
+    assert await tvos.press("up", "up") == "c10"
+    # At the end of a column, the nearest tile below wins, although it lies partly beside.
+    assert await tvos.press("down", start="c20") == "c10"

@@ -135,6 +135,8 @@ FOCUS_HELPER = r"""() => {
 # the focused item animates. Retune CONFIG when the frame rate rises.
 # Hardware finding: a row must not remember its last focused item. Up and down then go
 # diagonally, which reads as a fault. They take the item straight above or below on screen.
+# When the next row has nothing there, because it is short or offset, they take its nearest item,
+# as tvOS does. A skip to a row further on also reads as a fault.
 TVOS_HELPER = r"""() => {
   if (window.__tvRemoteFocus) return;
   window.__tvRemoteFocus = 'tvos';
@@ -204,14 +206,24 @@ TVOS_HELPER = r"""() => {
     const w = r.width / s, h = r.height / s, x = r.left + (r.width - w) / 2, y = r.top + (r.height - h) / 2;
     return {left: x, top: y, right: x + w, bottom: y + h, width: w, height: h};
   };
+  // A container that scrolls sideways. One that scrolls only up and down also computes to
+  // overflow-x: auto, so the widths decide.
+  const sideways = node => node.scrollWidth > node.clientWidth && /auto|scroll/.test(getComputedStyle(node).overflowX);
   // The row of an item: the nearest [data-tv-group], or the nearest container that scrolls sideways.
-  // A container that scrolls only up and down also computes to overflow-x: auto, so the widths decide.
   const rowOf = el => {
     for (let node = el.parentElement; node && node !== document.body && node !== root; node = node.parentElement) {
-      if (node.hasAttribute('data-tv-group') || (node.scrollWidth > node.clientWidth
-          && /auto|scroll/.test(getComputedStyle(node).overflowX))) return node;
+      if (node.hasAttribute('data-tv-group') || sideways(node)) return node;
     }
     return null;
+  };
+  // The left and right edge of the part of an item that its sideways scroller shows.
+  const shown = (el, r) => {
+    for (let node = el.parentElement; node && node !== document.body && node !== root; node = node.parentElement) {
+      if (!sideways(node)) continue;
+      const left = node.getBoundingClientRect().left + node.clientLeft;
+      return [Math.max(r.left, left), Math.min(r.right, left + node.clientWidth)];
+    }
+    return [r.left, r.right];
   };
   addEventListener('focusin', event => {
     const el = event.target;
@@ -255,7 +267,7 @@ TVOS_HELPER = r"""() => {
       .filter(([, r]) => r.width > 0 && r.height > 0);
     const from = active && box(active);
     const row = active && dir[0] ? rowOf(active) : null;
-    const beam = [];
+    const next = [];  // Items that can be in the next row or column.
     let best = null, bestScore = Infinity;
     for (const [el, r] of items) {
       if (!from) {
@@ -269,31 +281,41 @@ TVOS_HELPER = r"""() => {
       const dy = r.top + r.height / 2 - (from.top + from.height / 2);
       const along = dx * dir[0] + dy * dir[1];
       if (along <= 1) continue;
+      // Where the item starts and ends past the focused box in the pressed direction.
+      const start = dir[0] ? (dir[0] > 0 ? r.left - from.right : from.left - r.right)
+        : (dir[1] > 0 ? r.top - from.bottom : from.top - r.bottom);
+      const end = start + (dir[0] ? r.width : r.height);
       // How far the two boxes overlap on the other axis. Below zero: the distance between them.
       const overlap = dir[0] ? Math.min(r.bottom, from.bottom) - Math.max(r.top, from.top)
         : Math.min(r.right, from.right) - Math.max(r.left, from.left);
-      if (overlap > 1) {
-        // In the beam: the focused box projected in the pressed direction.
-        const gap = Math.max(0, dir[0] ? (dir[0] > 0 ? r.left - from.right : from.left - r.right)
-          : (dir[1] > 0 ? r.top - from.bottom : from.top - r.bottom));
-        const size = dir[0] ? Math.min(r.height, from.height) : Math.min(r.width, from.width);
-        beam.push({el, gap, end: gap + (dir[0] ? r.width : r.height),
-          share: Math.round(100 * overlap / size), off: Math.abs(dir[0] ? dy : dx)});
+      // Left and right take an item in the beam: the focused box projected in the pressed direction.
+      // Up and down also take an item whose center lies past the focused box. The next row can be
+      // short or offset and have nothing in the beam, and a row further on must not win then.
+      if (overlap > 1 || (dir[1] && start + end > 0)) {
+        next.push({el, r, gap: Math.max(0, start), end});
         continue;
       }
-      // Outside the beam. Used only when the beam is empty. Left and right stay in their row:
-      // at the end of a row, a tile of another row that is scrolled differently is not "right".
+      // Used only when nothing qualifies above. Left and right stay in their row: at the end of
+      // a row, a tile of another row that is scrolled differently is not "right".
       const cross = Math.max(0, -overlap);
       if (along > cross && along + cross * 4 < bestScore && (!dir[0] || rowOf(el) === row)) {
         [best, bestScore] = [el, along + cross * 4];
       }
     }
-    if (beam.length) {
-      // The nearest row or column of the beam is every item that starts before the nearest one ends.
-      // In it, the item that lines up best with the focused box wins, then the nearest center.
-      const near = beam.reduce((a, b) => (b.gap < a.gap ? b : a));
-      best = beam.filter(item => item.gap < near.end)
-        .reduce((a, b) => ((b.share - a.share || a.off - b.off || a.gap - b.gap) > 0 ? b : a)).el;
+    if (next.length) {
+      // The next row or column is every such item that starts before the first one of them ends.
+      // In it, the item that covers most of the focused box wins, then the nearest one, then the
+      // nearest center. For up and down, only the part of a tile that its row shows counts.
+      const stop = Math.min(...next.map(item => item.end));
+      const [low, high] = dir[0] ? [from.top, from.bottom] : [from.left, from.right];
+      best = next.filter(item => item.gap < stop).map(({el, r, gap}) => {
+        const [a, b] = dir[0] ? [r.top, r.bottom] : shown(el, r);
+        const overlap = Math.min(b, high) - Math.max(a, low);
+        const size = Math.min(dir[0] ? r.height : r.width, high - low);
+        return {el, gap, hidden: b <= a, share: Math.max(0, Math.round(100 * overlap / size)),
+          apart: Math.max(0, -overlap), off: Math.abs(a + b - low - high) / 2};
+      }).reduce((x, y) => ((x.hidden - y.hidden || y.share - x.share || x.apart - y.apart
+        || x.off - y.off || x.gap - y.gap) > 0 ? y : x)).el;
     }
     if (!best) return;  // Nothing that way. The page scrolls as usual.
     event.preventDefault();

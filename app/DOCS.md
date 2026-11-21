@@ -113,7 +113,7 @@ Pass `remote` to `tv_show` to let a person use the Siri Remote on a mirrored pag
 - `remote: "keys"` sends Left, Right, Up, Down and Select to the page as the keys `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` and `Enter`. Use it for a page that handles `keydown` itself.
 - `remote: "focus"` also adds a focus helper. Arrows move focus between links and controls, a focus ring shows the focused element, and Select activates it. Use it for ordinary pages. The helper skips a key that the page handled with `preventDefault()`.
 
-- `remote: "tvos"` is `focus` with a tvOS look. The focused item lifts with a shadow and a white ring, Up and Down go to the item straight above or below on screen, a row scrolls at once without a glide, and scrollbars are hidden. Use it for pages you write for the TV. Use `focus` for other pages, where a scaled item could be clipped.
+- `remote: "tvos"` is `focus` with a tvOS look. The focused item lifts with a shadow and a white ring, Up and Down go to the next row on screen and take the item straight above or below, or else the nearest one, a row scrolls at once without a glide, and scrollbars are hidden. Use it for pages you write for the TV. Use `focus` for other pages, where a scaled item could be clipped.
 
 For example, `tv_show {"url":"https://example.org/","remote":"focus"}`.
 

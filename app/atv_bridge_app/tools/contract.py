@@ -245,7 +245,7 @@ With remote: "keys", a mirrored page gets ArrowLeft, ArrowRight, ArrowUp, ArrowD
 for Siri Remote input. With remote: "focus", arrows also move focus between links and controls,
 unless the page handles the key itself.
 With remote: "tvos", the focused item also lifts with a shadow and a white ring, and Up and Down go to
-the item straight above or below on screen. For "tvos", put focusable items in rows and grids, put
+the next row on screen and take the item straight above or below, or else the nearest one. For "tvos", put focusable items in rows and grids, put
 each row in a horizontal scroll container or a data-tv-group element, leave 8% spare room around
 items, use a dark background, and do not use hover-only controls or animation that runs without input.
 Clickpad remote: ring clicks are arrows and the center click is Enter (verified).
