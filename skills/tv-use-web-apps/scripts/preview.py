@@ -34,14 +34,18 @@ KEYS = {"left": "ArrowLeft", "right": "ArrowRight", "up": "ArrowUp", "down": "Ar
 HELPER_SRC = pathlib.Path(__file__).resolve().parents[3] / "app/atv_bridge_app/present/remote_input.py"
 
 
-def remote_helper(mode, src):
-    """Read the focus helper the bridge injects for remote mode, from its Python source."""
+def remote_script(name, src):
+    """Read a script that the bridge runs for remote input, from its Python source."""
     import re
-    name = {"focus": "FOCUS_HELPER", "tvos": "TVOS_HELPER"}[mode]
     found = re.search(rf'^{name} = r?"""(.*?)"""', src.read_text(), re.S | re.M)
     if not found:
         raise SystemExit(f"{name} not found in {src}; pass --helper-src to the bridge's remote_input.py")
     return found.group(1)
+
+
+def remote_helper(mode, src):
+    """Read the focus helper the bridge injects for remote mode, from its Python source."""
+    return remote_script({"focus": "FOCUS_HELPER", "tvos": "TVOS_HELPER"}[mode], src)
 
 
 TYPES = {".woff2": "font/woff2", ".jpg": "image/jpeg", ".png": "image/png", ".svg": "image/svg+xml"}
@@ -102,17 +106,23 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(**({} if args.bundled else {"channel": "chrome"}))
         page = await browser.new_page(viewport={"width": width, "height": height})
+        # Chromium reports autofocus in the sandboxed frame as an error. The bridge applies autofocus itself.
         page.on("console", lambda m: m.type == "error" and not (args.no_fonts and "404" in m.text)
-                and errors.append(m.text))
+                and not m.text.startswith("Blocked autofocusing") and errors.append(m.text))
         page.on("pageerror", lambda e: errors.append(str(e)))
         await page.goto(f"http://127.0.0.1:{server.server_port}/")
         frame = page.frame_locator("#app")
         await frame.locator("body").wait_for()
         app = next(f for f in page.frames if f.url.endswith("/app/index.html"))
+        helper = remote_helper(args.remote, args.helper_src) if args.remote else None
+        if helper:  # as the bridge does at show time: the helper, the page's autofocus, and system focus to show it
+            await page.evaluate("document.getElementById('app').focus()")
+            await app.evaluate(helper)
+            await app.evaluate(remote_script("AUTOFOCUS", args.helper_src))
+            await (await page.context.new_cdp_session(page)).send("Input.insertText", {"text": ""})
         await page.wait_for_timeout(400)
         await page.screenshot(path=args.out / "0-initial.png")
         print("0-initial", json.dumps(await app.evaluate("window.app && window.app.state()")))
-        helper = remote_helper(args.remote, args.helper_src) if args.remote else None
         for n, patch in enumerate(steps, 1):
             try:
                 if "_key" in patch:  # a Siri Remote press: left, right, up, down or select

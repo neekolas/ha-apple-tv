@@ -130,7 +130,7 @@ A show returns `data.page_id`, `data.size` and `data.transport`. A mirror report
 
 For example, `tv_show {"html":"<button onclick=\"next()\">Next</button>","remote":"focus"}`.
 
-Chromium blocks `autofocus` in the stage's frame, so the bridge applies it when the page shows: it focuses the first focusable `autofocus` element, unless the page has focused an element itself. The focused element shows its focus before the first press, and the first arrow moves from it, as on tvOS. In `focus` and `tvos`, an arrow with nothing focused goes to the `autofocus` element, or else to the first item on screen.
+Chromium blocks `autofocus` in the stage's frame. In `focus` and `tvos`, the bridge applies it when the page shows: it focuses the first focusable `autofocus` element, unless the page has focused an element itself. The focused element shows its focus before the first press, and the first arrow moves from it, as on tvOS. An arrow with nothing focused goes to the `autofocus` element, or else to the first item on screen.
 
 Write pages for `tvos` with these layout rules:
 

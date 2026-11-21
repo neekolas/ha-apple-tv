@@ -625,10 +625,15 @@ class RemoteInput:
         return arrived
 
     async def prime(self):
-        """Find the content document at show time, so the first press is not slow. Focus its [autofocus] item."""
+        """Find the content document at show time, so the first press is not slow.
+
+        In focus and tvos mode, also focus the page's [autofocus] item and show its focus.
+        """
         with suppress(Exception):
             async with asyncio.timeout(3):
                 frame, _, session = await self.prepare()
+                if self.mode not in HELPERS:
+                    return
                 await frame.evaluate(AUTOFOCUS)
                 # Only input gives a frame system focus. Without it, :focus does not match, and the focused item
                 # shows no ring or lift until the first press. Empty text sends the page no event.
