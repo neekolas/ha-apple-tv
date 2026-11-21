@@ -19,9 +19,14 @@ KEYS = {
     "down": "ArrowDown",
     "select": "Enter",
 }
+# Input.dispatchKeyEvent needs the Windows key code of each key.
+KEY_CODES = {"ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40, "Enter": 13}
 STALE_S = 2.0
 QUEUE_LIMIT = 8
 RETRY_MAX_S = 30
+# A key needs no new wake script when one ran in the content frame less than this long ago.
+# The frame dropped keys only after idle minutes. Set to 0 to wake the frame before every key.
+WAKE_FRESH_S = 0.5
 TOUCH_LOG_LIMIT = 20  # Touch reports logged per TOUCH_LOG_WINDOW_S. A finger can touch the remote many times a second.
 TOUCH_LOG_WINDOW_S = 10
 # Reasons for state "unavailable" that start in the app. The observer adds its own
@@ -34,10 +39,12 @@ FOCUS_STAGE = """() => {
   if (frame && document.activeElement !== frame) frame.focus();
 }"""
 
-# Runs in the content document before every key. It counts trusted key presses in
+# Runs in the content document before a key and after it. It counts trusted key presses in
 # window.__tvRemote and returns the document's id, the count, and whether a helper is installed.
 # Hardware finding: after a few idle minutes the sandboxed frame drops a key unless a
 # script ran in it just before. This evaluation is that script. Do not remove it.
+# The bridge waits for its result before it sends the key. A key that follows another one
+# within WAKE_FRESH_S uses the run after that key as its wake.
 PRESS_LOG = """() => {
   if (!window.__tvRemote) {
     const log = window.__tvRemote = {id: Math.random().toString(36).slice(2), count: 0, last: null};
@@ -295,6 +302,14 @@ TVOS_HELPER = r"""() => {
 HELPERS = {"focus": FOCUS_HELPER, "tvos": TVOS_HELPER}
 
 
+def key_events(key):
+    """The key-down and key-up parameters of one press, as Playwright's keyboard.press sends them."""
+    base = {"key": key, "code": key, "windowsVirtualKeyCode": KEY_CODES[key]}
+    # Enter carries its text. The character event is what activates a button or a link.
+    down = {"type": "keyDown", "text": "\r", "unmodifiedText": "\r"} if key == "Enter" else {"type": "rawKeyDown"}
+    return base | down, base | {"type": "keyUp"}
+
+
 class RemoteInput:
     """Keep the observer's button watch running while a page asks for remote input.
 
@@ -320,6 +335,9 @@ class RemoteInput:
         self.queue = asyncio.Queue()
         self.touch_logged = deque()
         self.touch_skipped = 0
+        self.cdp = None  # (page, CDP session) for key events.
+        self.awake = None  # (frame, press log state, time) after a key that left the document ready for the next one.
+        self.timing = {}  # Seconds that each step of the last send took.
         ops.stage.on_change = self.sync
         # The transport can change after the show: a mirror can fail or fall back to a recording.
         for sender in {id(s): s for s in (ops.sender, getattr(ops, "live_mirror", None)) if s}.values():
@@ -343,7 +361,8 @@ class RemoteInput:
         mode = (page or {}).get("remote") or "off"
         revision = page["revision"] if page else None
         if revision != self.revision:
-            self.revision, self.presses, self.last = revision, 0, None
+            # A top-level page keeps its frame object across shows, so the frame alone does not tell a new page.
+            self.revision, self.presses, self.last, self.awake = revision, 0, None, None
         self.mode = mode
         if mode == "off":
             self._set("off")
@@ -442,52 +461,109 @@ class RemoteInput:
 
     async def _dispatch(self):
         while True:
-            key, queued, event = await self.queue.get()
-            if not self.wanted() or time.monotonic() - queued > STALE_S:
+            batch = [await self.queue.get()]
+            # Keys that arrived while the last ones went out leave together, as the arrows after a flick do.
+            # Select ends a batch: it can start a navigation, and the next key must find the new document.
+            while not self.queue.empty() and batch[-1][0] != "select":
+                batch.append(self.queue.get_nowait())
+            now = time.monotonic()
+            batch = [item for item in batch if now - item[1] <= STALE_S] if self.wanted() else []
+            if not batch:
                 continue
+            keys = [key for key, _, _ in batch]
+            names = " + ".join(f"{key} ({event['gesture']})" if event.get("gesture") else key for key, _, event in batch)
+            started = time.time()
             try:
                 async with asyncio.timeout(STALE_S):
-                    if not await self.send(key):
-                        self.missed += 1
-                        _LOG.warning("Remote key %s was sent but the page did not get it", key)
-                        continue
+                    arrived = await self.send(*keys)
             except Exception as exc:  # noqa: BLE001 - A lost key must not stop the next one.
-                _LOG.info("Remote key %s was not delivered (%s)", key, type(exc).__name__)
+                self.awake = None
+                _LOG.info("Remote key %s was not delivered (%s)", names, type(exc).__name__)
                 continue
-            received = event.get("received") or time.time()
+            if arrived < len(keys):
+                self.missed += len(keys) - arrived
+                _LOG.warning("Remote key %s was sent but the page did not get it (%d of %d arrived)", names, arrived, len(keys))
+                continue
+            event = batch[0][2]
+            received = event.get("received") or started
+            step = {name: seconds * 1000 for name, seconds in self.timing.items()}
+            # The key is in the page when its events are acknowledged. The press log read comes after that.
             _LOG.debug(
-                "Remote key %s sent to the page %d ms after the observer read it (TV log to observer %d ms)",
-                key,
-                (time.time() - received) * 1000,
+                "Remote key %s reached the page %d ms after the observer read it "
+                "(queue %d, bind %d, wake %d, keys %d ms; press log read %d ms more; TV log to observer %d ms)",
+                names,
+                (started - received) * 1000 + step["bind"] + step["wake"] + step["keys"],
+                (started - received) * 1000,
+                step["bind"],
+                step["wake"],
+                step["keys"],
+                step["log"],
                 (received - event.get("device_time", received)) * 1000,
             )
+
+    async def session(self, page):
+        """Return the CDP session that carries key events to a page. One is made for each page."""
+        if not self.cdp or self.cdp[0] is not page:
+            self.cdp = (page, await page.context.new_cdp_session(page))
+        return self.cdp[1]
 
     async def prepare(self):
         """Give the current content document keyboard focus and, in focus and tvos mode, the helper.
 
-        Return the frame and its press log state.
+        Return the frame, its press log state and the CDP session of its page.
         """
+        started = time.monotonic()
         frame, _, direct = await self.interaction.binding()
-        if not direct:
-            await frame.page.evaluate(FOCUS_STAGE)
-        state = await frame.evaluate(PRESS_LOG)
-        helper = HELPERS.get(self.mode)
-        # The helper source is large. Send it only to a document that does not have it.
-        if helper and not state[2]:
-            await frame.evaluate(helper)
-        return frame, state
+        session = await self.session(frame.page)
+        bound = time.monotonic()
+        awake = self.awake
+        if awake and awake[0] is frame and bound - awake[2] < WAKE_FRESH_S:
+            # A script ran in this document a moment ago, after the last key. Focus and helper are in place.
+            state = awake[1]
+        else:
+            # The stage document and the content document are two frames, so the two scripts run side by side.
+            focus = [] if direct else [frame.page.evaluate(FOCUS_STAGE)]
+            state, *_ = await asyncio.gather(frame.evaluate(PRESS_LOG), *focus)
+            helper = HELPERS.get(self.mode)
+            # The helper source is large. Send it only to a document that does not have it.
+            if helper and not state[2]:
+                await frame.evaluate(helper)
+        self.timing = {"bind": bound - started, "wake": time.monotonic() - bound, "keys": 0.0, "log": 0.0}
+        return frame, state, session
 
-    async def send(self, key):
-        """Press one key in the current content document. Return False if the page did not get it."""
-        # A mirror restart or a navigation loses focus and the helper. Restore both for each key.
-        frame, before = await self.prepare()
-        await frame.page.keyboard.press(KEYS[key])
+    async def send(self, *keys):
+        """Press keys in the current content document, in order. Return how many of them the page got."""
+        # A mirror restart or a navigation loses focus and the helper. Restore both, unless a key just went out.
+        frame, before, session = await self.prepare()
+        timing, self.awake = self.timing, None
+        woke = time.monotonic()
+        try:
+            # Nothing waits between the events. One CDP session handles its messages in the order sent,
+            # so every key-down still comes before its key-up and before the next key.
+            await asyncio.gather(*(
+                session.send("Input.dispatchKeyEvent", event) for key in keys for event in key_events(KEYS[key])
+            ))
+        except Exception:
+            self.cdp = None
+            raise
+        pressed = time.monotonic()
+        timing["keys"] = pressed - woke
+        self.timing = timing
         try:
             after = await frame.evaluate(PRESS_LOG)
         except Exception:  # noqa: BLE001 - The key may have started a navigation.
-            return True
+            return len(keys)
+        done = time.monotonic()
+        timing["log"] = done - pressed
         # A new id means a new document, so the count cannot be compared.
-        return after[0] != before[0] or after[1] > before[1]
+        if after[0] != before[0]:
+            return len(keys)
+        arrived = min(len(keys), after[1] - before[1])
+        # This read is the wake for a key that follows at once. Not after Select, which can start a navigation,
+        # and not for a document that lost its helper.
+        if arrived == len(keys) and keys[-1] != "select" and (after[2] or self.mode not in HELPERS):
+            self.awake = (frame, after, done)
+        return arrived
 
     async def prime(self):
         """Find the content document at show time, so the first press is not slow."""

@@ -157,7 +157,7 @@ Notes:
 
 - Presses sent with `tv_remote` during the page are forwarded to the page too.
 - Swipes are read from the TV's debug log. In a capture, the TV logged about 65 lines per second while a finger was on the remote, one burst of 513 lines when the remote woke, and less than one line per second otherwise.
-- Set the app's log level to `debug` to log each forwarded key with its delay, and button lines that the bridge did not recognize. One press on the physical remote then shows what the TV logs for it.
+- Set the app's log level to `debug` to log each forwarded key with its delay, and button lines that the bridge did not recognize. One press on the physical remote then shows what the TV logs for it. The key line splits the delay into `queue` (from the observer's read to the start of the send), `bind` (finding the content frame), `wake` (the script that must run in the frame before a key), `keys` (key-down and key-up) and the press log read after the key. A key that follows another one within half a second needs no wake. Keys that wait together, such as the arrows after a flick, go out together and share one line.
 
 ### Presentation mode
 

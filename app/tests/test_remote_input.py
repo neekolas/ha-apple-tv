@@ -3,6 +3,7 @@
 import asyncio
 import json
 import plistlib
+import re
 import struct
 import sys
 import time
@@ -1224,28 +1225,47 @@ def test_show_schema_accepts_the_remote_option():
 
 def fake_frame(delivered=True, document="doc"):
     """A content frame whose press log counts each key the page got."""
-    page = SimpleNamespace(evaluate=AsyncMock(), keyboard=SimpleNamespace(press=AsyncMock()))
+    session = SimpleNamespace(send=AsyncMock())
+    context = SimpleNamespace(new_cdp_session=AsyncMock(return_value=session))
+    page = SimpleNamespace(evaluate=AsyncMock(), context=context)
 
     async def evaluate(script):
         if script == PRESS_LOG:
-            return [frame.document, page.keyboard.press.await_count if delivered else 0, frame.helper]
+            return [frame.document, len(pressed(frame)) if delivered else 0, frame.helper]
         frame.helper = True
 
-    frame = SimpleNamespace(page=page, evaluate=AsyncMock(side_effect=evaluate), document=document, helper=False,
-                            url="http://127.0.0.1:8766/c/a/index.html")
+    frame = SimpleNamespace(page=page, session=session, evaluate=AsyncMock(side_effect=evaluate), document=document,
+                            helper=False, url="http://127.0.0.1:8766/c/a/index.html")
     return frame
 
 
+def pressed(frame):
+    """The keys that went to a fake frame, from its key-down events."""
+    return [call.args[1]["key"] for call in frame.session.send.await_args_list if call.args[1]["type"] != "keyUp"]
+
+
 @pytest.mark.parametrize("mode,direct", [("keys", False), ("focus", False), ("keys", True), ("focus", True), ("tvos", False)])
-async def test_key_goes_to_the_current_content_frame(remote, mode, direct):
+async def test_key_goes_to_the_current_content_frame(remote, monkeypatch, mode, direct):
     service, observer, control = remote
     frame = fake_frame()
     control.interaction.binding = AsyncMock(return_value=(frame, frame.url, direct))
     control.mode = mode
+    # Without the window for keys in a run, every key is on its own.
+    monkeypatch.setattr(remote_input, "WAKE_FRESH_S", 0)
     for key, expected in remote_input.KEYS.items():
-        assert await control.send(key)
-        assert frame.page.keyboard.press.await_args.args == (expected,)
+        assert await control.send(key) == 1
+        assert pressed(frame)[-1] == expected
     assert set(remote_input.KEYS.values()) == {"ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"}
+    # Each press is a key-down and a key-up on one CDP session of the page.
+    frame.page.context.new_cdp_session.assert_awaited_once_with(frame.page)
+    sent = [call.args for call in frame.session.send.await_args_list]
+    assert {method for method, _ in sent} == {"Input.dispatchKeyEvent"}
+    assert sent[0][1] == {"type": "rawKeyDown", "key": "ArrowLeft", "code": "ArrowLeft", "windowsVirtualKeyCode": 37}
+    assert sent[1][1] == {"type": "keyUp", "key": "ArrowLeft", "code": "ArrowLeft", "windowsVirtualKeyCode": 37}
+    # Enter carries its text, which activates a button or a link.
+    assert sent[8][1] == {"type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13,
+                          "text": "\r", "unmodifiedText": "\r"}
+    assert [event["type"] for _, event in sent] == ["rawKeyDown", "keyUp"] * 4 + ["keyDown", "keyUp"]
     # Keyboard focus is restored for every key: the stage iframe, then the helper.
     assert [c.args for c in frame.page.evaluate.await_args_list] == ([] if direct else [(FOCUS_STAGE,)] * 5)
     # A script runs in the content frame just before each key. Without it an idle frame drops the key.
@@ -1259,6 +1279,52 @@ async def test_key_goes_to_the_current_content_frame(remote, mode, direct):
     assert [c.args for c in frame.evaluate.await_args_list] == [(PRESS_LOG,), *helper, (PRESS_LOG,)]
 
 
+@pytest.mark.parametrize("mode", ["keys", "tvos"])
+async def test_keys_in_a_run_share_one_wake(remote, monkeypatch, mode):
+    """Hardware finding: a key took 80 to 125 ms from the observer to the page, in five round trips."""
+    service, observer, control = remote
+    frame = fake_frame()
+    control.interaction.binding = AsyncMock(return_value=(frame, frame.url, False))
+    control.mode = mode
+    helper = [(TVOS_HELPER,)] if mode == "tvos" else []
+
+    def scripts():
+        calls = [c.args for c in frame.evaluate.await_args_list], [c.args for c in frame.page.evaluate.await_args_list]
+        frame.evaluate.reset_mock()
+        frame.page.evaluate.reset_mock()
+        return calls
+
+    # The first key wakes the frame and gives the stage focus. The read after each key is the wake for the next.
+    for key in ("right", "right", "down"):
+        assert await control.send(key) == 1
+    assert scripts() == ([(PRESS_LOG,), *helper, (PRESS_LOG,)] + [(PRESS_LOG,)] * 2, [(FOCUS_STAGE,)])
+    # Keys that waited in the queue go out together: one read for all of them.
+    assert await control.send("left", "left", "up") == 3
+    assert scripts() == ([(PRESS_LOG,)], [])
+    assert pressed(frame)[-3:] == ["ArrowLeft", "ArrowLeft", "ArrowUp"]
+    assert [call.args[1]["type"] for call in frame.session.send.await_args_list[-6:]] == ["rawKeyDown", "keyUp"] * 3
+    # Select can start a navigation. The key after it wakes the frame again.
+    assert await control.send("select") == 1 and await control.send("left") == 1
+    assert scripts() == ([(PRESS_LOG,)] * 3, [(FOCUS_STAGE,)])
+    # So does a key after a new page was shown, even in a frame that stays the same object.
+    await service.stage.show("a", "/c/a/index.html", remote=mode)
+    assert await control.send("left") == 1
+    assert scripts() == ([(PRESS_LOG,)] * 2, [(FOCUS_STAGE,)])
+    # So does a key after one that the page did not get,
+    frame.session.send.side_effect = lambda *_: frame.session.send.await_args_list.pop()
+    assert await control.send("left") == 0
+    frame.session.send.side_effect = None
+    assert await control.send("left") == 1
+    assert scripts() == ([(PRESS_LOG,)] * 3, [(FOCUS_STAGE,)])
+    # and a key after the window.
+    monkeypatch.setattr(remote_input, "WAKE_FRESH_S", 0.02)
+    await asyncio.sleep(0.03)
+    assert await control.send("left") == 1
+    assert scripts() == ([(PRESS_LOG,)] * 2, [(FOCUS_STAGE,)])
+    await control.send("left")
+    assert scripts() == ([(PRESS_LOG,)], [])
+
+
 async def test_a_key_the_page_did_not_get_is_reported(remote, caplog):
     service, observer, control = remote
     control.mode = "keys"
@@ -1266,9 +1332,9 @@ async def test_a_key_the_page_did_not_get_is_reported(remote, caplog):
     control.interaction.binding = AsyncMock(return_value=(lost, lost.url, False))
     assert not await control.send("left")
     # A key that starts a navigation gives a new document. That is not a lost key.
-    lost.page.keyboard.press.side_effect = lambda key: setattr(lost, "document", "next")
+    lost.session.send.side_effect = lambda *_: setattr(lost, "document", "next")
     assert await control.send("select")
-    lost.page.keyboard.press.side_effect = None
+    lost.session.send.side_effect = None
     await service.stage.show("a", "/c/a/index.html", remote="keys")
     await until(lambda: control.state == "active")
     observer.emit({"event": "button", "key": "left"})
@@ -1287,8 +1353,9 @@ async def test_forwarding_needs_no_tool_lock_and_survives_a_lost_key(remote):
     async with service.tools.lock:
         for key in ("left", "right", "select"):
             observer.emit({"event": "button", "key": key, "received": time.time(), "device_time": time.time()})
-        await until(lambda: frame.page.keyboard.press.await_count == 2)
-    assert [c.args[0] for c in frame.page.keyboard.press.await_args_list] == ["ArrowRight", "Enter"]
+            await asyncio.sleep(0.02)  # Each key is on its own. Keys that wait together go out together.
+        await until(lambda: len(pressed(frame)) == 2)
+    assert pressed(frame) == ["ArrowRight", "Enter"]
     assert control.presses == 3 and control.status()["last"]["key"] == "select"
     observer.emit({"event": "button", "key": "home"})
     assert control.presses == 3
@@ -1330,7 +1397,7 @@ async def test_forwarding_does_not_wait_for_the_observer_request_lock(service, t
         for lock in locks:
             await lock.acquire()
         try:
-            await until(lambda: frame.page.keyboard.press.await_count == 1)
+            await until(lambda: len(pressed(frame)) == 1)
             assert all(lock.locked() for lock in locks)
         finally:
             for lock in locks:
@@ -1359,9 +1426,9 @@ async def test_queued_keys_expire(remote, monkeypatch):
     await asyncio.sleep(0.15)
     release.set()
     observer.emit({"event": "button", "key": "up"})
-    await until(lambda: frame.page.keyboard.press.await_count == 1)
+    await until(lambda: len(pressed(frame)) == 1)
     await asyncio.sleep(0.02)
-    assert [c.args[0] for c in frame.page.keyboard.press.await_args_list] == ["ArrowUp"]
+    assert pressed(frame) == ["ArrowUp"]
 
 
 # --- Real browser ----------------------------------------------------------
@@ -1457,6 +1524,70 @@ async def test_keys_reach_the_sandboxed_frame_as_trusted_events(remote, browser_
     assert (log["count"], log["last"]) == (5, "Enter")
 
 
+async def test_keys_sent_together_arrive_in_order(remote, browser_frame):
+    """Key-down and key-up events go out without a wait between them. The page must still get them in order."""
+    service, observer, control = remote
+    frame = browser_frame
+    control.interaction.binding = AsyncMock(return_value=(frame, frame.url, False))
+    control.mode = "keys"
+    await frame.evaluate("""() => { window.order = [];
+        for (const type of ['keydown', 'keyup']) addEventListener(type, e => order.push(type + ' ' + e.key + ' ' + e.isTrusted), true); }""")
+    keys = ["left", "right", "up", "down", "right", "left", "down", "up"] * 6 + ["select"]
+    assert await control.send(*keys) == len(keys)
+    assert await frame.evaluate("order") == [f"{kind} {remote_input.KEYS[key]} true" for key in keys for kind in ("keydown", "keyup")]
+    # One at a time, as most keys arrive.
+    await frame.evaluate("order.length = 0")
+    for key in keys[:8]:
+        assert await control.send(key) == 1
+    assert await frame.evaluate("order") == [f"{kind} {remote_input.KEYS[key]} true" for key in keys[:8] for kind in ("keydown", "keyup")]
+    assert await frame.evaluate("clicks") == {}
+
+
+async def test_the_debug_log_shows_where_the_time_of_a_key_goes(remote, browser_frame, caplog):
+    """Hardware finding: the app took 79 to 260 ms from the observer's read to the end of its send.
+
+    That figure covered five CDP round trips, one after the other: stage focus, wake script, key-down,
+    key-up and the press log read. The key was in the page after the third. Now the stage focus runs
+    beside the wake script, key-up follows key-down without a wait, and a key in a run needs no wake.
+    """
+    service, observer, control = remote
+    frame = browser_frame
+    control.interaction.binding = AsyncMock(return_value=(frame, frame.url, False))
+    caplog.set_level("DEBUG", logger="atv_bridge_app.present.remote_input")
+    await service.stage.show("a", "/c/a/index.html", remote="focus")
+    await until(lambda: control.state == "active")
+
+    def lines():
+        return [record.getMessage() for record in caplog.records if "reached the page" in record.getMessage()]
+
+    def press(*keys, gesture=None):
+        for key in keys:
+            event = {"event": "button", "key": key, "received": time.time(), "device_time": time.time() - 0.04}
+            observer.emit(event | ({"gesture": gesture} if gesture else {}))
+
+    pattern = (r"Remote key (.+) reached the page (\d+) ms after the observer read it "
+               r"\(queue (\d+), bind (\d+), wake (\d+), keys (\d+) ms; press log read (\d+) ms more; TV log to observer (\d+) ms\)")
+
+    def parsed(line):
+        names, *numbers = re.fullmatch(pattern, line).groups()
+        return names, dict(zip(("total", "queue", "bind", "wake", "keys", "log", "tv"), map(int, numbers)))
+
+    # A key on its own: the wake script runs first.
+    press("right")
+    await until(lambda: len(lines()) == 1)
+    names, first = parsed(lines()[0])
+    assert names == "right" and first["tv"] in (39, 40, 41)
+    assert first["total"] <= first["queue"] + first["bind"] + first["wake"] + first["keys"] + 4  # Whole milliseconds.
+    # The arrows of a flick arrive while the first one goes out. They leave together and need no wake.
+    press("right", gesture="swipe")
+    press("right", "right", gesture="momentum")
+    await until(lambda: len(lines()) >= 2 and "momentum" in lines()[-1])
+    names, last = parsed(lines()[-1])
+    assert names.endswith("right (momentum) + right (momentum)") and last["wake"] == 0
+    assert await frame.evaluate("document.activeElement.id") == "own"
+    assert await frame.evaluate("window.__tvRemote.count") == 4 and control.missed == 0
+
+
 async def test_focus_helper_moves_by_geometry_and_enter_clicks_once(remote, browser_frame):
     service, observer, control = remote
     frame = browser_frame
@@ -1544,8 +1675,9 @@ async def test_tvos_beam_search_in_a_grid_and_past_an_offset_neighbor(tvos):
     # The focus helper's scoring would pick the other one. It stays as the fallback when the beam is empty.
     assert await tvos.press("down", start="r1") == "diag"
     assert await tvos.press("left", start="diag") == "r1"
-    # The helper source crossed CDP once for all of these keys.
-    assert tvos.sent.count(TVOS_HELPER) == 1 and tvos.sent.count(PRESS_LOG) >= 20
+    # The helper source crossed CDP once for all of these 11 keys. Each key has one press log read
+    # after it. Only a key that follows a pause has one before it too.
+    assert tvos.sent.count(TVOS_HELPER) == 1 and 12 <= tvos.sent.count(PRESS_LOG) < 22
     assert await tvos.frame.evaluate("window.__tvRemoteFocus") == "tvos"
 
 
