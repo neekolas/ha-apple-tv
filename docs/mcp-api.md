@@ -139,7 +139,7 @@ The show result has `data.remote` with `mode`, `state` and, when unavailable, `r
 | `presses` | Number of presses received for this page |
 | `last` | `key` (`left`, `right`, `up`, `down` or `select`) and `at` (UTC time) of the last press, or null |
 
-Poll `tv_look` and compare `presses` to learn that someone pressed a key. To react in the page, listen for `keydown`.
+Poll `tv_look` and compare `presses` to learn that someone pressed a key. To react in the page, listen for `keydown`. The bridge also keeps a press log in the content document. Read it with `tv_page_run {"script":"window.__tvRemote"}`. It has `count` and `last` (the last key name), and it starts again after a navigation. If the bridge sends a key and the page does not get it, the app log has a warning.
 
 The bridge reads presses from the TV's log over the screen pairing, so remote input needs screen pairing. A press reaches the page about 150 ms after the TV logs it. Limits:
 

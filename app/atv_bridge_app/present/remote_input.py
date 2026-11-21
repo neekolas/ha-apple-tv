@@ -28,6 +28,20 @@ FOCUS_STAGE = """() => {
   if (frame && document.activeElement !== frame) frame.focus();
 }"""
 
+# Runs in the content document before every key. It counts trusted key presses in
+# window.__tvRemote and returns the document's id and count.
+# Hardware finding: after a few idle minutes the sandboxed frame drops a key unless a
+# script ran in it just before. This evaluation is that script. Do not remove it.
+PRESS_LOG = """() => {
+  if (!window.__tvRemote) {
+    const log = window.__tvRemote = {id: Math.random().toString(36).slice(2), count: 0, last: null};
+    addEventListener('keydown', event => {
+      if (event.isTrusted) { log.count += 1; log.last = event.key; }
+    }, true);
+  }
+  return [window.__tvRemote.id, window.__tvRemote.count];
+}"""
+
 # Runs in the content document. Safe to run before every key.
 FOCUS_HELPER = r"""() => {
   if (window.__tvRemoteFocus) return;
@@ -109,6 +123,7 @@ class RemoteInput:
         self.blocked = None
         self.revision = None
         self.presses = 0
+        self.missed = 0
         self.last = None
         self.watching = False
         self.delay = 1
@@ -218,7 +233,10 @@ class RemoteInput:
                 continue
             try:
                 async with asyncio.timeout(STALE_S):
-                    await self.send(key)
+                    if not await self.send(key):
+                        self.missed += 1
+                        _LOG.warning("Remote key %s was sent but the page did not get it", key)
+                        continue
             except Exception as exc:  # noqa: BLE001 - A lost key must not stop the next one.
                 _LOG.info("Remote key %s was not delivered (%s)", key, type(exc).__name__)
                 continue
@@ -237,13 +255,20 @@ class RemoteInput:
             await frame.page.evaluate(FOCUS_STAGE)
         if self.mode == "focus":
             await frame.evaluate(FOCUS_HELPER)
-        return frame.page
+        return frame
 
     async def send(self, key):
-        """Press one key in the current content document."""
+        """Press one key in the current content document. Return False if the page did not get it."""
         # A mirror restart or a navigation loses focus and the helper. Restore both for each key.
-        page = await self.prepare()
-        await page.keyboard.press(KEYS[key])
+        frame = await self.prepare()
+        before = await frame.evaluate(PRESS_LOG)
+        await frame.page.keyboard.press(KEYS[key])
+        try:
+            after = await frame.evaluate(PRESS_LOG)
+        except Exception:  # noqa: BLE001 - The key may have started a navigation.
+            return True
+        # A new id means a new document, so the count cannot be compared.
+        return after[0] != before[0] or after[1] > before[1]
 
     async def prime(self):
         """Find the content document at show time, so the first press is not slow."""

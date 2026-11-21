@@ -12,7 +12,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from atv_bridge_app.present import remote_input
-from atv_bridge_app.present.remote_input import FOCUS_HELPER, FOCUS_STAGE
+from atv_bridge_app.present.remote_input import FOCUS_HELPER, FOCUS_STAGE, PRESS_LOG
 from atv_bridge_app.processes import ObserverClient
 from atv_bridge_app.state import Fault, State
 from atv_bridge_app.tools.contract import ROUTED_SCHEMAS, SCHEMAS
@@ -479,9 +479,17 @@ def test_show_schema_accepts_the_remote_option():
 # --- Dispatch --------------------------------------------------------------
 
 
-def fake_frame():
+def fake_frame(delivered=True, document="doc"):
+    """A content frame whose press log counts each key the page got."""
     page = SimpleNamespace(evaluate=AsyncMock(), keyboard=SimpleNamespace(press=AsyncMock()))
-    return SimpleNamespace(page=page, evaluate=AsyncMock(), url="http://127.0.0.1:8766/c/a/index.html")
+
+    async def evaluate(script):
+        if script == PRESS_LOG:
+            return [frame.document, page.keyboard.press.await_count if delivered else 0]
+
+    frame = SimpleNamespace(page=page, evaluate=AsyncMock(side_effect=evaluate), document=document,
+                            url="http://127.0.0.1:8766/c/a/index.html")
+    return frame
 
 
 @pytest.mark.parametrize("mode,direct", [("keys", False), ("focus", False), ("keys", True), ("focus", True)])
@@ -491,12 +499,31 @@ async def test_key_goes_to_the_current_content_frame(remote, mode, direct):
     control.interaction.binding = AsyncMock(return_value=(frame, frame.url, direct))
     control.mode = mode
     for key, expected in remote_input.KEYS.items():
-        await control.send(key)
+        assert await control.send(key)
         assert frame.page.keyboard.press.await_args.args == (expected,)
     assert set(remote_input.KEYS.values()) == {"ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"}
     # Keyboard focus is restored for every key: the stage iframe, then the helper.
     assert [c.args for c in frame.page.evaluate.await_args_list] == ([] if direct else [(FOCUS_STAGE,)] * 5)
-    assert [c.args for c in frame.evaluate.await_args_list] == ([(FOCUS_HELPER,)] * 5 if mode == "focus" else [])
+    # A script runs in the content frame just before each key. Without it an idle frame drops the key.
+    per_key = ([(FOCUS_HELPER,)] if mode == "focus" else []) + [(PRESS_LOG,), (PRESS_LOG,)]
+    assert [c.args for c in frame.evaluate.await_args_list] == per_key * 5
+
+
+async def test_a_key_the_page_did_not_get_is_reported(remote, caplog):
+    service, observer, control = remote
+    control.mode = "keys"
+    lost = fake_frame(delivered=False)
+    control.interaction.binding = AsyncMock(return_value=(lost, lost.url, False))
+    assert not await control.send("left")
+    # A key that starts a navigation gives a new document. That is not a lost key.
+    lost.page.keyboard.press.side_effect = lambda key: setattr(lost, "document", "next")
+    assert await control.send("select")
+    lost.page.keyboard.press.side_effect = None
+    await service.stage.show("a", "/c/a/index.html", remote="keys")
+    await until(lambda: control.state == "active")
+    observer.emit({"event": "button", "key": "left"})
+    await until(lambda: control.missed == 1)
+    assert "did not get it" in caplog.text
 
 
 async def test_forwarding_needs_no_tool_lock_and_survives_a_lost_key(remote):
@@ -594,6 +621,9 @@ async def test_keys_reach_the_sandboxed_frame_as_trusted_events(remote, browser_
         await control.send(key)
     assert await frame.evaluate("keys") == [[k, True] for k in ("ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter")]
     assert await frame.evaluate("document.hasFocus()") and await frame.evaluate("clicks") == {}
+    # The page keeps a small press log that tv_page_run can read.
+    log = await frame.evaluate("window.__tvRemote")
+    assert (log["count"], log["last"]) == (5, "Enter")
 
 
 async def test_focus_helper_moves_by_geometry_and_enter_clicks_once(remote, browser_frame):
