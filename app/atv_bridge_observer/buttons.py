@@ -4,6 +4,7 @@
 import asyncio
 import logging
 import os
+import plistlib
 import re
 import time
 from contextlib import suppress
@@ -54,6 +55,8 @@ STREAM_FLAGS = int(OsActivityStreamFlag.PAYLOAD)
 STALE_S = 2.0
 CONNECT_GRACE_S = 1.0
 # A late line that stays late by the same amount for this long is a clock step, not a backlog.
+# Accepted limit: a backlog replayed at near real-time pace for longer than this would pass.
+# No trigger is known, because the stream never asks for HISTORICAL.
 REBASE_AFTER_S = 3.0
 REBASE_TOLERANCE_S = 0.5
 OPEN_TIMEOUT_S = 8
@@ -112,15 +115,22 @@ class Unavailable(Exception):
 def mark_established(connection, established):
     """Set the event when the device has accepted the stream.
 
-    syslog() in pymobiledevice3 11.61 reads a 1-byte record marker only after the
-    device answered StartActivity with success. An idle stream then stays silent.
+    syslog() in pymobiledevice3 11.61 reads the answer to StartActivity in three steps:
+    a 4-byte count, the length, then the status plist. Only the third read tells
+    whether the device accepted. An accepted idle stream then stays silent.
     """
     recvall = connection.recvall
+    reads = 0
 
     async def watched(size):
-        if size == 1:
-            established.set()
-        return await recvall(size)
+        nonlocal reads
+        data = await recvall(size)
+        reads += 1
+        if reads == 3:
+            with suppress(Exception):
+                if plistlib.loads(data).get("Status") == "RequestSuccessful":
+                    established.set()
+        return data
 
     connection.recvall = watched
 

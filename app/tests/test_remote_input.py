@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import plistlib
+import struct
 import sys
 import time
 from datetime import datetime
@@ -127,6 +129,65 @@ def entry(message, device=None, process="backboardd", category="Button"):
     )
 
 
+def start_activity_answer(status, fmt=plistlib.FMT_BINARY):
+    """The three byte strings that the device sends in answer to StartActivity."""
+    body = plistlib.dumps({"Status": status}, fmt=fmt)
+    count = (len(body).bit_length() + 7) // 8
+    return struct.pack("<I", count), len(body).to_bytes(count, "little"), body
+
+
+class WireConnection:
+    """Feeds the real OsTraceService.syslog() from a byte string, then stays silent."""
+
+    def __init__(self, data):
+        self.data, self.position = data, 0
+
+    async def send_plist(self, *_, **__):
+        pass
+
+    async def recvall(self, size):
+        if self.position + size > len(self.data):
+            await asyncio.Event().wait()
+        self.position += size
+        return self.data[self.position - size:self.position]
+
+    async def close(self):
+        pass
+
+
+@pytest.mark.parametrize("status,fmt,expected", [
+    ("RequestSuccessful", plistlib.FMT_BINARY, True),
+    ("RequestSuccessful", plistlib.FMT_XML, True),
+    # A refusal with a short body has a 1-byte length. That read must not count as accepted.
+    ("RequestFailed", plistlib.FMT_BINARY, False),
+    ("RequestFailed", plistlib.FMT_XML, False),
+])
+async def test_stream_counts_as_established_only_after_an_accepting_status(status, fmt, expected):
+    """Runs the real pymobiledevice3 syslog() read sequence (reviewer repro established.py)."""
+    answer = b"".join(start_activity_answer(status, fmt))
+    connection = WireConnection(answer)
+    service = buttons.OsTraceService(lockdown=None, service=connection)
+    established = asyncio.Event()
+    seen = []
+    buttons.mark_established(service.service, established)
+    recvall = connection.recvall
+
+    async def spy(size):
+        data = await recvall(size)
+        seen.append((connection.position, established.is_set()))
+        return data
+
+    connection.recvall = spy
+    first = asyncio.create_task(service.syslog(pid=1, stream_flags=4).__anext__())
+    await asyncio.sleep(0.05)
+    # Never set before the whole status plist was read.
+    assert all(not was_set for position, was_set in seen if position < len(answer))
+    assert established.is_set() is expected
+    assert first.done() is not expected  # An accepted idle stream waits. A refused one raises.
+    first.cancel()
+    await asyncio.gather(first, return_exceptions=True)
+
+
 class FakeTrace:
     """Stand-in for OsTraceService. Each instance is one connection."""
 
@@ -136,10 +197,12 @@ class FakeTrace:
     pid_error = None
 
     accept = True
+    status = "RequestSuccessful"
 
     def __init__(self, lockdown):
         self.rsd = lockdown
-        self.service = SimpleNamespace(recvall=AsyncMock(return_value=b"\x02"))
+        # The answer to StartActivity, then an endless run of 1-byte record markers.
+        self.service = SimpleNamespace(recvall=AsyncMock(side_effect=[*start_activity_answer(self.status), *[b"\x02"] * 999]))
 
     async def __aenter__(self):
         return self
@@ -157,8 +220,13 @@ class FakeTrace:
         FakeTrace.streams.append(SimpleNamespace(pid=pid, flags=stream_flags, lines=lines))
         if not FakeTrace.accept:
             await asyncio.Event().wait()  # The device never answers StartActivity.
+        # The same reads as pymobiledevice3 11.61 syslog(): count, length, status plist.
+        (count,) = struct.unpack("<I", await self.service.recvall(4))
+        length = int.from_bytes(await self.service.recvall(count), "little")
+        if plistlib.loads(await self.service.recvall(length)).get("Status") != "RequestSuccessful":
+            await asyncio.sleep(0.03)  # The refusal reaches the caller a moment later.
+            raise ConnectionError("The device refused to start the log stream")
         while True:
-            # Like pymobiledevice3: the first 1-byte read follows the accepted StartActivity.
             await self.service.recvall(1)
             item = await lines.get()
             if isinstance(item, Exception):
@@ -169,6 +237,7 @@ class FakeTrace:
 @pytest.fixture
 def watch(monkeypatch, tmp_path):
     FakeTrace.streams, FakeTrace.pid_error, FakeTrace.accept = [], None, True
+    FakeTrace.status = "RequestSuccessful"
     FakeTrace.pids = {"68": {"ProcessName": "backboardd"}, "70": {"ProcessName": "rapportd"}}
     monkeypatch.setattr(buttons, "OsTraceService", FakeTrace)
     monkeypatch.setattr(buttons, "CONNECT_GRACE_S", 0)
@@ -254,9 +323,6 @@ async def hang():
     await asyncio.sleep(5)
 
 
-async def refused(self, pid, stream_flags):
-    raise ConnectionError("The device refused to start the log stream")
-    yield  # An async generator, like OsTraceService.syslog.
 
 
 @pytest.mark.parametrize("case,reason", [
@@ -282,8 +348,8 @@ async def test_watch_reports_why_it_cannot_run(watch, monkeypatch, case, reason)
     elif case == "rejected":
         observer.open_tunnel.side_effect = ScreenPairingInvalid()
     elif case == "refused":
-        FakeTrace.pid_error = None
-        monkeypatch.setattr(FakeTrace, "syslog", refused)
+        # The device answers StartActivity with a failure status. "active" must never show.
+        monkeypatch.setattr(FakeTrace, "status", "RequestFailed")
     else:
         # The device never answers the stream request. The watch must not report "active".
         FakeTrace.accept = False
@@ -394,7 +460,7 @@ def real_tunnel(monkeypatch, tmp_path):
     monkeypatch.setattr(userspace, "RemoteServiceDiscoveryService", Rsd)
     monkeypatch.setattr(userspace.UserspaceRsdTunnel, "_watch_transport_closed", never)
     monkeypatch.setattr(observer_module.Observer, "provider", provider)
-    FakeTrace.streams, FakeTrace.pid_error, FakeTrace.accept = [], None, True
+    FakeTrace.streams, FakeTrace.pid_error, FakeTrace.accept, FakeTrace.status = [], None, True, "RequestSuccessful"
     FakeTrace.pids = {"68": {"ProcessName": "backboardd"}}
     monkeypatch.setattr(buttons, "OsTraceService", FakeTrace)
     monkeypatch.setattr(buttons, "RETRY_MIN_S", 0.01)
@@ -474,6 +540,49 @@ async def test_slow_watch_connect_does_not_hold_requests_or_the_tunnel(real_tunn
         assert observer.opening[0].done()
         link.hang = False
         assert await observer.call({"method": "health", "verify": True}) == {"paired": True, "tunnel": True}
+    finally:
+        await observer.close()
+
+
+async def test_request_does_not_join_a_cancelled_connect(monkeypatch, tmp_path):
+    """Reviewer repro open_join.py: a request arrives while a cancelled connect still unwinds."""
+    for key, value in {"ATV_BRIDGE_HOST": "192.0.2.1", "ATV_CONTROLLER_ID": "test", "ATV_BRIDGE_DATA": str(tmp_path)}.items():
+        monkeypatch.setenv(key, value)
+    rsd = SimpleNamespace(peer_info={"Services": {}})
+
+    class Tunnel:
+        def __init__(self, provider_factory):
+            self.rsd, self.opens, self.unwinding = None, 0, False
+
+        async def aopen(self):
+            self.opens += 1
+            if self.opens > 1:
+                assert not self.unwinding  # A new connect must wait for the old one to finish.
+                self.rsd = rsd
+                return rsd
+            try:
+                await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                self.unwinding = True
+                await asyncio.sleep(0.2)  # Closing a half-open tunnel takes time.
+                self.unwinding = False
+                raise
+
+        async def aclose(self):
+            self.rsd = None
+
+    monkeypatch.setattr(observer_module, "UserspaceRsdTunnel", Tunnel)
+    observer = observer_module.Observer()
+    observer.record.touch()
+    try:
+        # The watch is the only waiter and gives up.
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.05):
+                await observer.open_tunnel()
+        assert observer.opening[0].cancelling() and not observer.opening[0].done()
+        # Two requests arrive during the unwind. Both get a new connect and no error.
+        assert await asyncio.gather(observer.open_tunnel(), observer.open_tunnel()) == [rsd, rsd]
+        assert observer.tunnel.opens == 2
     finally:
         await observer.close()
 

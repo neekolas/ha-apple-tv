@@ -123,7 +123,7 @@ Limits:
 
 - Presses sent with `tv_remote` during the page are forwarded to the page too.
 - Menu and Home still end the mirror. They do not reach the page.
-- Only presses sent by `tv_remote` have been verified on hardware, on tvOS 26. A physical Siri Remote and tvOS 27 are not yet verified. Arrows on the touch surface of a first-generation Siri Remote may not produce the log line that the bridge reads.
+- Verified on hardware: presses sent by `tv_remote` on tvOS 26, and arrows and Select on a physical clickpad Siri Remote on tvOS 27.2. The first-generation Siri Remote with a touch surface is untested. Its arrows may not produce the log line that the bridge reads.
 - Set the app's log level to `debug` to log each forwarded key with its delay, and button lines that the bridge did not recognize. One press on the physical remote then shows what the TV logs for it.
 
 ### Presentation mode

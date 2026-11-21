@@ -158,6 +158,9 @@ class Observer:
         Requests and the button watch therefore share one open task. A caller that
         arrives during a connect joins it and never waits for a connect of its own.
         """
+        # A cancelled connect that is still unwinding is finished for new callers. Wait for it, then start again.
+        while self.opening and not self.opening[0].done() and self.opening[0].cancelling():
+            await asyncio.wait({self.opening[0]})
         # aopen() returns at once when the tunnel is already open.
         if self.opening is None or self.opening[0].done():
             self.opening = [asyncio.create_task(self.tunnel.aopen()), 0]  # The task and its waiters.
