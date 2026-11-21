@@ -71,7 +71,7 @@ PROBE_INTERVAL_S = 30
 PROBE_RETRY_S = 5
 RETRY_MIN_S = 0.5
 RETRY_MAX_S = 30
-UNMATCHED_LIMIT = 6  # diagnostic lines per UNMATCHED_WINDOW_S
+UNMATCHED_LIMIT = 6  # diagnostic lines of each event per UNMATCHED_WINDOW_S
 UNMATCHED_WINDOW_S = 10
 ONCE_LIMIT = 12  # "first line" diagnostics per watch start
 LINE_LIMIT = 600  # characters of a log line kept in a diagnostic
@@ -162,7 +162,7 @@ class ButtonWatch:
         self.state = None
         self.delay = RETRY_MIN_S
         self.lag = float("inf")  # Lag baseline, kept across reconnects.
-        self.unmatched = []
+        self.unmatched = {}  # Event name to the times of its last diagnostic lines.
         self.logged = set()
         self.touch = touch.TouchRecognizer()
         self.momentum = None
@@ -336,7 +336,8 @@ class ButtonWatch:
             self.momentum = None
 
     def _unmatched(self, message, now, event="button_unmatched"):
-        self.unmatched = [at for at in self.unmatched if now - at < UNMATCHED_WINDOW_S]
-        if len(self.unmatched) < UNMATCHED_LIMIT:
-            self.unmatched.append(now)
+        # Each event has its own budget, so a flood of touch lines cannot hide button lines.
+        recent = self.unmatched[event] = [at for at in self.unmatched.get(event, []) if now - at < UNMATCHED_WINDOW_S]
+        if len(recent) < UNMATCHED_LIMIT:
+            recent.append(now)
             self.emit({"event": event, "message": str(message)[:300]})

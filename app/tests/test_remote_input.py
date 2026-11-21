@@ -281,6 +281,16 @@ async def test_watch_reports_one_key_per_press_with_a_pid_filter(watch):
         await watch.stop()
 
 
+
+def test_touch_and_button_lines_have_their_own_unmatched_budget(watch):
+    """Review finding: unknown touch lines used up the budget that unknown button lines needed."""
+    watch, observer, events = watch
+    for number in range(buttons.UNMATCHED_LIMIT + 2):
+        watch._unmatched(f"touch {number}", 100.0, "touch_unmatched")
+    watch._unmatched("button", 100.0)
+    assert [event["event"] for event in events].count("touch_unmatched") == buttons.UNMATCHED_LIMIT
+    assert [event["message"] for event in events if event["event"] == "button_unmatched"] == ["button"]
+
 async def test_watch_restarts_after_a_channel_reset_and_reads_the_pid_again(watch):
     watch, observer, events = watch
     watch.start()
