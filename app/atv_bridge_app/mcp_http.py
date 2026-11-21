@@ -11,6 +11,7 @@ from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.shared.exceptions import MCPError
 
+from . import __version__
 from .stage import MAX_UPLOAD
 from .tools.contract import SCHEMAS, ROUTED_SCHEMAS, INSTRUCTIONS, PAGE_GUIDE
 from .tools.public import PublicTools
@@ -153,7 +154,7 @@ class MCP:
 
         server = Server(
             "Apple TV Agent Bridge",
-            version="0.1.0",
+            version=__version__,
             instructions=INSTRUCTIONS,
             get_tool_input_schema=schemas.get,
             on_list_resources=resources,

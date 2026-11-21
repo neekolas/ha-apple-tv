@@ -3,11 +3,13 @@ import base64
 import json
 import logging
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import httpx2
 import pytest
+import yaml
 from mcp import ClientSession, types
 from mcp.client.streamable_http import streamable_http_client
 
@@ -28,6 +30,9 @@ async def test_real_mcp_sdk_and_rest(service, aiohttp_client):
     ):
         initialized = await session.initialize()
         assert initialized.instructions == INSTRUCTIONS
+        # The server reports the app version from app/config.yaml.
+        config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())
+        assert initialized.server_info.version == config["version"]
         assert {str(r.uri).rstrip("/") for r in (await session.list_resources()).resources} == {
             "tv://apps",
             "tv://screen",
