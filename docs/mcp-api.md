@@ -146,7 +146,7 @@ The bridge reads presses from the TV's log over the screen pairing, so remote in
 - Presses that the bridge sends with `tv_remote` or `tv_sequence` during the page are forwarded too.
 - Menu and Home still end the mirror on the TV. They do not reach the page.
 - Only presses sent by `tv_remote` have been verified on hardware, on tvOS 26. A physical Siri Remote and tvOS 27 are not yet verified. Arrows on the touch surface of a first-generation Siri Remote may not produce the log line that the bridge reads.
-- Play/Pause, volume, long presses and swipes are not forwarded.
+- Play/Pause, volume and swipes are not forwarded. Long presses are not tested.
 
 ### tv_page_run
 

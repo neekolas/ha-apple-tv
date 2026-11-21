@@ -345,6 +345,10 @@ async def test_watch_follows_the_presented_page(remote):
     await until(lambda: control.state == "active")
     assert observer.calls == ["buttons_start"]
     assert control.status() == {"mode": "keys", "state": "active", "presses": 0, "last": None}
+    # In auto mode the mirror can fall back to a recording. Keys cannot reach a recording.
+    service.operations.presenter = SimpleNamespace(mode="auto", active=SimpleNamespace(mode="play_url"))
+    assert control.status()["reason"] == "not_mirrored"
+    service.operations.presenter = SimpleNamespace(mode="mirror", stop=AsyncMock())
 
     # A second page with the option keeps the same watch.
     await stage.show("c", "/c/c/index.html", remote="focus")

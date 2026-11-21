@@ -223,7 +223,7 @@ class RemoteInput:
                 _LOG.info("Remote key %s was not delivered (%s)", key, type(exc).__name__)
                 continue
             received = event.get("received") or time.time()
-            _LOG.info(
+            _LOG.debug(
                 "Remote key %s sent to the page %d ms after the observer read it (TV log to observer %d ms)",
                 key,
                 (time.time() - received) * 1000,
@@ -264,8 +264,10 @@ class RemoteInput:
         if self.mode == "off":
             return None
         state, reason = self.state, self.reason
-        if self.blocked:
-            state, reason = "unavailable", self.blocked
+        presenter = getattr(self.ops, "presenter", None)
+        # In auto mode the mirror can fall back to a recording after the show.
+        if self.blocked or getattr(getattr(presenter, "active", presenter), "mode", None) == "play_url":
+            state, reason = "unavailable", self.blocked or "not_mirrored"
         result = {"mode": self.mode, "state": state, "presses": self.presses, "last": self.last}
         if state == "unavailable" and reason:
             result["reason"] = reason
