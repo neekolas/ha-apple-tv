@@ -1738,6 +1738,20 @@ async def test_tvos_look_lifts_the_focused_item(tvos):
     assert await frame.evaluate("getComputedStyle(document.activeElement).transitionProperty") == "scale"
 
 
+
+@TVOS_PAGE
+async def test_tvos_keeps_the_config_of_the_page_and_applies_later_changes(tvos):
+    """Review finding: the helper replaced a config that the page had set before it started."""
+    frame = tvos.frame
+    color = "getComputedStyle(document.activeElement).outlineColor"
+    await frame.evaluate("window.__tvRemoteConfig = {ringColor: 'rgb(255, 0, 0)', pressedMs: 50}")
+    assert await tvos.press("right", start="g00") == "g01"
+    assert await frame.evaluate(color) == "rgb(255, 0, 0)"
+    assert await frame.evaluate("[__tvRemoteConfig.pressedMs, __tvRemoteConfig.fastRunMs]") == [50, 250]
+    # A later change applies at once, also to the look.
+    await frame.evaluate("__tvRemoteConfig.ringColor = 'rgb(0, 255, 0)'")
+    assert await frame.evaluate(color) == "rgb(0, 255, 0)"
+
 @TVOS_PAGE
 async def test_tvos_flick_lands_on_the_right_item_and_scrolls_at_once(tvos):
     frame = tvos.frame

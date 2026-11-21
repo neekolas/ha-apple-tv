@@ -141,7 +141,7 @@ Write pages for `tvos` with these layout rules:
 - Do not rely on hover. Every control must be reachable with arrows and work with Enter.
 - Do not run animation without input. The mirror shows about 10 frames per second, so constant motion looks rough.
 
-The helper's timings and scales are in `window.__tvRemoteConfig`. They are preliminary and are read once, when the helper starts. They suit a mirror of about 10 frames per second: most of the lift shows in the first frame, Select holds the pressed look for 300 ms, and arrows less than 250 ms apart count as a run. `scrollBehavior` is `instant`. Set it to `smooth` only at a higher frame rate.
+The helper's timings and scales are in `window.__tvRemoteConfig`. They are preliminary. A page can set any of them in `window.__tvRemoteConfig` before the helper starts, and the helper keeps them over its defaults. A later change to a field applies at once. The defaults suit a mirror of about 10 frames per second: most of the lift shows in the first frame, Select holds the pressed look for 300 ms, and arrows less than 250 ms apart count as a run. `scrollBehavior` is `instant`. Set it to `smooth` only at a higher frame rate.
 
 Use `focus`, not `tvos`, for a page you did not write: a scale on an unknown layout can be clipped or can cover a neighbor.
 

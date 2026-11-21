@@ -129,7 +129,8 @@ FOCUS_HELPER = r"""() => {
 
 # The "tvos" helper. It extends the focus helper with a tvOS look and a search closer to UIKit:
 # a lift (scale, shadow, white ring) and a beam-first search. See docs/research/tvos-native-feel.md,
-# section 4. Every duration and scale is in CONFIG at the top, for tuning on the TV.
+# section 4. Every duration and scale is in CONFIG at the top, for tuning on the TV. A page can set
+# them in window.__tvRemoteConfig before the helper starts, and change them later.
 # The values suit a mirror of about 10 frames per second, where one frame is 100 ms: most of a
 # change lands in the first frame, and no state is shorter than about 200 ms. Only the scale of
 # the focused item animates. Retune CONFIG when the frame rate rises.
@@ -140,7 +141,9 @@ FOCUS_HELPER = r"""() => {
 TVOS_HELPER = r"""() => {
   if (window.__tvRemoteFocus) return;
   window.__tvRemoteFocus = 'tvos';
-  const CONFIG = window.__tvRemoteConfig = {
+  // Values that the page set before the helper started win over these. A later change to a field
+  // applies at once: the style sheet is written again.
+  const CONFIG = window.__tvRemoteConfig = new Proxy(Object.assign({
     scale: 1.06,            // Lift of the focused item.
     wideScale: 1.03,        // Lift of an item wider than wideRatio of the screen.
     wideRatio: 0.5,
@@ -165,17 +168,16 @@ TVOS_HELPER = r"""() => {
     scrollBehavior: 'instant',
     scrollMarginY: 60,      // Room kept above and below the focused item when it scrolls into view.
     scrollMarginX: 80,
-  };
+  }, window.__tvRemoteConfig), {set: (config, key, value) => { config[key] = value; style(); return true; }});
   const FOCUSABLE = 'a[href],button,input,select,textarea,summary,[tabindex],[contenteditable=""],[contenteditable="true"]';
   // A trusted Enter already activates these elements.
   const NATIVE = 'a[href],button,select,textarea,summary,input:not([type=checkbox]):not([type=radio])';
   const DIRECTIONS = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]};
   const root = document.documentElement;
-  try {
-    // A constructed sheet is not blocked by the page's style-src policy.
-    // The scale property leaves a transform that the page set on the element alone.
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(`
+  // A constructed sheet is not blocked by the page's style-src policy.
+  // The scale property leaves a transform that the page set on the element alone.
+  let sheet = null;
+  const style = () => sheet?.replaceSync(`
       :is(${FOCUSABLE}) { transition: scale ${CONFIG.scaleOutMs}ms ${CONFIG.easing};
         scroll-margin: ${CONFIG.scrollMarginY}px ${CONFIG.scrollMarginX}px; }
       :focus { outline: ${CONFIG.ringPx}px solid ${CONFIG.ringColor} !important;
@@ -189,6 +191,9 @@ TVOS_HELPER = r"""() => {
       * { scrollbar-width: none !important; }
       ::-webkit-scrollbar { display: none !important; }
     `);
+  try {
+    sheet = new CSSStyleSheet();
+    style();
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
   } catch {}
   const usable = el => !el.disabled && el.tabIndex >= 0 && !el.closest('[inert],[aria-hidden=true]')

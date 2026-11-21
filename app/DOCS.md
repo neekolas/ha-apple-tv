@@ -128,7 +128,7 @@ Write pages for `tvos` with these layout rules:
 - Do not rely on hover. Every control must be reachable with arrows and work with Enter.
 - Do not run animation without input. The mirror shows about 10 frames per second, so constant motion looks rough.
 
-The helper's timings and scales are in `window.__tvRemoteConfig`. They are preliminary, suit a mirror of about 10 frames per second, and are read once, when the helper starts.
+The helper's timings and scales are in `window.__tvRemoteConfig`. They are preliminary and suit a mirror of about 10 frames per second. A page can set any of them in `window.__tvRemoteConfig` before the helper starts, and the helper keeps them over its defaults. A later change to a field applies at once.
 
 The show result reports `data.remote` with `mode`, `state` and `reason`. The page still shows when remote input cannot start. Later results report `screen.presenting.remote` with `state`, the number of `presses` and the `last` key with its time.
 
