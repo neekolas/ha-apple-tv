@@ -296,18 +296,27 @@ def guard(identify):
 
     A browser sends Origin with every cross-site POST and WebSocket. A cross-site page can
     send a body without a preflight only as text/plain, form data or no type, so a JSON or
-    ZIP body type also proves that the sender is not such a page."""
+    ZIP body type also proves that the sender is not such a page. A current browser also
+    sends Sec-Fetch-Site with every request, including an <img> GET without Origin. Browsers
+    apply no CORS to WebSockets, so a socket accepts only the server's exact origin."""
 
     def authorize(request):
         if fault := identify(request):
             return fault
         origin = request.headers.get("Origin")
-        if origin is not None and not trusted_origin(origin, request.host):
+        if origin is None:
+            allowed = True
+        elif "websocket" in request.headers.get("Upgrade", "").lower():
+            allowed = origin.casefold() == f"{request.scheme}://{request.host}".casefold()
+        else:
+            allowed = trusted_origin(origin, request.host)
+        site = request.headers.get("Sec-Fetch-Site", "").strip().lower()
+        if not allowed or site in ("cross-site", "same-site"):
             return Refusal(
                 403,
                 "forbidden_origin",
                 "This server refuses requests from web pages on other sites.",
-                "Call the API from a program, or from a page on this server's own origin or loopback.",
+                "Call the API from a program, or from a page on this server's own origin.",
             )
         if request.method == "POST":
             expected = "application/zip" if request.path == "/api/bundle" else "application/json"

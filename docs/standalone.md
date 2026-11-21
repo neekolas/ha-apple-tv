@@ -198,7 +198,7 @@ Linux was not tested. There, `--network host` gives the container the host's own
 ### Security
 
 - **Port 8765** needs the token on every route, including `/api/health` and the event socket. With `--insecure-local`, it needs a loopback host name instead.
-- **Web pages cannot use port 8765**, even with `--insecure-local`. The server refuses a request whose `Origin` is another site or `null`, and a POST body that is not `application/json`, or `application/zip` for `/api/bundle`. A web page in a browser cannot send those without the server's permission, and the server gives none.
+- **Web pages cannot use port 8765**, even with `--insecure-local`. The server refuses a request whose `Origin` is another site or `null`, a request whose `Sec-Fetch-Site` is `cross-site` or `same-site`, and a POST body that is not `application/json`, or `application/zip` for `/api/bundle`. A web page in a browser cannot send those without the server's permission, and the server gives none. A current browser sends `Sec-Fetch-Site` with every request, even an image load that has no `Origin`. A page on another loopback port counts as `same-site`. The event socket also refuses every `Origin` except the server's own, with the same scheme, host and port. Programs send neither header.
 - **The stage**, port 8766, serves only the bridge's own browser. It requires a random key that changes at each start. Its socket also requires the stage's own origin, and no other page can frame it.
 - **Chromium's debugging port and the page proxy** accept any client on the container's loopback. Bridge networking keeps them inside the container. Host networking exposes them. See [Host networking](#host-networking).
 - **The token.** Prefer `TV_USE_TOKEN_FILE`. A `TV_USE_TOKEN` value is visible in `docker inspect` and in the container's `/proc/1/environ`. The bridge removes it from the environment of the processes that it starts, such as Chromium and tvpipe.
@@ -233,7 +233,7 @@ Measured on 21 November 2026 against an Apple TV 4K (2nd generation) on tvOS 27.
 | --- | --- |
 | The container exits at start | Read `docker logs tv-use`. A missing or short token, an empty TV list, a bad value or a flag in Home Assistant mode stops the container with a message. |
 | `401` with `unauthorized` | Send `Authorization: Bearer <token>` with the token from `TV_USE_TOKEN` or `TV_USE_TOKEN_FILE`. With `--insecure-local`, connect to `localhost` or `127.0.0.1`. |
-| `403` with `forbidden_origin` | The request came from a web page on another site, or from a sandboxed page that sends `Origin: null`. Call the API from a program. |
+| `403` with `forbidden_origin` | The request came from a web page on another site or another loopback port, or from a sandboxed page that sends `Origin: null`. Call the API from a program. |
 | `415` with `unsupported_media_type` | Send `Content-Type: application/json`, or `application/zip` to `/api/bundle`. |
 | Connection reset on `localhost:8765` | Without host networking, connect to `127.0.0.1`. The server listens on IPv4 only. |
 | `405` on `GET /mcp` | Expected. The server answers MCP with `POST` only. |

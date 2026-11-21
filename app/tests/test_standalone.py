@@ -521,6 +521,10 @@ async def test_every_route_needs_the_token_and_refuses_other_sites(tmp_path, aio
             # Sandboxed pages, including the bridge's own bundles, send Origin: null.
             (good | {"Origin": "null"}, 403),
             (good | {"Origin": "http://127.0.0.1.evil.example"}, 403),
+            # A browser sends Sec-Fetch-Site even on an <img> GET, which has no Origin.
+            (good | {"Sec-Fetch-Site": "cross-site"}, 403),
+            # A page on another loopback port is on the same site.
+            (good | {"Sec-Fetch-Site": "same-site", "Origin": "http://127.0.0.1:3000"}, 403),
         ]:
             response = await client.request(method, path, data=b"{}", headers=typed | headers)
             assert response.status == status, (method, path, headers)
@@ -544,9 +548,12 @@ async def test_insecure_local_refuses_other_sites_on_every_route(tmp_path, aioht
             ({"Host": "attacker.example:8765"}, 401),
             (local | {"Origin": EVIL}, 403),
             (local | {"Origin": "null"}, 403),
+            (local | {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "no-cors"}, 403),
+            (local | {"Sec-Fetch-Site": "same-site"}, 403),
         ]:
             response = await client.request(method, path, data=b"{}", headers=typed | headers)
             assert response.status == status, (method, path, headers)
+            assert (await response.json())["ok"] is False
         if method == "POST":
             response = await client.request(method, path, data=b"{}", headers=local | {"Content-Type": "text/plain"})
             assert response.status == 415, (method, path)
@@ -556,8 +563,9 @@ async def test_insecure_local_refuses_other_sites_on_every_route(tmp_path, aioht
 async def test_programs_and_same_origin_pages_are_accepted(tmp_path, aiohttp_client, argv):
     client, _ = await api(tmp_path, aiohttp_client, argv)
     headers = {"Host": "127.0.0.1:8765"} | ({"Authorization": "Bearer " + TOKEN} if "--token" in argv else {})
-    for origin in (None, "http://127.0.0.1:8765", "http://localhost:3000", "http://[::1]:8765"):
-        sent = headers | ({"Origin": origin} if origin else {})
+    for origin, site in [(None, None), (None, "none"), ("http://127.0.0.1:8765", "same-origin"),
+                         ("http://localhost:3000", None), ("http://[::1]:8765", None)]:
+        sent = headers | ({"Origin": origin} if origin else {}) | ({"Sec-Fetch-Site": site} if site else {})
         reply = await (await client.post("/api/tool/tv_status", json={}, headers=sent)).json()
         assert reply["ok"], origin
         tvs = await client.get("/api/tvs", headers=sent)
@@ -566,8 +574,9 @@ async def test_programs_and_same_origin_pages_are_accepted(tmp_path, aiohttp_cli
         assert health.status == 200 and "pending_pairing" in await health.json()
     bundle = await client.post("/api/bundle", data=zipped(), headers=headers | {"Content-Type": "application/zip"})
     assert re.fullmatch("[0-9a-f]{32}", (await bundle.json())["bundle"])
-    socket = await client.ws_connect("/api/events", headers=headers | {"Origin": "http://localhost:8765"})
-    await socket.close()
+    for sent in ({}, {"Origin": "http://127.0.0.1:8765", "Sec-Fetch-Site": "same-origin"}):
+        socket = await client.ws_connect("/api/events", headers=headers | sent)
+        await socket.close()
 
 
 @pytest.mark.parametrize("argv", [["--token", TOKEN], ["--insecure-local"]])
@@ -575,10 +584,14 @@ async def test_event_socket_refuses_other_sites(tmp_path, aiohttp_client, argv):
     client, _ = await api(tmp_path, aiohttp_client, argv)
     headers = {"Host": "127.0.0.1:8765"} | ({"Authorization": "Bearer " + TOKEN} if "--token" in argv else {})
     for path in ("/api/events", f"/api/tvs/{receivers(tmp_path).select().metadata['id']}/events"):
-        for sent, status in [(headers | {"Origin": EVIL}, 403), (headers | {"Origin": "null"}, 403)]:
+        # A socket needs the server's exact origin. Browsers apply no CORS to WebSockets.
+        for origin in (EVIL, "null", "http://127.0.0.1:3000", "http://localhost:8765", "https://127.0.0.1:8765"):
             with pytest.raises(aiohttp.WSServerHandshakeError) as refused:
-                await client.ws_connect(path, headers=sent)
-            assert refused.value.status == status
+                await client.ws_connect(path, headers=headers | {"Origin": origin})
+            assert refused.value.status == 403, origin
+        with pytest.raises(aiohttp.WSServerHandshakeError) as refused:
+            await client.ws_connect(path, headers=headers | {"Sec-Fetch-Site": "cross-site"})
+        assert refused.value.status == 403
     if "--token" in argv:
         with pytest.raises(aiohttp.WSServerHandshakeError) as refused:
             await client.ws_connect("/api/events", headers={"Origin": "http://127.0.0.1:8765"})
