@@ -327,8 +327,9 @@ def paired(root, key):
         ("name=Living Room,host=192.0.2.15", "name=Living Room,id=BB:02", False),
         # The stored identifier reattaches a TV that the list renames.
         ("name=Living Room,host=192.0.2.15", "name=Lounge,id=AA:01", True),
-        # The address reattaches a record when the entry has no name.
+        # The address reattaches a record when the entry or the record has no name.
         ("name=Living Room,host=192.0.2.15,id=AA:01", "host=192.0.2.15", True),
+        ("host=192.0.2.15,id=AA:01", "name=Den,host=192.0.2.15", True),
         # Another name at the record's address is another TV.
         ("name=Living Room,host=192.0.2.15,id=AA:01", "name=Bedroom,host=192.0.2.15", False),
     ],
