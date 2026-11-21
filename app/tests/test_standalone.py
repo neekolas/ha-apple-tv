@@ -231,6 +231,40 @@ async def test_standalone_token_replaces_the_internal_token(tmp_path, aiohttp_cl
         assert "tv_pair" in {tool.name for tool in (await session.list_tools()).tools}
 
 
+def start_fleet(root, tvs):
+    """Build the fleet as a container start with this TV_USE_TVS value would."""
+    options = (standalone(TV_USE_TVS=tvs) if tvs else standalone()).options
+
+    def factory(host, state, **kwargs):
+        adapter = FakeAdapter(state)
+        adapter.host = adapter.resolver.address = host
+        return TVRuntime(host, state, adapter, AsyncMock(), **kwargs)
+
+    return Fleet(root, options, factory=factory, stage_port=0)
+
+
+@pytest.mark.parametrize(
+    "first, second, kept",
+    [
+        # The identifier keeps the record when the address changes.
+        ("host=192.0.2.15,id=AA:01", "host=192.0.2.99,id=AA:01", True),
+        # Adding the identifier later keeps the record.
+        ("host=192.0.2.15", "host=192.0.2.15,id=AA:01", True),
+        # Without an identifier, a new address is a new TV, and the old record is deleted.
+        ("host=192.0.2.15", "host=192.0.2.99", False),
+        # An empty list deletes every TV that the list named before.
+        ("host=192.0.2.15,id=AA:01", "", False),
+    ],
+)
+def test_tv_list_changes_across_restarts(tmp_path, first, second, kept):
+    (rt,) = start_fleet(tmp_path, first).runtimes.values()
+    rt.state.save_pairings(airplay={"ltpk": "test"}, tv={"identifiers": ["AA:01"], "last_known_host": "192.0.2.15"})
+    key = rt.metadata["id"]
+    fleet = start_fleet(tmp_path, second)
+    assert (tmp_path / "tvs" / key / "pairings.json").exists() is kept
+    assert (key in fleet.runtimes) is kept
+
+
 async def test_home_assistant_app_still_accepts_only_the_internal_token(tmp_path, aiohttp_client):
     fleet = receivers(tmp_path)
     client = await aiohttp_client(fleet.app())

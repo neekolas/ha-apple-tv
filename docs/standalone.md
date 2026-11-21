@@ -49,9 +49,9 @@ The trade-off: the computer that runs the container must stay on and awake. When
      ghcr.io/neekolas/tv-use-bridge:latest
    ```
 
-   With `--network host`, the container uses the network of the OrbStack virtual machine, and OrbStack forwards its ports to the Mac. See [Networking](#networking).
+   With `--network host`, the container uses the network of the OrbStack virtual machine, and OrbStack forwards its ports to the Mac. See [Networking](#networking). After you pair the TV, add its ID to `TV_USE_TVS`. See [Keep each TV's ID](#keep-each-tvs-id).
 
-4. Check the container. The first command needs no token. The second reports the TV and its pairings.
+4. Check the container. The first command needs no token. It reports only that the app runs. The second reports the TV and its pairings. `GET /api/health` on port 8765, with the token, reports the TV connection and pairings in short form.
 
    ```sh
    curl -sS http://127.0.0.1:8766/api/health
@@ -77,7 +77,7 @@ docker run ... ghcr.io/neekolas/tv-use-bridge:latest \
 | `TV_USE_TOKEN` | `--token` | none | Bearer token that clients must send. At least 16 characters. A variable or flag value is visible in `docker inspect`. Prefer a token file. |
 | `TV_USE_TOKEN_FILE` | `--token-file` | none | File that holds the token. Use this or `TV_USE_TOKEN`, not both. |
 | `TV_USE_INSECURE_LOCAL` | `--insecure-local` | off | Accept requests without a token. The server then listens on loopback only and accepts only the host names `localhost`, `127.0.0.1` and `::1`. Any program on the computer can then control the TV. Use it only for a short test on a computer you trust. |
-| `TV_USE_TVS` | `--tv` | none | The TVs. Write each TV as `host=IP,id=ID,name=NAME` with any of the three keys, or as a bare IPv4 address. Separate TVs with semicolons in the variable. Repeat the flag for more TVs. The ID is the TV's advertised identifier, such as the one in `tv://tvs`. |
+| `TV_USE_TVS` | `--tv` | none | The TVs. Write each TV as `host=IP,id=ID,name=NAME` with any of the three keys, or as a bare IPv4 address. Separate TVs with semicolons in the variable. Repeat the flag for more TVs. The ID is the TV's advertised identifier from `tv://tvs`. [Keep the ID in the list.](#keep-each-tvs-id) |
 | `TV_USE_LISTEN` | `--listen` | `0.0.0.0` | Address for MCP and REST. `127.0.0.1` with `--insecure-local`. |
 | `TV_USE_PORT` | `--port` | `8765` | Port for MCP and REST. It cannot be 8766. |
 | `TV_USE_STAGE_LISTEN` | `--stage-listen` | `127.0.0.1` | Address of the stage on port 8766. See [Networking](#networking). |
@@ -98,7 +98,11 @@ docker run ... ghcr.io/neekolas/tv-use-bridge:latest \
 
 The settings match the [Home Assistant app options](SETUP.md#app-options). A bad value stops the container with a message in `docker logs`.
 
-Removing a TV from `TV_USE_TVS` deletes its pairing records at the next start. Keep the list the same across restarts.
+### Keep each TV's ID
+
+Add each TV's ID to `TV_USE_TVS` after you pair it. The bridge matches an entry to its saved records by the ID, or by the address when the entry has no ID. Without an ID, a changed address counts as a new TV, and the bridge deletes the old TV's pairing records. To find the ID, read `identifiers` from `tv://tvs` or `GET /api/tvs` after pairing. Add `id=<first identifier>` to the entry, keep the same address and restart. A later address change then needs only a new `host=`.
+
+A TV that leaves the list loses its pairing records at the next start. An empty `TV_USE_TVS` removes every TV that the list named before.
 
 ### How the container chooses its mode
 
@@ -158,7 +162,7 @@ What does not cross the virtual machine:
 
 ### Without host networking
 
-The container also works on Docker's default bridge network. In testing on OrbStack, control, screen reading and mirroring with sound worked. Publish only the MCP port. For example, to accept agents on this Mac only:
+The container also works on Docker's default bridge network. In testing on OrbStack, control, screen reading and mirroring with sound worked. The mirror ran for about 35 seconds. Longer sessions were tested only with `--network host`. Publish only the MCP port. For example, to accept agents on this Mac only:
 
 ```sh
 docker run -d --name tv-use --restart unless-stopped -p 127.0.0.1:8765:8765 \
@@ -169,7 +173,7 @@ docker run -d --name tv-use --restart unless-stopped -p 127.0.0.1:8765:8765 \
   ghcr.io/neekolas/tv-use-bridge:latest
 ```
 
-Connect to `http://127.0.0.1:8765/mcp`, not `localhost`. The server listens on IPv4 only, and Docker resets an IPv6 connection to `localhost`. To accept agents from the LAN, publish `-p 8765:8765` instead. Port 8766 stays inside the container.
+Use `http://127.0.0.1:8765/mcp`. The server listens on IPv4 only. With `-p 8765:8765`, which also accepts agents from the LAN, Docker opens the port on IPv6 too and resets those connections, so `localhost` can fail. Port 8766 stays inside the container, so check the container with `GET /api/health` on port 8765.
 
 ### On Linux
 
@@ -195,9 +199,9 @@ Measured on 21 November 2026 against an Apple TV 4K (2nd generation) on tvOS 27.
 | Frames sent at `mirror_fps` 10, 30 and 60 | 8 fps or less at 10 and 30. 60 was not measured. | 7.5, 24 and 52 fps |
 | CPU while mirroring | 3.3 of 4 cores | 0.6 to 1 core |
 
-- "Frames sent" is the change in tvpipe's count of frames pushed to the TV, with page sound muted. With sound, the count also includes about 125 audio frames per second. The Green values come from an earlier frame-rate study on 20–21 November 2026. There, the page render rate limited the sent rate.
-- A page where only a focus highlight moves sent 6 fps at `mirror_fps` 10 and 12.5 fps at 30. tvpipe sends a frame only when the picture changes.
-- Screenshots during the 60 fps run showed a clean picture. The frame counter on the TV was less than one second behind the page.
+- "Frames sent" is the change in tvpipe's count of frames pushed to the TV, with page sound muted. With sound, the count was about 125 per second higher, probably because it then includes audio frames. The Green values come from an earlier frame-rate study on 20–21 November 2026. There, the page render rate limited the sent rate.
+- A page where only a focus highlight moves sent 6 fps at `mirror_fps` 10 and 12.5 fps at 30. tvpipe appears to send a frame only when the picture changes.
+- These counts are frames sent, not frames the TV showed. Screenshots during the 60 fps run showed a clean picture. The frame counter on the TV was less than one second behind the page.
 - The Mac is not CPU bound. On a Mac, `TV_USE_MIRROR_FPS=30` is a good choice for pages that change often. The default of 10 matches the Home Assistant app.
 
 ## Troubleshooting
