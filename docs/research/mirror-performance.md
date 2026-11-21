@@ -7,11 +7,11 @@ Measured on 21 November 2026 on the Green (Rockchip RK3566, 4× Cortex-A55 at 1.
 ## Kept changes
 
 1. **tvpipe's reports are in the app log** (commit "Log tvpipe's sent rate, encoder report and receiver reports"). At debug level the app logs:
-   - the sent video fps every 5 s, with the count of each one-second report;
+   - the sent video fps every 5 s, with the count of each one-second report and the frames that the receivers dropped (`dropped`, `dropped_full` and `dropped_waiting` from tvpipe's `stats` events);
    - the `capture` and `started` events (capture size, route, playout latency);
    - tvpipe's `log` events at their own level. tvpipe runs with `--debug` when the app logs at debug level. From the debug and trace lines the app keeps only the capture page's encoder report (`fps`, `sourceFps`, `encodeMs`, `dropped`, `repeated`), the encoded rate at tvpipe, AirPlay send timing, the TV's receiver reports for the audio stream and the viewport fit.
 
-   Before this change the app kept only the sum of `receivers[].pushed`. That sum counts audio packets: about 130 per second at 7 video frames per second. The logging costs at most 0.1 core (see the control below).
+   Before this change the app kept only the sum of `receivers[].pushed`. That sum counts audio packets: about 130 per second at 7 video frames per second. In a muted control run, the logging cost at most 0.1 core (see the control below). The cost with audio was not measured.
 2. **Muted pages mirror at 15 fps** (commit "Mirror muted pages at 15 fps and document the cost of audio"). The new app option `mirror_fps_muted` (default 15) sets tvpipe's `--fps` for a show with `audio: "mute"`. The muted show uses the larger of it and `mirror_fps`, so `0` turns it off. `mirror_fps` stays 10 for shows with audio. A change of `audio` already restarts the sender, so the option adds no restart.
 3. **The cost of audio is documented** in the `tv_show` `audio` description, `app/DOCS.md` and `docs/SETUP.md`. The advice: set `audio` to `mute` for any page that plays no sound. The default stays `play` (see open decisions).
 
@@ -144,7 +144,7 @@ With nothing presenting, the container used 0.03 cores. The static page with aud
 
 ### Control: logging cost
 
-Muted, fps 15, `log_level` info (tvpipe without `--debug`, no sampler): render 9.9 fps, 2.59 cores, burst 2.5 frames, against 10.0 fps, 2.69 cores and 2.7 frames at debug. The logging costs at most 0.1 core.
+Muted, fps 15, `log_level` info (tvpipe without `--debug`, no sampler): render 9.9 fps, 2.59 cores, burst 2.5 frames, against 10.0 fps, 2.69 cores and 2.7 frames at debug. In this muted run, the logging cost at most 0.1 core. No control run was made with audio, so the cost with audio is not known.
 
 ## Recommendation
 

@@ -219,7 +219,7 @@ Tailscale is optional. An agent on the home network does not need it. Set it up 
 | `blocked_address` | Use a public URL or Tailscale Serve. For a trusted LAN service on another machine, add its host and port to `page_network_allow` and restart. The HA host and its local services stay protected. |
 | `page_unreachable` | Check the URL from the HA network, DNS, TLS, server and app logs. The same code can report a missing bundle or sender failure. Use the returned `error.fix`. |
 | `uncertain` or `verified: false` after input | Read the evidence and use a targeted `tv_look` before sending more input. |
-| Page stutters | Try a lower `mirror_fps` or `mirror_size: 1280x720`. |
+| Page stutters | Try a lower `mirror_fps` or `mirror_size: 1280x720`. A page shown with `audio: "mute"` uses the larger of `mirror_fps` and `mirror_fps_muted`, so set both. |
 
 Find app logs under **Settings → Apps → Apple TV Agent Bridge → Log** and integration logs under **Settings → System → Logs**. The LAN watchdog at `http://<HA host>:8766/api/health` should return `"ok":true` and `"state":"running"` even before pairing. It checks the app process. Use targeted `tv_status` to check the receiver.
 

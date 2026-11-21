@@ -171,6 +171,8 @@ Set `presentation_mode` in the app options.
 
 Mirroring defaults to a 1920×1080 canvas at 10 fps and 4000 kbps. Set `mirror_size` to `1280x720` or `1920x1080`, and `mirror_fps` to 1–60. The 720p setting uses 2500 kbps. A page shown with `audio: "mute"` uses the larger of `mirror_fps_muted` (default 15; `0` turns it off) and `mirror_fps`. On a Home Assistant Green at 1080p, a muted page sends about 9 fps at 15 and about 7 fps at 10. With audio, 15 sends no more frames than 10.
 
+Upgrade note: `mirror_fps_muted` is a new option. After the update, an install with `mirror_fps` below 15 mirrors muted pages at 15 fps. Set `mirror_fps_muted` to `0` to keep the old behavior.
+
 Live URLs always use mirroring. For recorded presentations, `tv_show` reports `data.transport` equal to `"video"` and may return `verified: false` while the clip is rendering. Static pages use a still frame for the duration of their audio, or 60 seconds without a finite audio track. Animated pages and page audio take time to record before playback begins. The clip loops while shown. If the TV closes the AirPlay session early, the bridge reopens it near the last playback position. Sending page data records a new clip.
 
 For `tv_play {"media":"https://example.org/clip.mp4"}`, replace the example URL with an HTTP or HTTPS media URL the Apple TV can fetch. Normal EOF finishes playback. The bridge can make up to two further playback attempts, using the observed or estimated position.
