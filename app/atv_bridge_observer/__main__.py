@@ -35,6 +35,7 @@ from zeroconf import (
 )
 
 from . import accessibility
+from .buttons import ButtonWatch
 
 
 class ScreenPairingInvalid(Exception):
@@ -129,6 +130,11 @@ async def endpoint(host, manual):
     raise PairingScreenUnavailable("RemotePairing service unavailable at configured address")
 
 
+def emit(event):
+    """Write one unsolicited event line. Responses and events share stdout, one JSON object per line."""
+    print(json.dumps(event), flush=True)
+
+
 class Observer:
     def __init__(self):
         self.host = os.environ["ATV_BRIDGE_HOST"]
@@ -139,6 +145,13 @@ class Observer:
         self.tunnel = UserspaceRsdTunnel(provider_factory=self.provider)
         self.audit = self.reader = None
         self.task = self.pin = None
+        self.pairing = False
+        # Held for each request. The button watch takes it before it closes a dead tunnel.
+        self.busy = asyncio.Lock()
+        self.buttons = ButtonWatch(self, emit)
+
+    def pairing_active(self):
+        return self.pairing or bool(self.task and not self.task.done())
 
     async def tunnel_endpoint(self):
         # The TXT identifier rotates. pymobiledevice3 checks its authTag against the
@@ -187,6 +200,13 @@ class Observer:
     async def pair_start(self):
         if self.task and not self.task.done():
             raise ValueError("A PIN prompt is already active")
+        self.pairing = True
+        try:
+            return await self._pair_start()
+        finally:
+            self.pairing = False
+
+    async def _pair_start(self):
         await self.close_channels()
         identifier, port = await endpoint(self.host, True)
         requested = asyncio.Event()
@@ -308,6 +328,12 @@ class Observer:
 
     async def call(self, req):
         method = req["method"]
+        if method == "buttons_start":
+            self.buttons.start()
+            return {}
+        if method == "buttons_stop":
+            await self.buttons.stop()
+            return {}
         if method == "ax_release":
             if self.reader:
                 await self.reader.close()
@@ -363,6 +389,7 @@ class Observer:
         raise ValueError("Unknown observer method")
 
     async def close(self):
+        await self.buttons.stop()
         if self.task:
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)
@@ -376,7 +403,8 @@ async def main():
     try:
         while line := await asyncio.to_thread(sys.stdin.buffer.readline):
             try:
-                result = {"ok": True, **await observer.call(json.loads(line))}
+                async with observer.busy:
+                    result = {"ok": True, **await observer.call(json.loads(line))}
             except Exception as exc:  # noqa: BLE001 - One JSON response per command, including driver failures.
                 if isinstance(exc, PairingScreenUnavailable):
                     logging.debug("Waiting for the manual pairing service")

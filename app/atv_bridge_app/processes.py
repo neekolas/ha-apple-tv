@@ -73,7 +73,37 @@ class ObserverClient:
         )
         self.proc = None
         self.stderr_task = None
+        self.reader = None
+        self.pending = None
+        self.listeners = []
         self.lock = asyncio.Lock()
+
+    def subscribe(self, listener):
+        """Receive the observer's unsolicited events. A listener must return at once."""
+        self.listeners.append(listener)
+
+    def _emit(self, event):
+        for listener in tuple(self.listeners):
+            try:
+                listener(event)
+            except Exception:  # noqa: BLE001 - A listener must not stop the pipe reader.
+                observer_log.exception("Observer event listener failed")
+
+    async def _read(self, proc):
+        """Split stdout into event lines and the response to the single request in flight."""
+        try:
+            while line := await proc.stdout.readline():
+                message = json.loads(line)
+                if "event" in message:
+                    self._emit(message)
+                elif self.pending and not self.pending.done():
+                    self.pending.set_result(message)
+        except Exception:  # noqa: BLE001 - Unreadable output ends the request below.
+            observer_log.warning("Observer output could not be read")
+        finally:
+            if self.pending and not self.pending.done():
+                self.pending.set_exception(ConnectionError("Observer exited"))
+            self._emit({"event": "closed"})
 
     async def call(self, method, **params):
         async with self.lock:
@@ -106,10 +136,12 @@ class ObserverClient:
                     limit=64 * 1024**2,
                 )
                 self.stderr_task = asyncio.create_task(forward_observer_errors(self.proc.stderr))
+                self.reader = asyncio.create_task(self._read(self.proc))
             async with asyncio.timeout(35):
+                self.pending = asyncio.get_running_loop().create_future()
                 self.proc.stdin.write(json.dumps({"method": method, **params}).encode() + b"\n")
                 await self.proc.stdin.drain()
-                response = json.loads(await self.proc.stdout.readline())
+                response = await self.pending
         except BaseException as exc:
             await self.close()
             if not isinstance(exc, Exception):
@@ -138,6 +170,9 @@ class ObserverClient:
             except TimeoutError:
                 await reap(proc)
             finally:
+                if self.reader:
+                    reader, self.reader = self.reader, None
+                    await asyncio.gather(reader, return_exceptions=True)
                 if self.stderr_task:
                     await self.stderr_task
                     self.stderr_task = None

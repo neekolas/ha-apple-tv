@@ -12,6 +12,7 @@ from jsonschema import Draft202012Validator
 from ..live import TAILNET_DNS_FIX
 from ..present.interaction import PageInteraction
 from ..present.media import MediaPlayback
+from ..present.remote_input import RemoteInput
 from ..state import Fault, classify
 from . import link_info, playback_identity
 from .contract import NO_SCREEN, RUN_HELP, SCHEMAS, UNKNOWN, checked, outcome, public_error, schema
@@ -46,6 +47,7 @@ class PublicTools:
         self.prompt_view = None
         self.media = MediaPlayback(self.engine)
         self.page_interaction = PageInteraction(ops)
+        self.remote_input = RemoteInput(ops, self.page_interaction)
 
     async def snapshot(self, focus=None, read_focus=True, observation=None, *, status=None):
         if status is None:
@@ -79,6 +81,8 @@ class PublicTools:
             if page
             else None,
         }
+        if page and (remote := self.remote_input.status()):
+            self.last_screen["presenting"]["remote"] = remote
         return self.last_screen.copy()
 
     def failure(self, name, fault):
@@ -858,11 +862,13 @@ class PublicTools:
         return await self.tv_show()
 
     async def tv_show(
-        self, url=None, html=None, files=None, bundle=None, title=None, audio="play", keep_awake=True
+        self, url=None, html=None, files=None, bundle=None, title=None, audio="play", keep_awake=True,
+        remote="off",
     ):
         """Present a page, or dismiss it by omitting the source. Can wake the TV and replaces its bridge media or page.
         The HA host renders the page and mirrors it or plays a recording. Live URLs use a mirror. The default fleet limit is one active mirror.
         Inspect data.transport and screen.presenting. verified means frames were sent or playback was observed. Use tv_page_run to read or change a live page.
+        Set remote to "keys" or "focus" so Siri Remote arrows and Select reach a mirrored page. Check data.remote.state and screen.presenting.remote.
         For example, tv_show {"html":"<h1>Hello</h1>"}."""
         await self.media.stop()
         if all(source is None for source in (url, html, files, bundle)):
@@ -876,8 +882,15 @@ class PublicTools:
             title=title,
             audio=audio,
             keep_awake=keep_awake,
+            remote=remote,
         )
         mode = result["mode"]
+        data = {}
+        if remote != "off":
+            if mode != "mirror":
+                self.remote_input.block("not_mirrored")
+            status = await self.remote_input.settle()
+            data["remote"] = {k: status[k] for k in ("mode", "state", "reason") if k in status}
         return outcome(
             "The bridge is presenting the page."
             if result["verified"]
@@ -887,6 +900,7 @@ class PublicTools:
                 "page_id": result["page_id"],
                 "size": self.size if mode == "mirror" else "1920x1080",
                 "transport": "mirror" if mode == "mirror" else "video",
+                **data,
             },
             result["verified"],
         )

@@ -88,6 +88,12 @@ SHOW = {
     "title": described(TEXT, "Title to report in screen.presenting."),
     "audio": described({"enum": ["play", "mute"]}, "Play or mute page audio.", default="play"),
     "keep_awake": described(BOOL, "Request a browser wake lock while presenting.", default=True),
+    "remote": described(
+        {"enum": ["off", "keys", "focus"]},
+        "Send Siri Remote presses to a mirrored page. keys sends arrow keys and Enter. "
+        "focus also moves focus between links and controls and shows a focus ring.",
+        default="off",
+    ),
 }
 # These are caller-side examples. The browser check runs the advertised recipes verbatim.
 OUTLINE_RECIPE = """const roles = {a:'link', button:'button', text:'textbox', password:'textbox', search:'searchbox', h1:'heading', h2:'heading', h3:'heading', h4:'heading', h5:'heading', h6:'heading'};
@@ -230,7 +236,10 @@ For live URLs, keep the server running. The Green loads the real site, including
 WebSockets and reloads. For a local server, use tailscale serve and pass its HTTPS MagicDNS URL.
 Pages that block framing open at the top level. Bundle-relative links and assets work.
 Page requests to Home Assistant and other LAN services are blocked by default.
-Page audio plays by default. Use audio: "mute" for a silent presentation."""
+Page audio plays by default. Use audio: "mute" for a silent presentation.
+With remote: "keys", a mirrored page gets ArrowLeft, ArrowRight, ArrowUp, ArrowDown and Enter key events
+for Siri Remote presses. With remote: "focus", arrows also move focus between links and controls,
+unless the page handles the key itself. Menu and Home still end the mirror."""
 RETRYABLE = {"tv_unreachable", "page_unreachable", "screen_unavailable", "busy"}
 CODES = {
     "wake_failed": "tv_unreachable",

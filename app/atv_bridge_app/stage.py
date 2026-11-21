@@ -160,6 +160,7 @@ class Stage:
         self.ws = None
         self.ready = asyncio.Event()
         self.lock = asyncio.Lock()
+        self.on_change = None  # Called after every show and hide.
 
     async def show(self, page_id, src, title=None, **options):
         self.direct_browser = None
@@ -173,6 +174,8 @@ class Stage:
         }
         self.store.pinned[self] = page_id
         self.ready.clear()
+        if self.on_change:
+            self.on_change()
         if self.ws:
             await self.ws.send_json(self.page)
 
@@ -180,6 +183,8 @@ class Stage:
         self.store.pinned.pop(self, None)
         self.page = self.direct_browser = None
         self.ready.clear()
+        if self.on_change:
+            self.on_change()
         if self.ws:
             await self.ws.close()
 

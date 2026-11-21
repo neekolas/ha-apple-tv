@@ -15,8 +15,13 @@ class ReceiverObserver:
         self.lock = asyncio.Lock()
         self.invalid = False
 
+    def subscribe(self, listener):
+        self.transport.subscribe(listener)
+
     async def call(self, method, **params):
         async with self.lock:
+            if method == "buttons_stop" and not self.transport.proc:
+                return {"ok": True}  # Nothing is watching. Do not start a process to stop it.
             if method == "pair_finish":
                 try:
                     result = await self.transport.call(method, **params)

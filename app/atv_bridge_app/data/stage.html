@@ -44,6 +44,8 @@ function connect() {
         frame.classList.add("visible");
         previous?.classList.remove("visible");
         setTimeout(() => previous?.remove(), 230);
+        // Remote key events go to the focused document.
+        if (msg.remote) frame.focus();
         reply({type:"ready", page_id:pageId, revision});
       };
       frame.src = msg.src;

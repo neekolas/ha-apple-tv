@@ -171,6 +171,7 @@ class TVRuntime:
         await self.pairing.stop()
         await self.history.stop()
         await self.tools.media.stop()
+        await self.tools.remote_input.close()
         await getattr(self.operations, "presenter", self.sender).stop()
         await self.engine.stop()
         await self.stage.hide()

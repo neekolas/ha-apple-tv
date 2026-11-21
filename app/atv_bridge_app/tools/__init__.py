@@ -422,7 +422,7 @@ class Tools:
             image={"mimeType": "image/png", "data": capture["png"]},
         )
 
-    async def present(self, *, url, html, files, bundle, title, audio, keep_awake):
+    async def present(self, *, url, html, files, bundle, title, audio, keep_awake, remote="off"):
         async with self.stage.lock:
             if files is not None:
                 bundle = await self.stage.store.put_files(files)
@@ -447,7 +447,10 @@ class Tools:
                     await previous.stop()
             self.presenter = sender
             self.live_mirror.audio = audio
-            await self.stage.show(page_id, target, title, url=url, audio=audio, keep_awake=keep_awake)
+            await self.stage.show(
+                page_id, target, title, url=url, audio=audio, keep_awake=keep_awake,
+                **({"remote": remote} if remote != "off" else {}),
+            )
             try:
                 direct = False
                 try:

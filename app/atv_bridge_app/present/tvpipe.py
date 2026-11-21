@@ -97,6 +97,7 @@ class TvpipeSender(Sender):
         self.navigation_failures = {}
         self.runner = self.proc = None
         self.child_lock = asyncio.Lock()
+        self.page_lock = asyncio.Lock()
         self.changed = asyncio.Event()
         self.started = False
         self.problem = None
@@ -149,6 +150,11 @@ class TvpipeSender(Sender):
         self.transition("showing", ["tvpipe started", "Page loaded"])
 
     async def browser_page(self):
+        # Tool calls and remote key dispatch can ask at the same time. Connect once.
+        async with self.page_lock:
+            return await self._browser_page()
+
+    async def _browser_page(self):
         if self.page is None and self.profile:
             port, path = (Path(self.profile.name) / "DevToolsActivePort").read_text().splitlines()[:2]
             if not self.driver:
