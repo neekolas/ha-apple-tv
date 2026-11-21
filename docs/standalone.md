@@ -107,7 +107,7 @@ The bridge never deletes a TV's pairing records because of a change to the TV li
 Kept the records of TV Living Room (ID 8fbc2b6530915fde8e449c7e72027484), which the TV list no longer names.
 ```
 
-When a listed TV matches a kept record again, the bridge uses the record and its pairings. It matches the TV's stored identifier first, then its name, then its address. An entry with an ID never takes the records of a TV with other identifiers.
+When a listed TV matches a kept record again, the bridge uses the record and its pairings. It matches the TV's stored identifier first, then its name, then its address. An entry with an ID never takes the records of a TV with other identifiers. An entry with a name never takes the records of a TV with another name, unless the entry's ID matches the TV's stored identifier. A new TV at a kept TV's address therefore needs its own name.
 
 Add each TV's ID to `TV_USE_TVS` after you pair it, because the ID is the strongest match. To find the ID, read `identifiers` from `tv://tvs` or `GET /api/tvs` after pairing. Add `id=<first identifier>` to the entry and restart. A later address change then needs only a new `host=`.
 

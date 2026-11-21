@@ -297,9 +297,13 @@ class Fleet:
                 return self.update(rt, host, identifier, name)
         if rt := self.reattach(host, identifier, name):
             return self.update(rt, host, identifier, name)
+        key = registry_id or record_id(identifier or host or name)
+        if not registry_id and key in (self.kept or ()):
+            # The derived ID belongs to a kept TV that did not match this entry. Never build onto it.
+            key = uuid.uuid4().hex
         rt = self._build(
             {
-                "id": registry_id or record_id(identifier or host or name),
+                "id": key,
                 "host": host,
                 "identifier": identifier,
                 "name": name,
@@ -326,19 +330,23 @@ class Fleet:
 
     def reattach(self, host, identifier, name):
         """Return to service the one kept record that matches by stored identifier, else by name,
-        else by address. An identifier rules out records that store other identifiers."""
+        else by address. An identifier rules out records that store other identifiers. A name rules
+        out records that store another name, unless the stored identifier matches."""
         records = {}
         for key in self.kept or ():
             directory = self.controller.root / "tvs" / key
             meta = json.loads((directory / "receiver.json").read_text())
             target = State(directory, controller=self.controller).pairings.get("tv") or {}
             ids = {x.casefold() for x in [meta.get("identifier"), *target.get("identifiers", [])] if x}
-            if identifier and ids and identifier.casefold() not in ids:
+            known = bool(identifier) and identifier.casefold() in ids
+            if identifier and ids and not known:
                 continue
             stored_name = (meta.get("name") or target.get("name") or "").casefold()
-            records[key] = meta, ids, stored_name, {meta.get("host"), target.get("last_known_host")}
+            if name and stored_name and stored_name != name.casefold() and not known:
+                continue
+            records[key] = meta, known, stored_name, {meta.get("host"), target.get("last_known_host")}
         for found in (
-            [key for key, (_, ids, _, _) in records.items() if identifier and identifier.casefold() in ids],
+            [key for key, (_, known, _, _) in records.items() if known],
             [key for key, (_, _, stored, _) in records.items() if name and stored == name.casefold()],
             [key for key, (_, _, _, hosts) in records.items() if host and host in hosts],
         ):

@@ -314,6 +314,12 @@ def paired(root, key):
         ("host=192.0.2.15", "host=192.0.2.99", False),
         # Another TV's identifier never takes over the record.
         ("name=Living Room,host=192.0.2.15", "name=Living Room,id=BB:02", False),
+        # The stored identifier reattaches a TV that the list renames.
+        ("name=Living Room,host=192.0.2.15", "name=Lounge,id=AA:01", True),
+        # The address reattaches a record when the entry has no name.
+        ("name=Living Room,host=192.0.2.15,id=AA:01", "host=192.0.2.15", True),
+        # Another name at the record's address is another TV.
+        ("name=Living Room,host=192.0.2.15,id=AA:01", "name=Bedroom,host=192.0.2.15", False),
     ],
 )
 def test_tv_list_changes_never_delete_pairings(tmp_path, first, second, active):
@@ -323,6 +329,56 @@ def test_tv_list_changes_never_delete_pairings(tmp_path, first, second, active):
     assert (key in fleet.runtimes) is active
     assert (key in fleet.registry["kept"]) is not active
     assert len(fleet.runtimes) == 1
+
+
+def receiver(root, key):
+    return json.loads((root / "tvs" / key / "receiver.json").read_text())
+
+
+# With the ID, the address alone matches the kept record. Without it, Bedroom's derived ID is also
+# Living Room's ID.
+@pytest.mark.parametrize("living", ["name=Living Room,host=192.0.2.15,id=AA:01", "name=Living Room,host=192.0.2.15"])
+async def test_a_tv_with_another_name_never_takes_a_kept_record(tmp_path, living):
+    key = pair(start_fleet(tmp_path, living))
+    stored = receiver(tmp_path, key)
+    assert key in start_fleet(tmp_path, "name=Den,host=192.0.2.40").kept
+    fleet = start_fleet(tmp_path, "name=Den,host=192.0.2.40;name=Bedroom,host=192.0.2.15")
+    bedroom = fleet.select("Bedroom")
+    assert bedroom.metadata["id"] != key and not bedroom.state.receiver("airplay")
+    assert key in fleet.kept and receiver(tmp_path, key) == stored and paired(tmp_path, key)
+    # Deleting Bedroom leaves Living Room's pairings, and Living Room returns by name.
+    await fleet.remove(bedroom.metadata["id"])
+    assert paired(tmp_path, key)
+    returned = start_fleet(tmp_path, "name=Den,host=192.0.2.40;name=Living Room,host=192.0.2.77")
+    assert returned.select("Living Room").metadata["id"] == key and paired(tmp_path, key)
+
+
+def test_an_ambiguous_match_never_builds_onto_a_kept_record(tmp_path):
+    first = start_fleet(tmp_path, "host=192.0.2.15;id=BB:02")
+    keys = []
+    for rt, ident in zip(first.runtimes.values(), ("AA:01", "BB:02")):
+        rt.state.save_pairings(airplay={"ltpk": "test"}, tv={"identifiers": [ident], "last_known_host": "192.0.2.15"})
+        keys.append(rt.metadata["id"])
+    stored = {key: receiver(tmp_path, key) for key in keys}
+    start_fleet(tmp_path, "host=192.0.2.50")
+    # Both kept TVs were last at 192.0.2.15, so neither reattaches, and the derived ID is the first one's.
+    fleet = start_fleet(tmp_path, "host=192.0.2.15")
+    (fresh,) = fleet.runtimes
+    assert fresh not in keys and set(keys) <= fleet.kept
+    assert all(receiver(tmp_path, key) == stored[key] and paired(tmp_path, key) for key in keys)
+    assert set(start_fleet(tmp_path, "host=192.0.2.15").runtimes) == {fresh}
+
+
+def test_an_address_reattaches_one_of_two_kept_tvs_with_one_name(tmp_path):
+    first = start_fleet(tmp_path, "name=Apple TV,host=192.0.2.15;name=Apple TV,host=192.0.2.16")
+    hosts = {}
+    for rt, ident in zip(first.runtimes.values(), ("AA:01", "BB:02")):
+        host = rt.metadata["host"]
+        rt.state.save_pairings(airplay={"ltpk": "test"}, tv={"identifiers": [ident], "last_known_host": host})
+        hosts[host] = rt.metadata["id"]
+    start_fleet(tmp_path, "name=Den,host=192.0.2.40")
+    fleet = start_fleet(tmp_path, "name=Apple TV,host=192.0.2.16")
+    assert set(fleet.runtimes) == {hosts["192.0.2.16"]} and hosts["192.0.2.15"] in fleet.kept
 
 
 @pytest.mark.parametrize(
@@ -353,7 +409,8 @@ async def test_discovery_reattaches_a_kept_tv_for_good(tmp_path):
     key = pair(start_fleet(tmp_path, "name=Living Room,host=192.0.2.15"))
     fleet = start_fleet(tmp_path, argv=["--discover"])
     assert key in fleet.kept
-    fleet.candidates = AsyncMock(return_value=[{"name": "Living Room", "identifiers": ["AA:01"], "address": "192.0.2.15"}])
+    # The identifier matches even though the TV advertises another name than the list gave.
+    fleet.candidates = AsyncMock(return_value=[{"name": "Living Room 4K", "identifiers": ["AA:01"], "address": "192.0.2.15"}])
     assert (await fleet.enrol("AA:01"))["id"] == key
     restarted = start_fleet(tmp_path, argv=["--discover"])
     assert set(restarted.runtimes) == {key} and restarted.registry["kept"] == []
