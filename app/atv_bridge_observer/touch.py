@@ -38,12 +38,11 @@ DEVICE = re.compile(r"IOHIDService name:(\S+) id:(\S+).*?transport:(\S+)")
 HINT = re.compile(r"touch|digitizer", re.IGNORECASE)
 
 # --- Tuning (pad units are fractions of the pad; times in seconds) -----------
-# The surface. A first-generation remote reports 0 to 1 on both axes. A surface that reports
-# another range gets its distances and speeds divided by the range that was seen.
-PAD_SPAN = 1.0  # The coordinate range that counts as one pad until another range is known.
-SPAN_MIN_SWIPES = 4  # Swipes to see before a range smaller than PAD_SPAN is believed.
-SPAN_FULL = 0.9  # A seen range of at least this share of PAD_SPAN is a full pad. A finger rarely reaches the edge.
-SPAN_MIN = 0.5  # A seen range counts as at least this. A wrong estimate can then at most double a distance.
+# The surface. A first-generation remote reports 0 to 1 on both axes. Distances and speeds are
+# divided by PAD_SPAN. It is fixed: a range learned from the finger shrank when a thumb stayed in
+# the middle of the pad, and every later swipe then gave more arrows. Retune it when the reports
+# show the coordinate range of the clickpad remote.
+PAD_SPAN = 1.0
 # Steps.
 STEP_DISTANCE = 0.4  # Finger travel on the dominant axis for one arrow.
 AXIS_DOMINANCE = 1.5  # The dominant axis must move this many times farther than the other.
@@ -135,8 +134,6 @@ class TouchRecognizer:
         # What is known about the surface. It describes the remote, so reset() keeps it.
         self.token = None  # Digitizer token of the last touch line.
         self.devices = []  # Devices that announced themselves, newest last.
-        self.extent = None  # [[lowest, highest] x, [lowest, highest] y] of the positions seen.
-        self.swipes = 0  # Contacts that gave an arrow. They show that the finger used the surface.
 
     def reset(self):
         self.contacts.clear()
@@ -146,15 +143,6 @@ class TouchRecognizer:
         self.button_at = at
         for contact in self.contacts.values():
             contact.clicked = True
-
-    def span(self):
-        """The coordinate range that counts as one pad. Distances and speeds are divided by it."""
-        seen = max(high - low for low, high in self.extent) if self.extent else 0.0
-        if seen > PAD_SPAN:
-            return seen  # The surface does not report 0 to 1.
-        if self.swipes < SPAN_MIN_SWIPES or seen >= SPAN_FULL * PAD_SPAN:
-            return PAD_SPAN
-        return max(SPAN_MIN, seen)
 
     def touch(self, message, at):
         gesture = Gesture()
@@ -166,10 +154,7 @@ class TouchRecognizer:
         if not found:
             gesture.unmatched = not OTHER.search(message)
             return gesture
-        token, cancel, body = found.groups()
-        if token != self.token:
-            # Another surface. What was learned about the old one does not apply.
-            self.token, self.extent, self.swipes = token, None, 0
+        self.token, cancel, body = found.groups()
         if cancel:
             gesture.reports += [self._report(contact, at, "cancelled") for contact in self.contacts.values()]
             self.reset()
@@ -228,39 +213,34 @@ class TouchRecognizer:
         if not contact.samples or contact.samples[-1][1:] != point:
             contact.moved_at = at
         contact.samples.append((at, *point))
-        if self.extent is None:
-            self.extent = [[value, value] for value in point]
         for axis in (0, 1):
             contact.low[axis] = min(contact.low[axis], point[axis])
             contact.high[axis] = max(contact.high[axis], point[axis])
-            self.extent[axis] = [min(self.extent[axis][0], point[axis]), max(self.extent[axis][1], point[axis])]
         velocity, elapsed = self._velocity(contact)
         if velocity and elapsed >= PEAK_MIN_WINDOW_S:
             contact.peak = [max(peak, abs(speed)) for peak, speed in zip(contact.peak, velocity)]
 
     def _step(self, contact, point):
-        span = self.span()
         for axis in (0, 1):
             reach = contact.lead[axis] - contact.anchor[axis]
             now = point[axis] - contact.anchor[axis]
             if now * reach >= 0 and abs(now) >= abs(reach):
                 contact.lead[axis] = point[axis]
-            elif abs(point[axis] - contact.lead[axis]) >= REVERSAL_DISTANCE * span:
+            elif abs(point[axis] - contact.lead[axis]) >= REVERSAL_DISTANCE * PAD_SPAN:
                 contact.anchor[axis], contact.lead[axis] = contact.lead[axis], point[axis]
         if contact.clicked:
             return None
         delta = [point[axis] - contact.anchor[axis] for axis in (0, 1)]
         axis = self._dominant(delta)
-        if axis is None or abs(delta[axis]) < STEP_DISTANCE * span:
+        if axis is None or abs(delta[axis]) < STEP_DISTANCE * PAD_SPAN:
             return None
         contact.steps += 1
         contact.anchor, contact.lead = list(point), list(point)
         return AXES[axis][delta[axis] > 0]
 
     def _lift(self, contact, gesture, at):
-        span = self.span()
         velocity, _ = self._velocity(contact)
-        lift = [speed / span for speed in velocity] if velocity else None
+        lift = [speed / PAD_SPAN for speed in velocity] if velocity else None
         count = 0
         if contact.clicked:
             reason = "clicked"
@@ -273,7 +253,7 @@ class TouchRecognizer:
             reason = "no_dominant_axis"
         elif abs(lift[axis]) < FLICK_V_MIN:
             reason = "below_v_min"
-        elif (contact.high[axis] - contact.low[axis]) / span < FLICK_MIN_TRAVEL:
+        elif (contact.high[axis] - contact.low[axis]) / PAD_SPAN < FLICK_MIN_TRAVEL:
             reason = "too_short"
         else:
             reason = None
@@ -284,17 +264,14 @@ class TouchRecognizer:
                 contact.keys.append(key)
             gesture.momentum = (key, momentum_delays(count))
         gesture.reports.append(self._report(contact, at, reason, lift, count))
-        if contact.keys:
-            self.swipes += 1
 
     def _report(self, contact, at, reason, lift=None, count=0):
         """Describe a contact that ended, for the log. Positions are as the TV logged them.
 
-        Speeds are in pad units per second: coordinate units divided by span.
+        Speeds are in pad units per second: coordinate units divided by PAD_SPAN.
         no_momentum is None when momentum fired. Otherwise it is one of clicked, too_short,
         rest_before_lift, no_dominant_axis, below_v_min, cancelled, no_lift.
         """
-        span = self.span()
         end = contact.samples[-1][1:]
         return {
             "token": self.token,
@@ -309,8 +286,8 @@ class TouchRecognizer:
             "travel": [round(end[axis] - contact.start[axis], 4) for axis in (0, 1)],
             "duration": round(at - contact.started, 4),
             "rest": round(at - contact.moved_at, 4),
-            "span": round(span, 4),
-            "peak_v": [round(speed / span, 2) for speed in contact.peak],
+            "span": PAD_SPAN,
+            "peak_v": [round(speed / PAD_SPAN, 2) for speed in contact.peak],
             "lift_v": lift and [round(speed, 2) for speed in lift],
             "steps": contact.steps,
             "keys": list(contact.keys),

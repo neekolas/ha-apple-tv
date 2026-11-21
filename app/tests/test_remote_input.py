@@ -466,8 +466,6 @@ def test_real_touch_remote_capture_replays_to_the_expected_keys():
         "travel": [-0.7927, 0.0078], "duration": 0.1964, "rest": 0.017, "span": 1.0,
         "peak_v": [9.82, 0.82], "lift_v": [-9.82, 0.82], "steps": 1, "keys": ["left"], "momentum": 2, "no_momentum": None,
     }
-    # The remote used its whole 0 to 1 range, so distances stay in fractions of that.
-    assert recognizer.span() == touch.PAD_SPAN and recognizer.swipes == 6
 
 
 def test_slow_drag_moves_one_item_per_step():
@@ -552,38 +550,19 @@ def test_a_surface_that_reports_slowly_can_still_flick():
     assert recognize(contact([0.08, 0.5, 0.92], 0.08, 0.01)) == (["right", "right"], ("right", touch.momentum_delays(1)))
 
 
-def test_distances_follow_the_range_that_the_surface_reports():
-    def swipe(at, low=0.27, high=0.73):
-        return stroke((low, 0.5), (high, 0.5), 0.3, at=at)
+def test_distances_are_fractions_of_a_fixed_pad():
+    """Review finding: the range that the finger had used counted as the pad.
 
-    # A surface that reports about 0.25 to 0.75. Until four swipes were seen, the range counts as 0 to 1.
+    Brisk flicks in the middle of a 0-to-1 pad shrank it to half, so every later swipe gave twice the
+    arrows, and a reset kept that. The pad is now PAD_SPAN, whatever the finger did.
+    """
     recognizer = touch.TouchRecognizer()
-    for number in range(touch.SPAN_MIN_SWIPES):
-        assert recognizer.span() == touch.PAD_SPAN
-        assert recognize(swipe(number * 2.0), recognizer) == (["right"], None)
-    # Then the range seen counts as the pad, but never as less than SPAN_MIN. The same swipe gives two steps.
-    assert recognizer.span() == touch.SPAN_MIN
-    assert recognize(swipe(10.0), recognizer) == (["right", "right"], None)
-    # The reports say which range was used. A reset keeps what was learned about the surface.
-    recognizer.reset()
-    reports = [report for at, line in swipe(12.0) for report in recognizer.touch(line, at).reports]
-    assert [(report["span"], report["steps"], report["min"][0], report["max"][0]) for report in reports] == [(0.5, 2, 0.27, 0.73)]
-    # A finger that goes further widens the range again.
-    recognize(swipe(14.0, 0.1, 0.9), recognizer)
-    assert recognizer.span() == pytest.approx(0.8)
-    # Lines with another digitizer token come from another surface. Learning starts again.
-    other = [(at, line.replace("0xB5890338", "0xAAAA0001")) for at, line in swipe(16.0)]
-    assert recognize(other, recognizer) == (["right"], None) and recognizer.span() == touch.PAD_SPAN
-    # A remote that uses nearly all of 0 to 1 keeps that range, however many swipes it makes.
-    full = touch.TouchRecognizer()
-    for number in range(6):
-        assert recognize(swipe(number * 2.0, 0.04, 0.96), full) == (["right", "right"], None)
-    assert full.span() == touch.PAD_SPAN
-    # A range beyond 0 to 1 is used as soon as it is seen. The first swipe teaches it.
-    large = touch.TouchRecognizer()
-    recognize(swipe(0.0, 0, 200), large)
-    assert large.span() == 200
-    assert recognize(swipe(2.0, 0, 200), large) == (["right", "right"], None)
+    for number in range(8):
+        assert recognize(stroke((0.4, 0.5), (0.65, 0.5), 0.04, at=number * 2.0), recognizer)[0] == ["right"]
+    drag = stroke((0.3, 0.55), (0.75, 0.55), 1.0, at=20.0)
+    assert recognize(drag, recognizer) == recognize(drag) == (["right"], None)
+    reports = [report for at, line in drag for report in recognizer.touch(line, at).reports]
+    assert [(report["span"], report["steps"]) for report in reports] == [(touch.PAD_SPAN, 1)]
 
 
 def test_a_second_finger_is_ignored():
