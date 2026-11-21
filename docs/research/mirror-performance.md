@@ -1,6 +1,6 @@
 # Mirror performance on the Home Assistant Green
 
-**At 1920x1080, page audio is the largest cost that the app controls. A muted mirror uses about one core less, renders 38% more frames, and encodes each frame in 78 ms instead of 122 ms. With audio muted, `mirror_fps` 15 sends 9.1–9.7 fps against 6.7–7.3 fps at 10. With audio playing, `mirror_fps` 15 sends no more frames than 10. GPU rendering on the Mali-G52 works, but it renders fewer frames. The SoC has no hardware H.264 encoder in this kernel. No Chromium flag that was tested changed the frame rate.**
+**At 1920x1080, page audio is the largest cost that the app controls. A muted mirror uses about one core less, renders 38% more frames, and encodes each frame in 78 ms instead of 122 ms. With audio muted, `mirror_fps` 15 sends 9.1–9.7 fps against 6.7–7.3 fps at 10. With audio playing, `mirror_fps` 15 sends no more frames than 10. GPU rendering on the Mali-G52 works, but it renders fewer frames. The SoC has no hardware H.264 encoder in this kernel. No Chromium flag that was tested raised the frame rate.**
 
 Measured on 21 November 2026 on the Green (Rockchip RK3566, 4× Cortex-A55 at 1.8 GHz, 4 GB, HAOS kernel 6.18.58) with app 0.1.2, tvpipe v0.2.0, HeadlessChrome 156 and the Living Room Apple TV 4K (2nd generation). Every cell ran at `mirror_size` 1920x1080. The user tested 1280x720 and rejected it: motion was not much smoother, and the picture looked worse.
 
@@ -9,10 +9,10 @@ Measured on 21 November 2026 on the Green (Rockchip RK3566, 4× Cortex-A55 at 1.
 1. **tvpipe's reports are in the app log** (commit "Log tvpipe's sent rate, encoder report and receiver reports"). At debug level the app logs:
    - the sent video fps every 5 s, with the count of each one-second report;
    - the `capture` and `started` events (capture size, route, playout latency);
-   - tvpipe's `log` events at their own level. tvpipe runs with `--debug` when the app logs at debug level. From the debug and trace lines the app keeps only the capture page's encoder report (`fps`, `sourceFps`, `encodeMs`, `dropped`, `repeated`), the encoded rate at tvpipe, AirPlay send timing, the TV's receiver reports and the viewport fit.
+   - tvpipe's `log` events at their own level. tvpipe runs with `--debug` when the app logs at debug level. From the debug and trace lines the app keeps only the capture page's encoder report (`fps`, `sourceFps`, `encodeMs`, `dropped`, `repeated`), the encoded rate at tvpipe, AirPlay send timing, the TV's receiver reports for the audio stream and the viewport fit.
 
    Before this change the app kept only the sum of `receivers[].pushed`. That sum counts audio packets: about 130 per second at 7 video frames per second. The logging costs at most 0.1 core (see the control below).
-2. **Muted pages mirror at 15 fps** (commit "Mirror muted pages at 15 fps and document the cost of audio"). The new app option `mirror_fps_muted` (default 15, `0` uses `mirror_fps`) sets tvpipe's `--fps` for a show with `audio: "mute"`. `mirror_fps` stays 10 for shows with audio. A change of `audio` already restarts the sender, so the option adds no restart.
+2. **Muted pages mirror at 15 fps** (commit "Mirror muted pages at 15 fps and document the cost of audio"). The new app option `mirror_fps_muted` (default 15) sets tvpipe's `--fps` for a show with `audio: "mute"`. The muted show uses the larger of it and `mirror_fps`, so `0` turns it off. `mirror_fps` stays 10 for shows with audio. A change of `audio` already restarts the sender, so the option adds no restart.
 3. **The cost of audio is documented** in the `tv_show` `audio` description, `app/DOCS.md` and `docs/SETUP.md`. The advice: set `audio` to `mute` for any page that plays no sound. The default stays `play` (see open decisions).
 
 No Chromium flag, device mapping or package was kept.
@@ -35,7 +35,7 @@ Measurements:
 - **Sent fps:** video frames per second in tvpipe's `stats` events, with the range of the one-second counts.
 - **Encoder:** `encodeMs` from the capture page's report is the mean time from capture to encoded chunk. `dropped` counts frames that the page dropped because the encoder queue was full.
 - **Lag:** tvpipe's capture-to-tvpipe time, mean and maximum.
-- **TV delivery:** tvpipe's AirPlay timing report (lateness against a fixed schedule, minimum playout headroom) and the Apple TV's `rrmt` reports (lost and late packets).
+- **TV delivery:** tvpipe's AirPlay timing report: video lateness against a fixed schedule, and the minimum playout headroom (how early a frame left before its deadline on the TV). The Apple TV's `rrmt` reports (lost and late packets, glitches) cover the audio stream only, so muted cells have none. The video cadence on the TV was not measured directly. It is inferred from the sent rate and the headroom.
 - **CPU:** Supervisor `cpu_percent` × 4, as cores, with the maximum share of four cores. **Memory:** container maximum.
 - **Show time:** the time of each `tv_show` call.
 
@@ -102,8 +102,8 @@ The observer used 13–20% only while `tv_look` took screenshots.
 ### Kept or confirmed
 
 - **Make tvpipe's sent rate observable.** Kept (above). It showed that the earlier frame counts mixed audio and video.
-- **Audio costs about one core (new).** tvpipe's `capture.js` turns tab audio into 16-bit PCM in an AudioWorklet and sends a WebSocket message about every 10 ms. Each message passes Chromium's DevTools network observer (the Playwright driver reads every frame), the app's Python page proxy, and tvpipe, which sends AirPlay audio. Muting removed 1.1 cores on the continuous page, 0.9 on the burst page and 0.8 on the static page. Render fps rose from 7.8 to 10.8 and `encodeMs` fell from 122 to 78 ms. A muted transition never dropped to one frame. The `tv_show` default stays `play`, because changing it changes the public contract.
-- **Raise `mirror_fps` above the render rate when muted.** At fps 10 the muted page renders 10.8 fps but sends only 7.3. Two gates drop frames: Chromium's tab capture keeps at least 100 ms between frames, and `capture.js` skips a frame that arrives less than 98 ms after the last one. At fps 15 both gates fall to about 65 ms, and the sent rate (9.1–9.7) is close to the render rate. A tvpipe fork that changes the gate would give the same result. fps 20 is no better than 15. With audio, fps 15 sent the same 7.0–7.1 fps as fps 10. The CPU was saturated (3.3 cores), and the worst burst frame was 759 ms late against 447 ms.
+- **Audio costs about one core (new).** tvpipe's `capture.js` turns tab audio into 16-bit PCM in an AudioWorklet and sends a WebSocket message about every 10 ms. Each message passes Chromium's DevTools network observer (the Playwright driver reads every frame), the app's Python page proxy, and tvpipe, which sends AirPlay audio. Muting removed 1.1 cores on the continuous page, 0.9 on the burst page and 0.8 on the static page. Render fps rose from 7.8 to 10.8 and `encodeMs` fell from 122 to 78 ms. Transitions averaged 2.5–2.9 frames instead of 2.2–2.3, but a muted transition still sometimes got only one frame. The `tv_show` default stays `play`, because changing it changes the public contract.
+- **Raise `mirror_fps` above the render rate when muted.** At fps 10 the muted page renders 10.8 fps but sends only 7.3. Two gates drop frames: Chromium's tab capture keeps at least 100 ms between frames, and `capture.js` skips a frame that arrives less than 98 ms after the last one. At fps 15 both gates fall to about 65 ms, and the sent rate (9.1–9.7) is close to the render rate. A tvpipe fork that changes the gate would give the same result. fps 20 is no better than 15. With audio, fps 15 sent the same 7.0–7.1 fps as fps 10, with the CPU saturated (3.3 cores). In that single run the latest burst frame was 759 ms late. At fps 10 the latest burst frame was 165–447 ms late in three runs.
 
 ### Rejected
 
@@ -129,18 +129,18 @@ The observer used 13–20% only while `tv_look` took screenshots.
 - **Throttling.** tvpipe already passes `--disable-background-timer-throttling`, `--disable-renderer-backgrounding` and `--disable-backgrounding-occluded-windows`. The stage page runs at full rate.
 - **Rendering at the target size.** `devicePixelRatio` is 1, and the stage viewport and the capture track are 1920x1080 at the set fps. tvpipe's viewport fit races the slow window at start (`the page is 1920x1024, not 1920x1080`, then three more resizes), but the window settles at 1920x1280 with a 1920x1080 viewport. So no frame is scaled in steady state.
 - **CPU limits and priority.** The container has no cgroup CPU limit (`cpu.max` is `max`). With audio, every core is busy, and the Python app, Playwright and tvpipe use about 0.6 core of it, mostly for audio. Muted, the cores are not saturated (65–84% at most). The limit is then the single `VizCompositorTh` thread at 93–95%, which priorities cannot speed up. Priorities were not changed.
-- **Delivery to the TV.** TV delivery does not limit the frame rate. Every cell kept positive playout headroom, and the TV reported 0 late packets and at most 2 lost packets per minute. The uneven motion comes from uneven frame production.
+- **Delivery to the TV.** The network and the TV did not limit the frame rate, as far as the sender can tell. The minimum playout headroom stayed positive in every cell: 7–354 ms, with the lowest values (7–24 ms) in muted cells. Audio cells were mostly at 56 ms or more, with one at 8 ms. The audio `rrmt` reports showed 0 late packets and at most 2 lost packets per minute, but `totalGlitches` rose by 17–43 per minute while the captured sound was silent. The uneven motion comes mostly from uneven frame production. A check by eye on the TV is still needed, because the thin headroom in muted cells could show as an occasional late frame.
 
 ### Check on the final build
 
-The cleaned build (no probes, no flags, `mirror_fps` 10, `mirror_fps_muted` 15, with watch history from `main`):
+The cleaned build (no probes, no flags, `mirror_fps` 10, `mirror_fps_muted` 15, now with watch history from `main`):
 
 | Show | Continuous render / sent fps | Burst frames, sent fps | Cores (continuous, burst, static) |
 |---|---|---|---|
 | Audio | 7.9 / 6.9 (5–9) | 2.2 (1–4), 6.7 | 3.48, 3.43, 1.95 |
 | Muted (plan `1920x1080@15, no audio`) | 10.2 / 9.4 (7–11) | 2.8 (2–4), 9.2 | 2.63, 2.71, 0.70 |
 
-With nothing presenting, the container used 0.03 cores.
+With nothing presenting, the container used 0.03 cores. The static page with audio used 1.95 cores here and 1.34–1.44 in earlier cells. The cause of that spread is not known.
 
 ### Control: logging cost
 
@@ -149,8 +149,8 @@ Muted, fps 15, `log_level` info (tvpipe without `--debug`, no sampler): render 9
 ## Recommendation
 
 - **Use `audio: "mute"` for every page that plays no sound.** At 1080p this is the largest gain available.
-- **For muted 1080p pages, 15 fps is the highest rate that stays steady.** It sends 9.1–9.7 fps, uses at most 84% of the CPU and keeps positive playout headroom. 20 fps sends no more. `mirror_fps_muted` now defaults to 15.
-- **With audio, keep `mirror_fps` 10.** 15 fps sends no more frames and makes delivery more uneven.
+- **For muted 1080p pages, 15 fps is the highest useful rate.** It sends 9.1–9.7 fps and uses at most 84% of the CPU. The playout headroom stayed positive but fell to 11–21 ms at times. 20 fps sends no more. `mirror_fps_muted` now defaults to 15.
+- **With audio, keep `mirror_fps` 10.** 15 fps sends no more frames.
 - The app options are back at 1920x1080, `mirror_fps` 10 and `log_level` debug. `mirror_fps_muted` is at its default of 15.
 
 ## Open decisions and next steps
@@ -159,5 +159,5 @@ Muted, fps 15, `log_level` info (tvpipe without `--debug`, no sampler): render 9
 2. **Make audio cheaper in a tvpipe fork:** send PCM in larger chunks, send nothing while the tab is silent, or start the AirPlay audio stream only when sound starts. This keeps sound for pages that need it. Expected gain: most of the one core when a page is silent.
 3. **Lift the compositor limit.** Muted, the software compositor thread in Chromium's GPU process is at 93–95% and caps the continuous page near 10 fps. GPU compositing moves that work off the CPU, but the read-back for tab capture is slower than the gain on Panfrost. A newer Mesa or a Chromium capture path without the full read-back could change this. Expected gain: up to the encoder's limit of 12–15 fps.
 4. **Remove the DevTools observer from the capture socket.** Playwright enables the Network domain on the stage page, so Chromium and the Playwright driver process every capture WebSocket frame. A raw CDP connection with only the needed domains would save about 0.2 core with audio. It saves little when muted.
-5. **Press-to-screen latency.** Muting cut the capture-to-tvpipe time from 116 to 70 ms on average. tvpipe's playout budget (`--latency`, 300 ms in the plan, AirPlay video lead 100 ms) was not changed. A glass-to-glass measurement with a camera is needed to tune it.
+5. **Press-to-screen latency and TV cadence.** Muting cut the capture-to-tvpipe time from 116 to 70 ms on average. tvpipe's playout budget (`--latency`, 300 ms in the plan, AirPlay video lead 100 ms) was not changed. A larger budget would protect the thin headroom of muted cells. A smaller one would cut latency. A camera on the TV is needed to measure glass-to-glass latency and the cadence that the TV shows.
 6. **Hardware encode** needs a kernel with an `rkvenc` driver. HAOS does not ship one, so this is not practical.
