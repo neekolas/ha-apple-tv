@@ -60,6 +60,9 @@ def parser():
     )
     sub.add_parser("screen", help="one DVT screenshot, also updates results/latest.png")
     sub.add_parser("ax-probe", help="enumerate RSD services and probe accessibility")
+    from . import press_probe
+
+    press_probe.add_arguments(sub.add_parser("press-probe", help="record RSD log streams during remote presses"))
     sub.add_parser("power", help="wake ladder or confirmed sleep").add_argument(
         "power", choices=["on", "off"]
     )
@@ -91,6 +94,16 @@ async def dispatch(lab, args):
             from .observer import observe
 
             return await observe(lab, getattr(args, "action", args.cmd), getattr(args, "repeat", 1))
+        case "press-probe":
+            from . import press_probe
+
+            return await press_probe.run(
+                lab.host,
+                lab.state.root,
+                lab.state.identity["controller_id"],
+                args,
+                args.out or lab.directory / "press-probe.jsonl",
+            )
         case "power":
             return await lab.engine.wake() if args.power == "on" else await control.sleep(lab)
         case "press":
@@ -126,7 +139,7 @@ async def run(args):
     begin = time.monotonic()
     try:
         with ExitStack() as stack:
-            observing = args.cmd in ("s5", "screen", "screenshot", "ax-probe")
+            observing = args.cmd in ("s5", "screen", "screenshot", "ax-probe", "press-probe")
             if args.cmd != "info":
                 lock(stack, state / ("observer.lock" if observing else "control.lock"))
             if args.cmd == "pair" or args.cmd == "s5" and args.action == "pair" or args.cmd == "s3":
