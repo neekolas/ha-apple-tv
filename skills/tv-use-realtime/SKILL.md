@@ -27,6 +27,8 @@ The user talks and watches the TV. You act, and the screen answers.
 
 One page per task. Never show a new page for each change. Build pages with **tv-use-web-apps**.
 
+If the user may want to pick on screen themselves, show the page with `"remote": "focus"`. Their Siri Remote then moves and selects on the page, and you can read their presses instead of waiting for speech.
+
 ## Latency
 
 Local connection, from a Mac at home:

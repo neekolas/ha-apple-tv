@@ -47,4 +47,5 @@ It renders in the bridge's sandbox with an installed Chrome and saves a PNG per 
 | [app-contract.md](references/app-contract.md) | Build or change an app |
 | [design.md](references/design.md) | Motion at 10 fps, input, audio, recorded mode |
 | [delivery.md](references/delivery.md) | Choose `html`, `files`, `bundle` or a live `url`; limits, lifetime, sandbox, mirror slots |
+| [remote.md](references/remote.md) | Let someone at the TV use the Siri Remote on a page |
 | [recipes.md](references/recipes.md) | DOM recipes for any page, a live dashboard, a slideshow, reading aloud |
