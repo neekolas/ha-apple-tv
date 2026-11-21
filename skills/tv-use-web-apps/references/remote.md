@@ -4,11 +4,14 @@ Use this when a person at the TV should move through or pick things on a page yo
 
 | `remote` on `tv_show` | For | Effect |
 |---|---|---|
-| `"focus"` | Ordinary pages | Arrows move a visible focus ring between links and buttons; Select activates the focused one. A page that calls `preventDefault()` on a key keeps that key. |
+| `"tvos"` | Pages you write, including every reference app | `focus` with the tvOS look: the focused item lifts 6% with a ring and shadow, arrows search straight ahead first, and each `data-tv-group` row remembers its last item. Follow the layout rules in [app-contract.md](app-contract.md#remote-input). |
+| `"focus"` | Ordinary pages you did not write | Arrows move a visible focus ring between links and buttons; Select activates the focused one. A page that calls `preventDefault()` on a key keeps that key. |
 | `"keys"` | Pages that handle `keydown` themselves | Trusted `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` and `Enter` events. |
 | `"off"` (default) | | Presses aren't forwarded. |
 
-Example: `tv_show {"html":"<button onclick=\"next()\">Next</button>","remote":"focus"}`
+Example: `tv_show {"bundle":"<pick-one ID>","remote":"tvos"}`
+
+To see what the person did, read `tv_page_run {"script":"tv.state().input"}`: `count`, `last` (`{n, action, detail, at}`) and the five most recent actions. Each app's header lists the actions it reports.
 
 ## Check it
 
