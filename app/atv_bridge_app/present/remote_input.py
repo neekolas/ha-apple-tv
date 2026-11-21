@@ -286,18 +286,21 @@ TVOS_HELPER = r"""() => {
       const dy = r.top + r.height / 2 - (from.top + from.height / 2);
       const along = dx * dir[0] + dy * dir[1];
       if (along <= 1) continue;
-      // Where the item starts and ends past the focused box in the pressed direction.
+      // Where the item starts past the focused box in the pressed direction, and its length that way.
       const start = dir[0] ? (dir[0] > 0 ? r.left - from.right : from.left - r.right)
         : (dir[1] > 0 ? r.top - from.bottom : from.top - r.bottom);
-      const end = start + (dir[0] ? r.width : r.height);
+      const length = dir[0] ? r.width : r.height;
       // How far the two boxes overlap on the other axis. Below zero: the distance between them.
       const overlap = dir[0] ? Math.min(r.bottom, from.bottom) - Math.max(r.top, from.top)
         : Math.min(r.right, from.right) - Math.max(r.left, from.left);
       // Left and right take an item in the beam: the focused box projected in the pressed direction.
       // Up and down also take an item whose center lies past the focused box. The next row can be
       // short or offset and have nothing in the beam, and a row further on must not win then.
-      if (overlap > 1 || (dir[1] && start + end > 0)) {
-        next.push({el, r, gap: Math.max(0, start), end});
+      if (overlap > 1 || (dir[1] && start + length / 2 > 0)) {
+        // An item that overlaps the focused box starts at 0. Each item then ends after it starts,
+        // so the item that ends first is always in the next row.
+        const gap = Math.max(0, start);
+        next.push({el, r, gap, end: gap + length});
         continue;
       }
       // Used only when nothing qualifies above. Left and right do not go to another row: at the end

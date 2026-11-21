@@ -1865,6 +1865,18 @@ async def test_tvos_left_and_right_stay_in_the_row_at_its_end(tvos):
     assert await tvos.press("down", start="t07") == "t13"
 
 
+
+# A focusable card with a button in its lower right corner.
+CARD_CONTENT = """<style>body{margin:0;background:#111} div,button{position:absolute;border:0;background:#333}</style>
+<div id=card tabindex=0 style='left:40px;top:20px;width:600px;height:300px'><button id=play style='right:20px;bottom:20px;width:80px;height:60px'></button></div>"""
+
+
+@pytest.mark.parametrize("browser_frame", [CARD_CONTENT], indirect=True)
+async def test_tvos_moves_from_a_card_to_the_button_inside_it(tvos):
+    """Review finding: an item that does not reach past the focused box left the next row empty, and the search threw."""
+    assert await tvos.press("right", start="card") == "play"
+    assert await tvos.press("down", start="card") == "play"
+
 # A menu at the left, outside every row, and two rows of tiles that scroll sideways. The rows lie lower than the menu.
 MENU_CONTENT = """<style>body{margin:0;background:#111} button{border:0;background:#333}
 #menu{position:absolute;left:20px;top:20px;width:200px} #menu button{display:block;width:200px;height:60px;margin-bottom:20px}
