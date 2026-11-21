@@ -1801,6 +1801,18 @@ async def test_up_and_down_take_the_item_that_covers_most_when_rows_are_scrolled
 
 
 @ROWS_PAGE
+async def test_tvos_down_right_after_a_flick_reads_the_row_where_it_ends(tvos):
+    """With a smooth scroll, Down read the boxes before the row had moved.
+
+    Measured in Chromium with scrollBehavior 'smooth': focus went to t16, below the place where the
+    flicked tile had been, and row 1 then scrolled 570 px to show it. The tile straight below was on screen.
+    """
+    await tvos.scroll(row1=450)
+    assert await tvos.press("right", "right", "right", "right", "down", start="t01") == "t14"
+    assert await tvos.frame.evaluate("[row0.scrollLeft, row1.scrollLeft]") == [700, 450]
+
+
+@ROWS_PAGE
 async def test_tvos_left_and_right_stay_in_the_row_at_its_end(tvos):
     """After a flick, momentum arrows can arrive at the end of a row. They must not jump to another row."""
     await tvos.scroll(row0=9999)

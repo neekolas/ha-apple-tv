@@ -158,7 +158,8 @@ TVOS_HELPER = r"""() => {
     // than this shows for one frame or for none, which looks like flicker.
     fastRunMs: 250,
     // 'instant' or 'smooth'. A smooth scroll is three to five mirrored frames that each repaint
-    // a whole row, and it starts slowly. Use 'smooth' only at a higher frame rate.
+    // a whole row, and it starts slowly. A key that arrives during it reads boxes that have not
+    // moved yet. Use 'smooth' only at a higher frame rate.
     scrollBehavior: 'instant',
     scrollMarginY: 60,      // Room kept above and below the focused item when it scrolls into view.
     scrollMarginX: 80,
